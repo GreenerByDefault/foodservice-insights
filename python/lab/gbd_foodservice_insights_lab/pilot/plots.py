@@ -227,7 +227,7 @@ def plot_category_trends(
         if len(all_periods) > 1:
             ax.legend(fontsize=8)
 
-        formatted_labels = format_month_labels(all_months)
+        formatted_labels = format_month_labels(pd.PeriodIndex(all_months, freq="M"))
         ax.set_xticks(range(len(all_months)))
         ax.set_xticklabels(formatted_labels, rotation=45, fontsize=8)
 

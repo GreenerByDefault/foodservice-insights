@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pandas as pd
 from gbd_foodservice_insights.categories import (
     animal_product_categories,
@@ -8,6 +10,7 @@ from gbd_foodservice_insights.categories import (
     plant_protein_categories,
     protein_categories,
 )
+from gbd_foodservice_insights.report.metric import KILOS
 
 from gbd_foodservice_insights_lab.categories import (
     dairy_categories,
@@ -15,124 +18,118 @@ from gbd_foodservice_insights_lab.categories import (
     meat_categories,
 )
 
+# Step 2 names its per-head column and count sheet for diners or meals; this module calls
+# either a diner-meal.
+PER_DINER_MEAL_COLUMN = "kilos per diner-meal"
+DINER_MEALS_COLUMN = "diner-meals"
+_KILOS_SHEETS = ("Monthly by Product", "Monthly by Category", "Raw Data")
+# "Diners or Meals" reads whichever of the two count sheets the workbook has.
+SheetName = Literal[
+    "Template", "Monthly by Product", "Monthly by Category", "Raw Data", "Diners or Meals"
+]
 
-def _load_and_concat_data(
-    baseline_input_file: str,
-    pilot_input_file: str,
-    sheet_name: str,
-    transpose: bool = False,
-    drop_total_column: bool = False,
-    drop_total_row: bool = False,
-    merge_on_category: bool = False,
-    validate_months: bool = False,
-) -> pd.DataFrame:
-    """Load a sheet from the baseline and pilot Excel files and combine them.
 
-    By default the frames are concatenated with a ``period`` column of ``"baseline"`` or
-    ``"pilot"``; ``merge_on_category`` instead inner-joins them on ``category`` and ignores
-    ``drop_total_row`` and ``validate_months``. ``drop_total_column`` drops the ``total``
-    column. ``drop_total_row`` assumes transposed data: it renames ``index`` and ``0`` to
-    ``month_year`` and ``diner-meals``, then drops the ``month_year == "total"`` row.
-    ``validate_months`` asserts both periods have the same number of unique ``month_year``
-    values.
-    """
-    baseline_data = pd.read_excel(baseline_input_file, sheet_name=sheet_name)
-    pilot_data = pd.read_excel(pilot_input_file, sheet_name=sheet_name)
-
-    if transpose:
-        baseline_data = baseline_data.T.reset_index()
-        pilot_data = pilot_data.T.reset_index()
-
-    if drop_total_column:
-        baseline_data.drop(columns=["total"], inplace=True)
-        pilot_data.drop(columns=["total"], inplace=True)
-
-    if merge_on_category:
-        return pd.merge(baseline_data, pilot_data, on="category", how="inner")
-
-    baseline_data["period"] = "baseline"
-    pilot_data["period"] = "pilot"
-    combined_data = pd.concat([baseline_data, pilot_data], ignore_index=True)
-
-    if drop_total_row:
-        # Assumes transposed data with 'index' and 0 columns need renaming
-        combined_data.rename(columns={"index": "month_year", 0: "diner-meals"}, inplace=True)
-        combined_data = combined_data.loc[combined_data["month_year"] != "total", :]
-
-    if validate_months:
-        baseline_months = combined_data.loc[
-            combined_data["period"] == "baseline", "month_year"
-        ].nunique()
-        pilot_months = combined_data.loc[combined_data["period"] == "pilot", "month_year"].nunique()
-        assert baseline_months == pilot_months, (
-            "Baseline and Pilot must have the same number of unique months "
-            f"(baseline={baseline_months}, pilot={pilot_months}). Proceed with caution."
+def _read_period_sheet(input_file: str, sheet_name: SheetName) -> pd.DataFrame:
+    """Read a sheet of step 2's QA workbook, with its diner or meal columns renamed and its
+    categories lowercased, since this module matches them by their lowercase names."""
+    with pd.ExcelFile(input_file) as workbook:
+        count_sheets = [name for name in ("Diners", "Meals") if name in workbook.sheet_names]
+        if len(count_sheets) != 1:
+            raise ValueError(
+                f"{input_file} needs exactly one of a Diners or Meals sheet. "
+                f"Found sheets: {workbook.sheet_names}"
+            )
+        count_sheet = count_sheets[0]
+        df = pd.read_excel(
+            workbook, sheet_name=count_sheet if sheet_name == "Diners or Meals" else sheet_name
         )
 
-    return combined_data
+    if sheet_name in _KILOS_SHEETS and KILOS.column not in df.columns:
+        raise ValueError(
+            f"{input_file} has no {KILOS.column} column in {sheet_name}. Pilot analysis "
+            "compares kilos, so it needs a procurement report."
+        )
+    if "category" in df.columns:
+        df["category"] = df["category"].str.lower()
+    diner_or_meal = "diner" if count_sheet == "Diners" else "meal"
+    return df.rename(
+        columns={
+            KILOS.per_head(diner_or_meal): PER_DINER_MEAL_COLUMN,
+            f"{diner_or_meal}s": DINER_MEALS_COLUMN,
+        }
+    )
+
+
+def _concat_periods(baseline_data: pd.DataFrame, pilot_data: pd.DataFrame) -> pd.DataFrame:
+    return pd.concat(
+        [baseline_data.assign(period="baseline"), pilot_data.assign(period="pilot")],
+        ignore_index=True,
+    )
+
+
+def _load_period_sheets(
+    baseline_input_file: str, pilot_input_file: str, sheet_name: SheetName
+) -> pd.DataFrame:
+    """Read ``sheet_name`` from both workbooks, with a ``period`` of baseline or pilot."""
+    return _concat_periods(
+        _read_period_sheet(baseline_input_file, sheet_name),
+        _read_period_sheet(pilot_input_file, sheet_name),
+    )
 
 
 def load_template_data(baseline_input_file: str, pilot_input_file: str) -> pd.DataFrame:
-    """Load and merge template data from the baseline and pilot "Template Data" sheets.
-
-    The result has columns from both periods.
-    """
-    return _load_and_concat_data(
-        baseline_input_file,
-        pilot_input_file,
-        sheet_name="Template Data",
-        drop_total_column=True,
-        merge_on_category=True,
-    )
+    """Inner-join the baseline and pilot Template sheets on ``category``, without their
+    ``total`` columns, so the result has each period's month columns."""
+    baseline_data = _read_period_sheet(baseline_input_file, "Template").drop(columns="total")
+    pilot_data = _read_period_sheet(pilot_input_file, "Template").drop(columns="total")
+    return pd.merge(baseline_data, pilot_data, on="category", how="inner")
 
 
 def load_monthly_product_data(baseline_input_file: str, pilot_input_file: str) -> pd.DataFrame:
-    """Load and combine the baseline and pilot "Monthly Product Data" sheets.
-
-    A ``period`` column marks each row as baseline or pilot.
-    """
-    return _load_and_concat_data(
-        baseline_input_file, pilot_input_file, sheet_name="Monthly Product Data"
-    )
+    return _load_period_sheets(baseline_input_file, pilot_input_file, "Monthly by Product")
 
 
 def load_monthly_category_data(baseline_input_file: str, pilot_input_file: str) -> pd.DataFrame:
-    """Load and combine the baseline and pilot "Monthly Category Data" sheets.
-
-    A ``period`` column marks each row as baseline or pilot.
-    """
-    return _load_and_concat_data(
-        baseline_input_file, pilot_input_file, sheet_name="Monthly Category Data"
-    )
+    return _load_period_sheets(baseline_input_file, pilot_input_file, "Monthly by Category")
 
 
 def load_diner_meal_data(
     baseline_input_file: str, pilot_input_file: str, validate_months: bool = True
 ) -> pd.DataFrame:
-    """Load and combine the baseline and pilot "Diner-Meal Numbers" sheets.
+    """Return ``month_year``, ``diner-meals``, and ``period`` columns.
 
-    Returns ``month_year``, ``diner-meals``, and ``period`` columns, without the ``total``
-    row. ``validate_months`` checks both periods have the same number of months.
+    ``validate_months`` checks both periods have the same number of months.
     """
-    return _load_and_concat_data(
-        baseline_input_file,
-        pilot_input_file,
-        sheet_name="Diner-Meal Numbers",
-        transpose=True,
-        drop_total_row=True,
-        validate_months=validate_months,
-    )
+    combined_data = _load_period_sheets(baseline_input_file, pilot_input_file, "Diners or Meals")
+
+    if validate_months:
+        months = combined_data.groupby("period")["month_year"].nunique()
+        assert months["baseline"] == months["pilot"], (
+            "Baseline and Pilot must have the same number of unique months "
+            f"(baseline={months['baseline']}, pilot={months['pilot']}). Proceed with caution."
+        )
+
+    return combined_data
 
 
 def load_monthly_product_category_data(
     baseline_input_file: str, pilot_input_file: str
 ) -> pd.DataFrame:
-    """Load and combine the baseline and pilot "Monthly Product x category Data" sheets.
+    """Return ``month_year``, ``product``, ``category``, ``kilos_total``, and ``period``.
 
-    A ``period`` column marks each row as baseline or pilot.
+    Step 2 has no product-by-category sheet, so this sums its Raw Data rows.
     """
-    return _load_and_concat_data(
-        baseline_input_file, pilot_input_file, sheet_name="Monthly Product x category Data"
+
+    def by_product_and_category(input_file: str) -> pd.DataFrame:
+        rows = _read_period_sheet(input_file, "Raw Data")
+        return (
+            rows.groupby(["month_year", "product", "category"], dropna=False)[KILOS.column]
+            .sum()
+            .reset_index()
+        )
+
+    return _concat_periods(
+        by_product_and_category(baseline_input_file), by_product_and_category(pilot_input_file)
     )
 
 
@@ -183,14 +180,14 @@ def calculate_product_overlap(monthly_product_data: pd.DataFrame) -> dict:
     assess whether changes in metrics are due to menu composition shifts vs actual
     intervention effects.
 
-    ``monthly_product_data`` needs ``product_name`` and ``period`` columns. Returns
+    ``monthly_product_data`` needs ``product`` and ``period`` columns. Returns
     ``baseline_unique``, ``pilot_unique``, ``overlap_count``, and ``overlap_percentage``
     (the percentage of baseline products appearing in pilot).
     """
     # Normalize product names: lowercase and strip whitespace
     monthly_product_data = monthly_product_data.copy()
     monthly_product_data["normalized_name"] = (
-        monthly_product_data["product_name"].str.lower().str.strip()
+        monthly_product_data["product"].str.lower().str.strip()
     )
 
     # Get unique normalized names for each period

@@ -50,6 +50,21 @@ def build_report_artifact_paths(out_dir: str | Path, stem: str) -> dict[str, str
     }
 
 
+def find_qa_workbook(folder: Path) -> Path:
+    """Return the one QA workbook a food-report run wrote anywhere under ``folder``."""
+    matches = sorted(folder.rglob("food_report_*_qa.xlsx"))
+    if not matches:
+        raise FileNotFoundError(
+            f"No food_report_*_qa.xlsx under {folder}. Run 2. Produce Food Report.py there first."
+        )
+    if len(matches) > 1:
+        raise ValueError(
+            f"Expected one food_report_*_qa.xlsx under {folder}, but found {len(matches)}: "
+            f"{[str(path.relative_to(folder)) for path in matches]}"
+        )
+    return matches[0]
+
+
 def _load_metadata_dict(metadata_path: Path) -> dict[str, Any]:
     """Load client metadata, or ``{}`` if the file is absent or not a JSON object."""
     if not metadata_path.exists():

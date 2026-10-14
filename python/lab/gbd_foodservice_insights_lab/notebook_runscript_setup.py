@@ -270,24 +270,10 @@ def _apply_step_file_paths(
                 f"{config['analysis_context']!r}."
             )
 
-        has_sub_client = config["sub_client_name"] is not None
-        client = config["client"]
-        procurement_serving = config["procurement_serving"]
-        sub_client_name = config["sub_client_name"]
-        base_filepath = str(config["base_filepath"])
-        baseline_base_filepath = base_filepath.replace("/pilot/", "/baseline/")
-
-        if has_sub_client:
-            baseline_filename_base = f"{client}_{sub_client_name}_baseline_{procurement_serving}"
-            pilot_filename_base = f"{client}_{sub_client_name}_pilot_{procurement_serving}"
-        else:
-            baseline_filename_base = f"{client}_baseline_{procurement_serving}"
-            pilot_filename_base = f"{client}_pilot_{procurement_serving}"
-
-        config["baseline_input_file"] = (
-            f"{baseline_base_filepath}/full_analysed_{baseline_filename_base}.xlsx"
-        )
-        config["pilot_input_file"] = f"{base_filepath}/full_analysed_{pilot_filename_base}.xlsx"
+        pilot_folder = Path(str(config["base_filepath"]))
+        baseline_folder = Path(str(pilot_folder).replace("/pilot/", "/baseline/"))
+        config["baseline_input_file"] = str(report_artifacts.find_qa_workbook(baseline_folder))
+        config["pilot_input_file"] = str(report_artifacts.find_qa_workbook(pilot_folder))
         return
 
     raise ValueError(f"Unhandled step: {step!r}")
@@ -300,17 +286,6 @@ def _validate_required_input_files(config: dict[str, Any], step: PipelineStep | 
         if not input_file.exists():
             raise FileNotFoundError(
                 f"Required input file for step '{step}' not found: {input_file}"
-            )
-    elif step == "pilot":
-        baseline_input = Path(str(config["baseline_input_file"]))
-        pilot_input = Path(str(config["pilot_input_file"]))
-        if not baseline_input.exists():
-            raise FileNotFoundError(
-                f"Required baseline input file for step '{step}' not found: {baseline_input}"
-            )
-        if not pilot_input.exists():
-            raise FileNotFoundError(
-                f"Required pilot input file for step '{step}' not found: {pilot_input}"
             )
 
 
