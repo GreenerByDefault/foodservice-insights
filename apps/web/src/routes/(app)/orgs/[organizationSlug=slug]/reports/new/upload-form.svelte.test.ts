@@ -321,6 +321,17 @@ describe('UploadForm', () => {
       await expect.element(screen.getByLabelText('Report name')).toHaveFocus();
     });
 
+    test('Replace is disabled while the file is being checked', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      const release = holdInspection();
+
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+
+      await expect.element(screen.getByRole('button', { name: 'Replace' })).toBeDisabled();
+      release();
+      await expect.element(screen.getByRole('button', { name: 'Replace' })).toBeEnabled();
+    });
+
     test('Replace moves focus to the file input', async () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
       await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());

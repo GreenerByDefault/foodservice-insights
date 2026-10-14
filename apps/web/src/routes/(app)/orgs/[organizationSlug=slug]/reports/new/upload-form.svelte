@@ -208,6 +208,7 @@ async function backToForm() {
             bind:ref={replaceButtonElement}
             type="button"
             variant="outline"
+            disabled={formState.status === 'checking'}
             onclick={replaceFile}
           >
             Replace
