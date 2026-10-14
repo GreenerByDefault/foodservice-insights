@@ -2,8 +2,8 @@
  * open at once.
  *
  * Every process connects directly, with no pooler between it and Postgres, so the project's
- * `max_connections` is the one cap — and Supabase's own Auth and Storage servers draw from it too,
- * since every request they serve reads or writes their tables in our database. Past it, Postgres
+ * `max_connections` is the one cap — and Supabase's own services draw from it too, since every
+ * request they serve reads or writes their tables in our database. Past it, Postgres
  * refuses a new connection with `53300`. That is transient, so nothing crashes, but a refused lease
  * renewal is a lease a step closer to expiring.
  *
@@ -22,6 +22,9 @@ export const HOSTED_MAX_CONNECTIONS = 90;
  * is. */
 export const SUPERUSER_RESERVED_CONNECTIONS = 3;
 
+/** The rest is headroom for what cannot be pinned down: `supabase_admin`'s monitoring and health
+ * checks, which take ordinary slots before reserved ones (three on an idle project), and the
+ * dashboard or a `psql` session as `postgres`. */
 export const BUDGET_SHARE = 0.8;
 
 /** Instance counts are set in the host's dashboard; these are what the budget assumes of it. */
@@ -90,6 +93,21 @@ export const CONNECTION_BUDGET = {
   // after a minute, so it tracks our own concurrent blob store calls, which are few. **Open:** an
   // estimate until measured on the hosted project during an upload.
   storage: 5,
+
+  // PostgREST, as `authenticator`. Disabling the Data API stops it exposing any schema, not running:
+  // two connections stay open, measured on the hosted project with the API off.
+  dataApi: 2,
+
+  // The role the poolers authenticate clients with, measured at one. We connect directly, so they
+  // hold nothing else.
+  pgbouncer: 1,
+
+  // Disabled in Realtime's settings, as in the local stacks' `config.toml`s: nothing uses it, and it
+  // holds connections while enabled. Re-enabling it means budgeting its pool here.
+  realtime: 0,
+
+  // Not listed: the roles for Pipelines (`supabase_etl_admin`) and read replicas
+  // (`supabase_replication_admin`), neither set up.
 } as const satisfies Record<string, number>;
 
 export function connectionBudgetTotal(): number {
