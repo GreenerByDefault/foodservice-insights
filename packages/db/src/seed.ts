@@ -1,5 +1,6 @@
-/** The one user and organization the app runs as in `PUBLIC_AUTH_MODE=placeholder`, where there
- * is no sign-in and these rows stand in for whoever would have been authenticated.
+/** The one user and organization the app runs as in `PUBLIC_AUTH_MODE=placeholder`, where signing
+ * in takes the site password rather than an email, and these rows stand in for whoever would have
+ * been authenticated.
  *
  * `pnpm seed:identity` writes them for a dev or hosted database; the browser suites take only the
  * user's id and address, and build their own organizations

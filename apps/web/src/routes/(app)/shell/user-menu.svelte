@@ -6,6 +6,8 @@ import UserRoundIcon from '@lucide/svelte/icons/user-round';
 import { toast } from 'svelte-sonner';
 import { goto } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
+import type { AuthMode } from '#lib/auth/mode.js';
+import { signOutOfSite } from '#lib/auth/site-session.js';
 import { Button } from '#lib/components/ui/button/index.js';
 import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 import { cnChildProps } from '#lib/utils/shadcn.js';
@@ -14,24 +16,28 @@ import { initials } from './initials.ts';
 interface Props {
   email: string;
   displayName: string;
-  /** False in `placeholder` mode, which has no session to end. */
-  canSignOut: boolean;
+  mode: AuthMode;
 }
 
-let { email, displayName, canSignOut }: Props = $props();
+let { email, displayName, mode }: Props = $props();
 
 const monogram = $derived(initials(displayName));
 
 async function signOut() {
-  // `local`: this device only, leaving the user's other browsers signed in. Its error is not
-  // checked: auth-js clears this device's session even when GoTrue refuses to revoke it, and in the
-  // rare case it keeps one — it could not read the session at all — `/` redirects a signed-in
-  // visitor back to `/orgs`, so nobody is left looking signed out who is not.
   try {
-    await browserAuth().signOut({ scope: 'local' });
+    if (mode === 'supabase') {
+      // `local`: this device only, leaving the user's other browsers signed in. Its error is not
+      // checked: auth-js clears this device's session even when GoTrue refuses to revoke it, and in
+      // the rare case it keeps one — it could not read the session at all — `/` redirects a
+      // signed-in visitor back to `/orgs`, so nobody is left looking signed out who is not.
+      await browserAuth().signOut({ scope: 'local' });
+    } else {
+      await signOutOfSite();
+    }
   } catch (cause) {
-    // The seam rejects, rather than answering `{ error }`, when the client itself could not load.
-    // Nothing was signed out, so there is nowhere to go; the next click loads it afresh.
+    // Nothing was signed out. The Supabase seam rejects, rather than answering `{ error }`, only
+    // when the client itself could not load, and the site session's cookie is cleared only by a
+    // 2xx. So there is nowhere to go; the next click tries again.
     console.error('Could not sign out', cause);
     toast.error("Couldn't sign out. Try again.");
     return;
@@ -91,13 +97,11 @@ async function signOut() {
       {/snippet}
     </DropdownMenu.Item>
 
-    {#if canSignOut}
-      <DropdownMenu.Separator class="my-2" />
+    <DropdownMenu.Separator class="my-2" />
 
-      <DropdownMenu.Item onSelect={signOut} class="flex items-center gap-2 px-3 py-2">
-        <LogOutIcon class="size-4 shrink-0" />
-        Sign out
-      </DropdownMenu.Item>
-    {/if}
+    <DropdownMenu.Item onSelect={signOut} class="flex items-center gap-2 px-3 py-2">
+      <LogOutIcon class="size-4 shrink-0" />
+      Sign out
+    </DropdownMenu.Item>
   </DropdownMenu.Content>
 </DropdownMenu.Root>

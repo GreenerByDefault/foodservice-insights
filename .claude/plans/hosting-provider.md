@@ -169,7 +169,8 @@ Five things, whichever provider wins:
    `production` GitHub Environment holds (the `env:` of
    [`deploy.yml`](../../.github/workflows/deploy.yml)'s migrate step lists them): the direct connection, with `DB_SSL_CA` beside it.
    Until there is an email provider, production runs as the placeholder identity behind a site
-   password: set `PUBLIC_AUTH_MODE=placeholder`; the deploy's migrate step seeds the identity
+   password: set `PUBLIC_AUTH_MODE=placeholder` and a long, random `SITE_PASSWORD` (the app
+   refuses a short one); the deploy's migrate step seeds the identity
    ([`apps/web/README.md`](../../apps/web/README.md#auth)). The site password is then
    all that stands between the internet and the placeholder admin. The web app has no `ORIGIN` to set
    (adapter-node 6 removed it): it takes its origin from `Host` and assumes `https`, which is right

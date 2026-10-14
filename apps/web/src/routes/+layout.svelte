@@ -20,7 +20,8 @@ $effect(() => {
 });
 
 // Keeps the page on the session the browser holds: a sign-in or sign-out, here or in another tab,
-// re-runs every load. `placeholder` has no session to follow, and must not load supabase-js.
+// re-runs every load. Not in `placeholder`, which must not load supabase-js: there, a sign-out in
+// another tab goes unnoticed until this tab next loads.
 $effect(() => {
   if (authMode() !== 'supabase') return;
 
@@ -54,8 +55,7 @@ $effect(() => {
 
 // A page restored by Back is reloaded rather than shown as it was, so it cannot show a session the
 // browser no longer holds.
-const onPageShow =
-  authMode() === 'supabase' ? refreshWhenRestoredByBack(() => location.reload()) : undefined;
+const onPageShow = refreshWhenRestoredByBack(() => location.reload());
 
 beforeNavigate((navigation) => {
   const url = fullLoadForNewVersion(updated.current, navigation);

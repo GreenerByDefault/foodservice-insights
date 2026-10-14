@@ -25,7 +25,7 @@ claiming a change works, verbatim, no matter how narrow the change was.
 **While iterating, run only the test file(s) you're actively working on**, not the full
 suite — a loop-versus-gate distinction, not a judgement call about blast radius:
 
-- vitest: `pnpm --filter @gbd/<pkg> test:unit -- path/to/thing.test.ts`
+- vitest: `pnpm --filter @gbd/<pkg> test:unit path/to/thing.test.ts`
 - Playwright (`test:e2e` or `test:screenshots`):
   `pnpm --filter @gbd/web test:e2e -- path/to/thing.e2e.ts`
 
