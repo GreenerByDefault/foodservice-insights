@@ -6,10 +6,9 @@
 time, and § Observability for dashboards. This plan builds the plumbing for them: metric
 definitions in the database, a read-only role to read them, a Grafana that runs locally against
 the dev stack, dashboards kept in this repo, and the push that ships those dashboards to Grafana
-Cloud. It is the part of [`observability-vendors.md`](observability-vendors.md) that needs no
-vendor account until the last PR, and that PR needs only a Grafana Cloud stack, which the team
-has already chosen (`observability-vendors.md` § 3.1). It covers a few representative metrics
-and one dashboard. The rest of § Metrics comes later, one small PR each, once the plumbing exists.
+Cloud, which the team chose (`ARCHITECTURE.md` § Stack). Nothing before the last PR needs a
+vendor account, and that PR needs only a Grafana Cloud stack. It covers a few representative
+metrics and one dashboard. The rest of § Metrics comes later, one small PR each, once the plumbing exists.
 
 Facts from the tree (2026-09-27) that shape the design:
 
@@ -64,10 +63,9 @@ Facts from the tree (2026-09-27) that shape the design:
 - **`deploy-web` migrates before it deploys**, and the push to Grafana Cloud has to run after
   the migrate step, so a dashboard never reaches Cloud before the view it reads.
 
-Out of scope: metrics beyond the first few; the data alerts, which ride this plan's pipe but wait
-on `observability-vendors.md` § 4 for where they are delivered; database and host health
-(`observability-vendors.md` § 3.2); AI cost, which needs the child to report token usage; and
-user country, which Cloudflare's dashboard already shows.
+Out of scope: metrics beyond the first few; the data alerts and database health, which ride this
+plan's pipe and are [`alerts.md`](alerts.md); AI cost, which needs the child to report token
+usage; and user country, which Cloudflare's dashboard already shows.
 
 ## Decisions
 
@@ -472,13 +470,12 @@ This PR needs PR 3's generator and PR 2's data source builder.
   Grafana's egress ranges would need adding to an allowlist only if Supabase's network
   restrictions were ever turned on.
 - `ARCHITECTURE.md`:
-  - The Stack table gains a Dashboards row: Grafana Cloud, with Grafana OSS locally.
+  - The Stack table's Grafana Cloud row gains "with Grafana OSS locally".
   - § Metrics gains a sentence about where dashboards live and how they deploy.
   - § Secrets management's line about production credentials in GitHub Actions gains the two new
     secrets.
-- Whichever of this PR and PR 6 lands last deletes this plan. It also turns
-  `observability-vendors.md`'s pointers to this plan into pointers to `apps/grafana/` and
-  `002_metrics.ts`.
+- Whichever of this PR and PR 6 lands last deletes this plan. It also turns `alerts.md`'s
+  pointers to this plan into pointers to `apps/grafana/` and `002_metrics.ts`.
 
 ## PR 6 — hard-deleted rows stay counted
 

@@ -1,347 +1,311 @@
-# Email provider recommendation
+# Email through Postmark
 
-> **Status:** a proposal for the decision [`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Email leaves
-> **Open**. A human makes the call; this file exists so they do not have to re-derive it. Once
-> decided, § Email records the choice,
-> [`transports/provider.ts`](../../packages/email/src/transports/provider.ts) gets a real `send`,
-> and this file is deleted.
+> **Status:** a spec. GBD chose Postmark on 2026-10-14
+> ([the evaluation](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/email-provider.md)),
+> and [`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Email records the choice. This plan wires it
+> up in two PRs, with the account and DNS work in § Before PR 2 finished before the second. The
+> PR that lands the last one deletes this file, and
+> [`production-sign-in.md`](production-sign-in.md) takes over.
 >
-> Provider facts were read from each provider's current docs on 2026-09-16 and move; prices drift
-> fastest. Cost figures come from [`scripts/email_costs.py`](../../scripts/email_costs.py), kept so
-> the estimate can be re-run as the assumptions change.
+> Vendor facts were read from Postmark's and Supabase's docs on 2026-10-14, and
+> greenerbydefault.org's DNS with `dig` the same day.
 
-## What we ask of a provider
+## Context
 
-Everything above the transport seam is written and tested, and that narrows the ask to almost
-nothing. [`client.ts`](../../packages/email/src/client.ts) defines `EmailTransport` as one method
-taking a fully rendered message — from, to, subject, `text` and `html` — and
-[`mailpit.ts`](../../packages/email/src/transports/mailpit.ts) is a short worked example of
-implementing it. So the provider renders nothing, stores no template, and needs no SDK.
+Everything above the `EmailTransport` seam is written and tested.
+[`provider.ts`](../../packages/email/src/transports/provider.ts) is a stub that rejects every
+send, and [`mailpit.ts`](../../packages/email/src/transports/mailpit.ts) is the worked example of a
+transport: one `fetch` inside `emailRequest`, aborted at `SEND_TIMEOUT_MS`. Supabase Auth sends
+sign-in and email-change codes itself, over SMTP, from the templates in
+[`supabase-dev/supabase/templates/`](../../supabase-dev/supabase/templates). Locally both go to
+Mailpit.
 
-1. **An HTTP JSON API that takes both bodies.** We render our own copy
-   (`ARCHITECTURE.md` § Email), so provider-side templating is irrelevant, and `multipart/alternative`
-   assembly, encoded-words and header folding stay the provider's problem rather than ours.
-2. **SMTP credentials as well as that API.** This is the requirement that is easy to miss. Auth is
-   email OTP (`REQUIREMENTS.md` § Authentication mechanism) and Supabase Auth sends those codes
-   itself — it speaks SMTP, not our transport. Supabase's built-in mailer is capped at 2 messages
-   per hour and disclaims any delivery SLA, so production must point it at custom SMTP. **The
-   provider therefore carries our login path, not just our notifications**, and an OTP that does
-   not arrive is a user who cannot get in at all.
-3. **Idempotency keys**, which § Email names explicitly as part of this evaluation — see
-   [§ 3](#3-what-idempotency-actually-buys-us).
-4. **Answer or fail inside `SEND_TIMEOUT_MS`** (10s), and absorb a burst of
-   `maxNotificationsPerSweep` concurrent sends — 5 today, per
-   [`config.ts`](../../apps/worker/src/config.ts). Rate limiting is already a sizing input there:
-   `maxReapsPerSweep` exists to stop a recovering fleet firing one failure email per stuck attempt
-   at once, for exactly that reason.
-5. **A searchable log of what was sent.** Delivery is best effort by design, so the standing
-   support question is "I never got it" and the answer has to come from somewhere.
-6. **Price and simplicity over time** for a two-person nonprofit team.
+The goal: every message, ours and Supabase's, comes from `insights@greenerbydefault.org`, a real
+Google Workspace mailbox that people read and reply from.
 
-Candidates: Resend, Postmark, Amazon SES, and Twilio SendGrid. *Rejected: Mailgun.* No idempotency
-support, requested on its own feedback forum for eight years. *Rejected: Brevo.* It runs
-transactional mail on infrastructure shared with its marketing product, which puts the sign-in
-path behind a reputation other people's campaigns can damage. *Rejected: MailerSend.* Mid-field
-deliverability in 2026 inbox tests, and it cut its free tier to 500/month in 2025. *Rejected:
-running our own MTA.* Same reasoning that rejected a bare Droplet in
-[`hosting-provider.md`](hosting-provider.md) — IP warming, blocklist monitoring and DNS
-authentication become ours to operate forever.
+That address lives on GBD's existing domain, whose mail setup this plan must not disturb:
 
-## 1. Meeting the requirements
+| | Today | This plan |
+| --- | --- | --- |
+| DNS host | Squarespace | Unchanged. Records are added there |
+| MX | Google Workspace | Unchanged |
+| SPF (root TXT) | `include:_spf.google.com`, HubSpot's include, `-all` | Unchanged; see § DKIM and a custom Return-Path |
+| DKIM | `google._domainkey`, and HubSpot's two CNAMEs | Postmark's selector added beside them |
+| DMARC | `v=DMARC1; p=reject;`, with no reporting address | Policy unchanged. Optionally gains `rua` |
+| Return-Path | n/a | `pm-bounces` CNAME added |
 
-| | Resend | Postmark | Amazon SES | SendGrid |
-| --- | --- | --- | --- | --- |
-| JSON API taking `text` + `html` | Yes | Yes | Yes | Yes |
-| SMTP for Supabase Auth | `smtp.resend.com:587` | `smtp.postmarkapp.com:587` (2525 fallback) | Yes, per region | Yes |
-| **Idempotency key** | **Yes** — `Idempotency-Key`, 24h, and `Resend-Idempotency-Key` over SMTP | No | No | No |
-| Our 5-send burst | 10 req/s per team, raisable | No documented req/s cap; 10 concurrent SMTP connections | 14/s default in production | Well above |
-| Message log and search | 30 days, all plans | 45 days; longer is a paid add-on on Pro or above | **None** — build it from SNS + storage | 3–7 days; 30 needs a paid add-on |
-| Bounce and complaint handling | Managed suppression list | Managed suppression list | **Ours to build** — SNS topic, subscriber, storage | Managed suppression list |
-| Sandbox on signup | No | No | **Yes** — 200/day to verified addresses until AWS approves production access | No |
+**`p=reject` is the fact that shapes the rollout.** A receiver that honors DMARC refuses any mail
+claiming to be from greenerbydefault.org that is not authenticated as it. Until our DNS records
+verify, Postmark signs with its own domain, which does not align. So the records must verify
+before the first send to anyone; otherwise a sign-in code bounces rather than landing in spam.
 
-### Deliverability: the part we cannot compensate for
+## How it fits together
 
-Spam filtering splits into things we control and things the provider controls, and it is worth
-being precise about which is which, because the split is unusual in our favour.
+```text
+ Every send is From: Foodservice Insights <insights@greenerbydefault.org>
 
-**Ours, and already close to ideal.** SPF, DKIM and DMARC on our sending domain; the reputation
-of that domain; message content; and who we send to. We mail only people who asked for the exact
-thing we are sending — a code they just requested, a report they just uploaded, an invite an admin
-just addressed to them. No marketing, no purchased lists, no re-engagement campaigns. We are also
-far below the 5,000-a-day threshold at which Gmail, Yahoo and Microsoft's bulk-sender rules bite,
-so those obligations do not constrain us.
+ web, worker ── HTTP API ─► Postmark, stream `outbound` ─┐  DKIM d=greenerbydefault.org, Postmark's selector
+ Supabase Auth ─── SMTP ──► Postmark, stream `auth` ─────┤  envelope pm-bounces.greenerbydefault.org
+                                                         ├─► recipient
+ staff, in Gmail ─────────► Google Workspace ────────────┘  DKIM d=greenerbydefault.org, selector `google`
+                                                            envelope greenerbydefault.org, SPF via Google
 
-**Theirs, and not negotiable at our volume.** The sending IP's reputation, who else shares that
-IP, and how fast the provider evicts the senders poisoning it. This is the crux: a dedicated IP
-needs somewhere between 50,000 and 300,000 messages a month to stay warm, and
-[`email_costs.py`](../../scripts/email_costs.py) puts us at 155–2,962. **We will be on shared
-pools permanently**, so we are renting someone else's reputation and have no way to build our own.
+ Replies ─► MX, unchanged ─► Google Workspace ─► the insights@ mailbox
+ Bounces ─► pm-bounces.greenerbydefault.org ─► Postmark. They never reach Workspace
+```
 
-That inverts the intuition that a small sender can shop on price. A high-volume sender can
-out-run a mediocre provider on a dedicated IP; we cannot. Choosing the provider *is* choosing our
-IP reputation, and it is the one deliverability lever we will never hold.
+Postmark and Google send as the same address without colliding, because nothing they publish
+overlaps. Their DKIM selectors differ, and SPF is checked against the envelope domain (Google's
+for staff mail, `pm-bounces` for Postmark's), never against the From address.
 
-Published inbox-placement tests rank them consistently, even where the absolute numbers disagree:
+## Decisions
 
-| | EmailTooltester 2026 | A second 2026 seed-list test |
-| --- | ---: | ---: |
-| Postmark | 93.8% (three rounds 95–97%, one 87%) | 83.3% |
-| MailerSend | 86.8% | — |
-| SendGrid | 82% | — |
-| Amazon SES | — | 77.1% |
+### Send from the root domain, as a real mailbox
 
-Treat the ordering as the signal and the percentages as noise: the two tests disagree by ten
-points on Postmark alone, seed-list methodology varies, and much of this genre is affiliate-funded.
-Three things survive that discount:
+*Rejected: a sending subdomain such as `mail.greenerbydefault.org`.* The evaluation recommended
+one, to keep app mail's reputation apart from GBD's own. But users should be able to reply to the
+address they see. Supabase Auth's SMTP settings have no Reply-To, so with a subdomain From, a
+reply to a sign-in code would go to an address that only works if the subdomain gets its own MX
+into Workspace.
 
-- **Postmark leads every test we found**, and it is the only candidate that keeps transactional
-  and broadcast mail on separate infrastructure — so no marketing send, ours or anyone else's in
-  the pool, can touch the IP carrying a sign-in code.
-- **Resend delivers through Amazon SES**, layering its own suppression lists and pool management
-  on AWS's sending path. **No public test measures Resend itself**, which for a 2023 company is
-  its own kind of answer; SES's 77.1% is the closest proxy and probably a pessimistic one.
-- **SendGrid sits low**, consistent with a very large, very mixed sender base.
+What we accept is that the root domain's reputation is shared with staff mail and with GBD's
+HubSpot campaigns, so a campaign that draws complaints can push our codes toward spam. Revisit if
+Postmark's `auth` stream shows spam complaints or Blocked bounces.
 
-One factor specific to us: our users are businesses, so their mail is mostly Microsoft 365 and
-Google Workspace rather than consumer Gmail. Microsoft is the harsher filter of the two — it
-tightened sharply through 2025, forgives slowly, and blocks without notifying the sender. Tests
-that report a blended average across consumer mailboxes therefore understate how much the
-provider matters here.
+**insights@ is a Workspace user, not a group or an alias.** Each person who answers it is given
+access through Gmail delegation, so they read and reply as insights@ from their own login and
+nobody shares a password. *Rejected: a Google Group.* Groups refuse posts from outside the
+organization by default and hold suspected spam for moderation, so a user's reply could sit
+unseen in a queue. *Rejected: an alias on a staff account.* The address would leave with that
+person.
 
-## 2. What it would cost us
+**Addresses.** `EMAIL_FROM_ADDRESS` and `EMAIL_SUPPORT_ADDRESS` are both insights@, so help
+requests and replies land in one place. `EMAIL_GBD_ADDRESS` is a different address. The GBD
+notices (organization created or deleted, user deleted) are operational rather than support, and
+Gmail can file a message that is From and To the same mailbox as sent rather than received.
+**Open:** which address. GBD names it.
 
-Output of `scripts/email_costs.py` on 2026-09-16. Volume figures are guesses until production
-exists; the script says which ones and how they combine.
+### DKIM and a custom Return-Path; SPF and MX untouched
 
-| Scenario | Emails/mo | Resend | Postmark | Amazon SES | SendGrid |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Launch: ~10 users, ~100 reports/mo | 155 | $0 | $15 | $0.02 | $19.95 |
-| Planned: ~40 users, ~500 reports/mo | 707 | $20 | $15 | $0.07 | $19.95 |
-| Growth: ~150 users, ~2,000 reports/mo | 2,762 | $20 | $15 | $0.28 | $19.95 |
+- **DKIM provides alignment.** Postmark signs as `d=greenerbydefault.org`, under the selector its
+  DNS settings page names.
+- **A custom Return-Path, `pm-bounces` → `pm.mtasv.net`, aligns SPF too**, under DMARC's default
+  relaxed alignment. That gives two independent passes, so a receiver that breaks one still passes
+  DMARC. Bounces go to Postmark, which is where suppression lives.
+- **Do not add Postmark to the root SPF record.** SPF is checked against `pm-bounces`, which picks
+  up Postmark's own SPF through the CNAME. An `include:` at the root would do nothing for Postmark
+  and would use up one of SPF's ten DNS lookups.
 
-What the table is really saying:
+Once the domain is verified, Postmark will send from *any* address at greenerbydefault.org, with
+valid DKIM. Each credential below can therefore send as anyone@greenerbydefault.org. Keep them only
+in production secrets and in Supabase, and rotate them if there's any doubt.
 
-- **Cost is not the deciding factor, and the human should not treat it as one.** The whole spread
-  is $20/month at the volumes we plausibly reach this decade — less than one scenario's difference
-  in [`hosting-provider.md`](hosting-provider.md). Every candidate is rounding error against two
-  salaries.
-- **Sign-in codes are a quarter to a third of the volume**, and they exist whether or not anyone
-  runs a report. That is the line item most likely to surprise someone who budgeted per report.
-- **Resend is free at launch and $20 after, and the cliff is the daily cap, not the monthly one.**
-  Its free tier allows 3,000/month but only 100/day; the planned scenario is 707/month and ~106 on
-  a peak day. Volume clusters, so the free tier expires on a busy Tuesday rather than at a monthly
-  total — `PEAK_DAY_SHARE` in the script is the assumption doing that work.
-- **SES is free in the way a pile of lumber is a free house.** $0.30/month at growth volume buys no
-  message log, no suppression list and no bounce handling; those become code we write and operate.
+### Two streams: `outbound` for our mail, `auth` for Supabase's
 
-## 3. What idempotency actually buys us
+Postmark keeps a separate suppression list for each message stream, and a suppression caused by a
+spam complaint can only be lifted by Postmark's support
+([Postmark](https://postmarkapp.com/support/article/903-an-address-has-been-marked-as-inactive-how-can-i-reactivate-it)).
+With one stream, a user who marked a report email as spam could no longer get sign-in codes, and
+would be locked out until support replied. Two streams keep that suppression on the report
+emails' stream. They also give the sign-in path its own delivery stats, which is what any future
+OTP alert would read.
 
-§ Result notifications makes the notification sweep deliberately at-least-once: a response lost
-after the provider accepted the mail is indistinguishable from a send that never went out, so the
-sweep re-sends and the user occasionally gets the same result email twice. An idempotency key
-keyed on the `analysis_attempt` id closes that window exactly, because the id is already stable
-across all five notification attempts.
+The setup is one Server, "Foodservice Insights", holding the default transactional stream
+`outbound` and a second transactional stream, `auth`:
 
-The window it closes is real but narrow, and sizing it matters more than the feature does:
+- **Supabase gets an SMTP token generated on `auth`.** That routes its mail to `auth` without the
+  `X-PM-Message-Stream` header GoTrue cannot set, and the token can do nothing except send SMTP on
+  that stream.
+- **Web and worker get the Server API token**, and name `outbound` in each request.
+- **Invites stay on `outbound`**, even though they lead to sign-in. Because an admin typed the
+  address, they are the emails most likely to bounce.
 
-- It only opens when a send **already failed** in a specific way — accepted, then the response
-  lost. Every ordinary failure is caught by `notification_email_sent_at`.
-- The blast radius is a duplicate email, capped at `maxNotificationAttempts` (5). No data is lost
-  and nothing is corrupted.
-- Resend's 24-hour key retention covers our retry window with room to spare: with
-  `notificationRetryBaseMs` at 5 minutes and 5 attempts, the whole sequence spans 75 minutes.
+The Basic plan allows 15 streams.
 
-So: Resend is the only candidate that closes it, and it would close it cleanly. But this is the
-smaller of the two risks on the table — a duplicate notification annoys a user, while an OTP that
-does not arrive locks them out.
+### The transport
 
-*Rejected: approximating idempotency against a provider without it.* Postmark can search sent
-messages by metadata, so the sweep could ask "did this attempt's mail already go out?" before
-sending. That trades a rare duplicate for an extra API call on every single send, and a new
-failure mode when the search itself times out.
+- **`postmarkTransport` replaces `providerTransport`**, and `EMAIL_TRANSPORT=postmark` replaces
+  `provider`. The stub stays until PR 2: the hosting plan's specs select it until then, so a send
+  fails loudly instead of going nowhere.
+- **`Tag` is the email's `kind`**, so Postmark's activity can be filtered by kind.
+- **Open and link tracking are off, and set explicitly** in each request so a dashboard toggle
+  cannot turn them back on. A tracking pixel and rewritten links cost deliverability, and a report
+  link rewritten through Postmark's domain looks like phishing.
+- **An error carries Postmark's `ErrorCode` but not its `Message`, and the operation label names
+  the kind, not the recipient.** Postmark's 406 message lists the inactive address, and server code
+  logs "ids, never emails" (`.claude/rules/typescript.md`). `mailpit.ts` labels with the
+  recipient, which is fine for a local catcher.
+- **A suppressed recipient** gets HTTP 422 with `ErrorCode` 406, which arrives as an `EmailError`
+  like any other failure. The notification sweep then spends its remaining attempts on it. That is
+  bounded, and not worth a special case.
+- **No idempotency key.** Postmark has none, and § Result notifications already accepts the
+  occasional duplicate.
 
-## 4. What each would cost us in work
+### Supabase Auth sends over SMTP
 
-| | Resend | Postmark | Amazon SES | SendGrid |
-| --- | --- | --- | --- | --- |
-| Write `providerTransport` | One `fetch` | One `fetch` | One `fetch`, SigV4-signed, or the SDK | One `fetch` |
-| Before the first production send | Verify domain, DNS | Verify domain, DNS, and a Server per environment | Verify domain, DNS, **request production access**, build bounce/complaint handling | Verify domain, DNS |
-| Ongoing | Watch the dashboard | Watch the dashboard | Operate the suppression and logging we built | Watch the dashboard |
+*Rejected: Supabase's Send Email Hook*, which would hand codes to an endpoint of ours to send
+through `@gbd/email`. That is a public endpoint on the login path for us to write, secure and
+keep running, and all it would add is visibility that the `auth` stream already gives.
 
-SES's SigV4 signing is the only one that does not fit the "a `fetch` with that provider's body
-shape" note already written into
-[`provider.ts`](../../packages/email/src/transports/provider.ts) — it needs either a signing
-implementation or the AWS SDK, which is the first third-party dependency this package would take.
+**The Auth email rate limit goes from 30 to 100 an hour.** Supabase sets 30 once custom SMTP is
+on, and the limit is project-wide, so reaching it stops every sign-in for the rest of the hour.
+One onboarding session for a 40-person customer could reach 30. No setting that leaves sign-in
+usable would protect Postmark's bounce rate; a CAPTCHA would, and
+[`production-sign-in.md`](production-sign-in.md) adds one at the first sign of abuse.
 
-## 5. Reliability in 2026
+### Not yet: bounce and complaint webhooks
 
-Resend's public incident history is the most active of the four: a 3.5-hour incident on
-February 15 that delayed sending and took the dashboard down via database connection exhaustion,
-intermittent SMTP problems in mid-February, and delayed webhook events in August. **SMTP is
-specifically the path our sign-in codes take**, which weights those incidents more heavily here
-than their duration suggests. Postmark and SES publish quieter records; SendGrid's are quiet for
-uptime but its deliverability complaints are the recurring theme instead.
+This answers the evaluation's two **Open:** questions: whether to ingest bounces, and whether to
+alert on Auth's OTP email. Without webhooks, each failure surfaces like this:
 
-Against that, Postmark's service *quality* is the thing reported to have slipped since
-ActiveCampaign acquired it in 2022 — accounts suspended without warning and slower support are
-the recurring complaints. That is a real risk for a nonprofit whose sending pattern (long quiet
-stretches, then a burst) can look anomalous. It is also the kind of claim that comes mostly from
-competitor-adjacent sources, so weigh it accordingly.
+| Failure | How we see it |
+| --- | --- |
+| Postmark down, or our account suspended | Every send fails. Our sends log an `EmailError`, the sign-in form shows an error, and Postmark emails the account owner about a suspension |
+| An address suppressed | Our sends fail with 406 in our logs. Supabase's codes to it show in the `auth` stream's Suppressions tab |
+| A receiver blocks us | A Blocked or DMARCPolicy bounce in Postmark's activity |
+| A receiver files us as spam | Nothing. Webhooks cannot see it either |
 
-## 6. Which one is the boring choice
+Webhooks would only report the middle two rows sooner, and at roughly 700 messages a month
+(the evaluation's estimate) those events are individual or rare. **Trigger:** build it the first
+time the `auth` stream shows a Blocked bounce. The likely shape is Postmark's Bounce webhook
+posting to a Better Stack log source, which needs no endpoint of ours; first check that Better
+Stack's ingest accepts Postmark's payload as is. *Rejected: Grafana polling Postmark's stats
+API.* Postmark has no read-only token, so Grafana would hold one that can send as anyone at
+greenerbydefault.org.
 
-§ 5 asks whether the service was up this year. This asks a different question — who owns it, what
-they want from it, and what they have already done to customers they acquired. At these prices
-that question outranks cost.
+## Before PR 2: accounts and DNS
 
-| | Owner | Age | What that implies |
-| --- | --- | --- | --- |
-| Amazon SES | AWS | 2011 | The genuinely boring one. AWS does not retire services, prices only fall, and there are no forced migrations |
-| SendGrid | Twilio (public) | 2009, acquired 2019 | Institutionally safe; no divestiture signals. But it retired its permanent free plan in 2025, so it does reprice |
-| Postmark | ActiveCampaign | 2010, acquired 2022 | **The inferred risk.** ActiveCampaign force-migrated its *own* platform's customers in a 2024 plan overhaul and has raised those prices ~40% since. Postmark's pricing has not moved; the risk is the owner's disposition, not anything yet done to Postmark |
-| Resend | Independent, VC-backed | 2023 | $21M raised, Series A Dec 2024, ~77 staff. Needs a Series B or profitability; the usual trajectory is upmarket pricing and thinner free tiers |
+PR 1 does not depend on any of this and can land first. Do these steps in order: because of
+`p=reject`, the DNS must verify before the first send.
 
-**The uncomfortable finding is that Postmark does not score best here.** What made Postmark the
-safe, boring pick was Wildbit — bootstrapped, profitable, famously unexcitable. That company sold
-in 2022. Its owner has since shown, on its own platform, exactly the behaviour a durability-minded
-buyer is trying to avoid, and the support complaints in § 5 read as the same story from the other
-end. Postmark feels like the incumbent while carrying more ownership risk than its reputation
-suggests — though still less than a Series A company that must, by construction, change something.
+1. **Workspace (a GBD admin).** Create insights@ as a user. Turn on Mail delegation in the Admin
+   console if it is off, then delegate the mailbox to whoever will answer it.
+2. **Postmark account.**
+   - Have a GBD staff login own the account, and add Eric as a second user;
+     `hosting-provider.md` already ruled out a shared login.
+   - Create the Server and the `auth` stream. Turn open and link tracking off on both streams;
+     the stream settings are what govern Supabase's mail.
+   - **Request account approval now.** Until Postmark approves the account, it delivers only to
+     domains verified on the account. That is fine for testing on greenerbydefault.org addresses,
+     and a blocker for launch. Describe the use as transactional only: sign-in codes, report
+     results, and invites, sent to people who signed up or were invited, with no marketing.
+3. **Add greenerbydefault.org** under Postmark's Sender Signatures → Domains. Postmark lists two
+   records.
+4. **Squarespace DNS (whoever holds GBD's domain login).** Add exactly those two records as Custom
+   Records:
+   - a TXT record at the DKIM host Postmark shows (it ends in `._domainkey`), with the value copied
+     whole;
+   - a CNAME record, `pm-bounces` → `pm.mtasv.net`.
 
-The other half of the answer is that **durability matters less here than it usually would**,
-because of the seam. A provider that raises prices or degrades does not trap us: the blast radius
-is one `fetch`, a DNS record, and a Supabase SMTP field. What does *not* migrate is the message
-log — switching costs us the history behind "did this user get their email in March" — and, for
-Postmark specifically, the deliverability advantage we would have picked it for.
+   Squarespace appends the domain to each host, so enter the host without `.greenerbydefault.org`.
+   Change nothing else: MX, SPF, DMARC, and the Google and HubSpot DKIM records stay as they are.
+5. **Confirm, then verify.** `dig +short TXT <host>.greenerbydefault.org` should return Postmark's
+   value, and `dig +short CNAME pm-bounces.greenerbydefault.org` should return `pm.mtasv.net.`.
+   Then press Verify on both records in Postmark.
+6. **Optional: DMARC reports.** greenerbydefault.org has `p=reject` but no `rua`, so nobody sees
+   what receivers reject on its behalf. Postmark's free DMARC digest supplies a reporting address;
+   **edit** the existing `_dmarc` TXT record to `v=DMARC1; p=reject; rua=mailto:<that address>`.
+   Never add a second `_dmarc` record: two DMARC records are invalid, receivers then ignore both,
+   and the domain loses its spoofing protection. The record covers all of GBD's mail, so this is
+   GBD's call; the plan works without it.
+7. **Make a first send** with the Server API token, to a greenerbydefault.org address:
 
-That last point is worth stating plainly, because it cuts against the recommendation below:
+   ```sh
+   curl https://api.postmarkapp.com/email \
+     -H 'Accept: application/json' -H 'Content-Type: application/json' \
+     -H "X-Postmark-Server-Token: $POSTMARK_SERVER_TOKEN" \
+     -d '{"From": "Foodservice Insights <insights@greenerbydefault.org>",
+          "To": "<you>@greenerbydefault.org", "Subject": "Postmark test",
+          "TextBody": "Test", "MessageStream": "outbound"}'
+   ```
 
-- **Postmark's advantage is the least portable thing on the shortlist.** Its separate transactional
-  infrastructure is the reason to choose it, and it exists nowhere else, so leaving costs us the
-  benefit entirely.
-- **Resend's position is the most portable.** It resells SES, so if it repriced or was acquired,
-  moving to SES directly keeps the same delivery path and the same shared IP pools, and we build
-  only the tooling we had been renting. The startup is, counter-intuitively, the *cleaner* exit.
+   In Gmail, "Show original" must show SPF, DKIM and DMARC all as **PASS**, with DKIM for
+   `greenerbydefault.org` and SPF for `pm-bounces.greenerbydefault.org`. Gmail must not show "via"
+   beside the sender. A reply to the message should land in insights@.
 
-*Rejected: choosing SendGrid because it is the institutionally safest.* That is the "nobody was
-fired for IBM" reasoning taken literally, and here it selects the weakest product of the four —
-worst deliverability, no free tier, no idempotency, shortest log retention. Corporate durability
-is not a feature our users experience.
+### Supabase Auth's settings
 
-## Recommendation
+After step 7, in the production project's dashboard:
 
-**Postmark, on the Basic plan, $15/month.** Held as the better of two defensible choices rather
-than a clear winner; the case for the other is made below in full, so the decision can go the
-other way on the same facts.
+- **SMTP:** host `smtp.postmarkapp.com`, port 587. The username and password are the access key
+  and secret key of the `auth` stream's SMTP token. The sender is `insights@greenerbydefault.org`,
+  with the name `Foodservice Insights`.
+- **Templates**, pasted from `supabase-dev/supabase/templates/`, with the subjects from
+  [`config.toml`](../../supabase-dev/supabase/config.toml):
+  - "Magic link" and "Confirm signup" both get `sign-in-code.html`. GoTrue's default templates send
+    a link, and new users get "Confirm signup" once `production-sign-in.md` turns on email
+    confirmation.
+  - "Change email address" gets `email-change.html`.
+- **Secure email change off**, matching `double_confirm_changes = false` in both local
+  `config.toml`s: `/account` asks for one code, sent to the new address.
+- **Rate limit for sending emails:** 100 an hour.
+- **Check it.** Send a code to a greenerbydefault.org address, from the dashboard's Users page or
+  with `POST /auth/v1/otp` and the publishable key. Repeat step 7's header checks, and confirm the
+  message shows up in Postmark under `auth`.
 
-The decision is Postmark against Resend. SES is right only for a team that wants to own bounce
-handling and message logging, and its missing dashboard hurts most on the auth path, which
-bypasses anything we build. SendGrid trails on every axis measured here.
+## PR 1 — the Postmark transport
 
-**What separates the two is the shape of the risk, not its size.** Each has one failure mode that
-would actually reach a user:
+This can land at any time, because nothing selects `postmark` until PR 2.
 
-- Postmark's is **front-loaded and account-level**: the adversarial onboarding and suspensions
-  reported since the acquisition. If it happens, it most likely happens before launch, where we
-  see it and switch at no cost. Its steady state after that is the most predictable on the list —
-  fifteen years of one product, transactional mail on its own infrastructure, the quietest 2026
-  record.
-- Resend's is **ongoing and path-level**: a 3.5-hour sending delay and intermittent SMTP faults
-  this year, a funding trajectory that must change something, and no independent deliverability
-  data. Each is bounded; together they recur, and SMTP is the path our sign-in codes take.
+- **A new `transports/postmark.ts`**, beside the `provider.ts` stub, exporting
+  `postmarkTransport({ serverToken, testOriginOverride?, testTimeoutOverrideMs? })`.
+  - It is shaped like `mailpit.ts`: one POST to `/email` inside `emailRequest`, aborted at
+    `SEND_TIMEOUT_MS`, throwing on any non-2xx response.
+  - The body: `From` with the display name quoted, `To`, `Subject`, `TextBody`, `HtmlBody`,
+    `MessageStream: 'outbound'`, `Tag`, `TrackOpens: false`, `TrackLinks: 'None'`.
+  - The file's header comment carries § The transport's reasons, since this is the file someone
+    would edit to reverse any of them.
+- **`transports/index.ts`:** `TransportName` gains `'postmark'`, with settings
+  `{ name: 'postmark'; serverToken }`. `parseTransportSettings` refuses `postmark` without
+  `POSTMARK_SERVER_TOKEN`, and says which variable is missing.
+- **Read `POSTMARK_SERVER_TOKEN`** beside `EMAIL_ENDPOINT` in `packages/email/src/env.ts` and
+  `apps/web/src/lib/server/email.ts`. Declare it in `apps/web/src/env.ts` and in `turbo.json`'s
+  `globalPassThroughEnv`. `assertConfigured` already builds the emailer at startup, so a deploy
+  missing the token fails at startup, not on its first send.
+- **Tests.** `postmark.test.ts` runs against a `node:http` server that the test starts on a free
+  port, and covers three cases:
+  - the exact request: `toEqual` on the parsed body, plus the token header;
+  - a 422 response with `ErrorCode` 406 and the address in `Message` arrives as an `EmailError`
+    that mentions 406 and does not contain the address;
+  - a server that never answers fails within the overridden timeout.
 
-That asymmetry matters because of how our own code protects each path. The notification sweep
-retries through an hour of outage by design (`EMAIL_OUTAGE_TO_SURVIVE_MS` in
-[`config.ts`](../../apps/worker/src/config.ts)); a sign-in code is sent once by Supabase and either
-lands or does not. **The architecture has already absorbed the risk a flaky API poses to result
-emails. It has no defence against a flaky SMTP endpoint on the login path.** Provider SMTP
-stability is therefore the property to buy, and it is the one where Postmark's record is clean
-and Resend's is not.
+  `index.test.ts` gains the `postmark` cases, including the missing-token refusal.
+- **`messages/layout.ts` gains one line:** an image in an email must come from the web app's
+  `static/`. A route through `handle` answers `Cross-Origin-Resource-Policy: same-origin`, which
+  blocks webmail clients that load images directly.
+- **By hand, once:** send one message through the transport using the token `POSTMARK_API_TEST`.
+  Postmark's real API validates it and does not deliver it.
 
-What we accept: no idempotency key, so the duplicate-send window stays open — the architecture
-already lives with it, and it yields a duplicate email rather than a missing one. The ownership
-risk in § 6, which is a disposition rather than an action taken against Postmark, and which at
-these prices costs dollars rather than users. And 45 days of history: longer retention is a paid
-add-on that needs the Pro plan, worth revisiting only if the support workflow turns out to need it.
+## PR 2 — production sends through Postmark
 
-**The trigger to revisit:** a forced plan migration, a deliverability regression, or a support
-failure during an incident. Any one means the thing we bought is gone; the answer is then Resend,
-not a second attempt at Postmark.
+This comes after § Before PR 2, and once the hosting plan's app specs exist.
 
-**Resend is a legitimate choice, and the honest case for it is this.** It is the only candidate
-that does what § Email asked this evaluation to look for, over HTTP and SMTP alike. It is free
-until we outgrow a hundred-email day and $20 after. Its exit is the cleanest — it resells SES, so
-leaving it keeps our delivery path. And the deliverability evidence for Postmark is moderate:
-seed-list tests of marketing-shaped mail, not codes and receipts, from a genre that is largely
-affiliate-funded; the structural argument (separate transactional infrastructure) carries more
-weight than the percentages do. If the team reads Resend's 2026 incidents as growing pains from a
-company whose status page has been clean since February, and weighs the architecture's explicit
-ask above a structural deliverability argument, Resend is the right call. Choose it knowing the
-login path then depends on the SMTP front end where those incidents clustered.
+- **Both app specs, `.do/web.yaml` and `.do/worker.yaml`:**
+  - `EMAIL_TRANSPORT=postmark`, replacing `provider`;
+  - `EMAIL_FROM_ADDRESS` and `EMAIL_SUPPORT_ADDRESS` set to `insights@greenerbydefault.org`;
+  - `EMAIL_GBD_ADDRESS` set to the address GBD names;
+  - `POSTMARK_SERVER_TOKEN` as a `${POSTMARK_SERVER_TOKEN}` secret, stored in the `production`
+    Environment ([`hosting-provider.md`](hosting-provider.md) § Secrets).
 
-**Amazon SES** is the right answer only if someone wants to own email infrastructure. At $0.30/month
-it is essentially free, and it is what Resend resells; everything it saves in dollars it spends in
-the bounce handling, logging and production-access work that the other three include.
-**SendGrid** — the provider § Email names as an example — is the weakest of the four here: most
-expensive, no free tier since 2025, no idempotency, and the poorest deliverability record.
+  The worker needs every one of these, because `@gbd/email/env` requires them all.
+- **Delete the stub:** `provider.ts`, its test, its export, and its `TransportName` member.
+- **Both local `config.toml`s gain `[auth.email.template.confirmation]` → `sign-in-code.html`.** It
+  goes unused while local confirmation is off, but this way the repo names every template
+  production uses. Beside the template stanzas, add one comment: production's copies are pasted
+  into the Supabase dashboard, so a change here must be pasted there too.
+- **`ARCHITECTURE.md` § Email, a few lines:**
+  - our mail goes on `outbound` and Supabase's on `auth`, and why;
+  - "I never got it" is answered from Postmark's activity for that stream;
+  - a spam complaint suppresses an address until Postmark's support lifts it.
+- **Delete this plan.**
 
-**This is not a one-way door, and that should lower the stakes.** The entire provider surface is
-one file behind `EmailTransport`, every message is rendered by us rather than stored with the
-provider, and `EMAIL_TRANSPORT` already selects between implementations. Switching later is a new
-`providerTransport`, a DNS change, and a redeploy — days, not a migration.
+## Verification
 
-## After the decision
-
-1. Implement `send` in [`provider.ts`](../../packages/email/src/transports/provider.ts) as a
-   `fetch` against the chosen provider, keeping every failure inside `emailRequest` so it arrives
-   as an `EmailError`, and honoring `SEND_TIMEOUT_MS`. If the provider supports idempotency keys,
-   the transport needs the `analysis_attempt` id to use one — `RenderedEmail` carries `kind` but no
-   id today, so that is a small type change, not a free win.
-2. Add the provider's credential to `.env.example` and the deploy environment, and extend
-   `parseTransportSettings` to require it when `EMAIL_TRANSPORT=provider` — it currently validates
-   nothing for that case.
-3. Buy or designate the sending domain and publish SPF, DKIM and DMARC for it.
-   `EMAIL_FROM_ADDRESS` is `noreply@foodservice-insights.test` everywhere today. Send from a
-   subdomain rather than the bare domain — it is free to do now and costly to retrofit, and it
-   keeps app mail's reputation separate from whatever GBD staff send from the parent domain.
-   Start DMARC at `p=none` with a reporting address and tighten once the reports are clean.
-4. Point Supabase Auth at the provider's SMTP credentials, and raise Supabase's own auth email
-   rate limit, which defaults to 30/hour once custom SMTP is configured. Set both the "Magic link"
-   and "Confirm signup" templates to `supabase-dev/supabase/templates/sign-in-code.html` — GoTrue's
-   defaults send a link, and the sign-in form needs the code. Likewise set "Change email address" to
-   `email-change.html` beside it, and turn "Secure email change" off, as both local `config.toml`s
-   do (`double_confirm_changes = false`): `/account` asks for one code, from the new address.
-   Check that "Confirm email" is on: GoTrue's `/signup` is public, and with confirmations off it
-   returns a session for any address unverified, which claiming an invite would take as proof of
-   ownership. (Local stacks leave it off; only developers use them.) Check also that the Data API is
-   disabled: nothing uses it, and with no RLS it could expose the tables to the publishable key the
-   browser now holds.
-5. Flip production to `PUBLIC_AUTH_MODE=supabase`, and in the same change flip `tests/e2e`'s run
-   with it. `webContainerCommand` already passes the Supabase URL and publishable key, since
-   startup requires them in both modes. The placeholder's organization and reports belong to an address nobody
-   can sign in as, so before flipping, add a real admin to that organization in Studio, or accept
-   that its data is abandoned. Then delete `placeholder` mode: `src/lib/auth/mode.ts`,
-   `pnpm seed:identity`, and the browser-testing fixtures' `placeholder` branch.
-
-**The Content Security Policy needs nothing for any candidate.** It governs what our pages load, and
-no email path runs in our pages: the worker's `fetch` to the provider and Supabase's SMTP are both
-server-side, and a mail client renders our HTML under its own policy. The browser half of sign-in
-calls Supabase Auth, whose origin `applySecurityHeaders` already adds to `connect-src`. The auth
-e2e failed on `/auth/v1/otp` without it. Three changes would need the policy revisited:
-
-- **A Supabase custom domain for Auth.** `PUBLIC_SUPABASE_URL` has to become that domain, since
-  `connect-src` is built from it. Pointing only the client at it would be blocked.
-- **An image in an email** served through `handle`, such as a logo route. Its `Cross-Origin-Resource-Policy:
-  same-origin` would block a webmail client that loads it directly instead of through a proxy. A
-  file in `static/` skips `handle`, so put the image there.
-- **A provider SDK or widget in the browser**, for example to show delivery status. Nothing in
-  this plan calls for one.
-
-**Open:** nothing consumes bounce or complaint webhooks, whichever provider wins. A hard-bouncing
-address will be suppressed provider-side and our sends will silently succeed forever after. Decide
-whether to ingest those events or to accept that the provider's dashboard is the only place a
-bounce is visible.
-
-**Open:** § Failure modes asks whether we can alert on Auth's own OTP email, which our
-notification metrics do not cover. Every candidate sends webhooks for delivery events; that is the
-likely mechanism, and it is worth deciding at the same time as the bounce question above.
+- Step 7's header checks pass for each path: an app email (send an invite) and a sign-in code.
+- A reply to each lands in insights@. A delegate's message sent as insights@ reaches an outside
+  address and passes DMARC through Google's own signing, which proves Workspace still uses the
+  address fully.
+- After approval, an outside Gmail address and an Outlook.com address each receive both kinds of
+  email in the inbox, not in spam.
+- Postmark's activity shows app mail on `outbound`, tagged by kind, and codes on `auth`.
+- If step 6 was done, the first weekly digest shows Postmark, Google and HubSpot all passing.

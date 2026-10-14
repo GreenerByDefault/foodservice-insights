@@ -135,9 +135,8 @@ function loadPrettyStream(): DestinationStream {
 
 /** No record written is longer than this, newline included.
  *
- * It is DigitalOcean's per-line forwarding cap, the tightest among the hosts
- * `.claude/plans/hosting-provider.md` compared. A line the forwarder splits is one no destination
- * can parse, so a looser host only raises this.
+ * It stays under DigitalOcean's per-line log forwarding cap. A line the forwarder splits is one no
+ * destination can parse.
  */
 export const MAX_RECORD_BYTES = 2_000;
 

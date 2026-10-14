@@ -5,8 +5,7 @@
 `REQUIREMENTS.md` § Metrics asks for "analysis cost, via AI metrics", and § Persistence carries
 two **Open**s: AI usage (model, tokens, cost), and structured result metadata ("rows in, rows
 categorized, products uncategorized, ..."). Both were dropped until their shape was known.
-`metrics-dashboards.md` leaves AI cost out "until the child reports token usage", and
-`observability-vendors.md` lists it as a follow-up.
+`metrics-dashboards.md` leaves AI cost out "until the child reports token usage".
 
 This plan records, as typed rows per analysis attempt:
 
@@ -570,8 +569,7 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - stage time p50 and p95;
   - which checks warn most;
   - and, on an impact dashboard, CO2e analyzed and plant share per month.
-- `metrics-dashboards.md` loses AI cost from its Out of scope. `observability-vendors.md`'s
-  AI-cost follow-up becomes a pointer here.
+- `metrics-dashboards.md` loses AI cost from its Out of scope.
 - This PR deletes this plan. If the metrics plan has not reached PR 1 by then, end this plan at
   PR 6. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
