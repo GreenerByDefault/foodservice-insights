@@ -15,8 +15,12 @@ from gbd_foodservice_insights import analysis
 from gbd_foodservice_insights.analysis import (
     LB_TO_KG,
     AnalysisRequest,
+    CategorizationSummary,
     CountsBasis,
+    InputSummary,
     InvalidInputError,
+    LlmCall,
+    StageFinished,
     Telemetry,
     UnitSystem,
     UnusableDataError,
@@ -422,9 +426,16 @@ def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -
     request = _request(tmp_path, unit_system="lb")
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
 
-    analyze(request, llm=KeywordLlmClient())
+    reported: list[Telemetry] = []
+
+    analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
 
     assert fake_report.rows["kilos_total"].tolist() == [pytest.approx(10 * LB_TO_KG)]
+    (input_summary,) = [record for record in reported if isinstance(record, InputSummary)]
+    (categorization,) = [record for record in reported if isinstance(record, CategorizationSummary)]
+    assert (input_summary.kilograms, categorization.categorized_kilograms) == pytest.approx(
+        (10 * LB_TO_KG, 10 * LB_TO_KG)
+    )
 
 
 @pytest.mark.parametrize(
@@ -495,7 +506,70 @@ def test_a_passed_llm_reports_no_calls(tmp_path: Path, fake_report: FakeReport) 
 
     analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
 
-    assert reported == []
+    assert reported
+    assert [record for record in reported if isinstance(record, LlmCall)] == []
+
+
+class MysteryMeatLlmClient(KeywordLlmClient):
+    def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
+        answer = super().match_product_to_category(item, categories)
+        return "Meat" if item == "mystery meat" else answer
+
+
+def test_reports_each_stages_summary_and_time_in_order(
+    tmp_path: Path, cache_path: Path, fake_report: FakeReport
+) -> None:
+    pd.DataFrame(
+        {
+            "product": ["House Blend 7", "Paper Towels", "OTHER PORK SKU"],
+            "category": ["Cheese", "No Matches Found", "Pork (pig meat)"],
+            "cleaned_item_names": ["house blend", "paper towels", "pork loin"],
+        }
+    ).to_csv(cache_path, index=False)
+    request = _request(tmp_path)
+    request.input_csv.write_text(
+        sample_input_csv(
+            (
+                "House Blend 7",
+                "Paper Towels",
+                "Pork Loin",
+                " Pork Loin",
+                "Chicken Thigh",
+                "Dish Soap",
+                "Mystery Meat",
+            )
+        )
+    )
+    reported: list[Telemetry] = []
+
+    analyze(request, report_telemetry=reported.append, llm=MysteryMeatLlmClient())
+
+    assert _without_times(reported) == [
+        StageFinished("read", ms=0),
+        InputSummary(rows=21, kilograms=210.0, unique_products=6, cache_entries=3),
+        StageFinished("categorize", ms=0),
+        CategorizationSummary(
+            raw_product_history_products=2,
+            cleaned_name_history_products=1,
+            llm_products=3,
+            history_uncategorized_products=1,
+            llm_uncategorized_products=2,
+            unrecognized_llm_answers=1,
+            categorized_rows=12,
+            categorized_kilograms=120.0,
+        ),
+        StageFinished("report", ms=0),
+        StageFinished("pdf", ms=0),
+        StageFinished("xlsx", ms=0),
+    ]
+
+
+def _without_times(reported: Sequence[Telemetry]) -> list[Telemetry]:
+    """Zeroes each stage's time, which varies from run to run."""
+    return [
+        dataclasses.replace(record, ms=0) if isinstance(record, StageFinished) else record
+        for record in reported
+    ]
 
 
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
@@ -544,17 +618,39 @@ def test_rejects_input_that_breaks_the_contract_before_any_llm_call(tmp_path: Pa
     request.input_csv.write_text("product,date,weight\nCheese,01/15/2025,1\n")
     llm = KeywordLlmClient()
 
+    reported: list[Telemetry] = []
+
     with pytest.raises(InvalidInputError, match="line 2 has a date"):
-        analyze(request, llm=llm)
+        analyze(request, report_telemetry=reported.append, llm=llm)
     assert llm.calls == []
+    assert reported == []
 
 
-def test_data_with_almost_no_recognizable_products_is_unusable(tmp_path: Path) -> None:
+def test_data_with_almost_no_recognizable_products_is_unusable_and_reports_why(
+    tmp_path: Path,
+) -> None:
     request = _request(tmp_path)
     request.input_csv.write_text(sample_input_csv(UNKNOWN_PRODUCTS))
+    reported: list[Telemetry] = []
 
     with pytest.raises(UnusableDataError, match="Over 80% of products were eliminated"):
-        analyze(request, llm=KeywordLlmClient())
+        analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
+    # No time for the failed "report" stage, and no cache file, so an empty cache.
+    assert _without_times(reported) == [
+        StageFinished("read", ms=0),
+        InputSummary(rows=6, kilograms=60.0, unique_products=2, cache_entries=0),
+        StageFinished("categorize", ms=0),
+        CategorizationSummary(
+            raw_product_history_products=0,
+            cleaned_name_history_products=0,
+            llm_products=2,
+            history_uncategorized_products=0,
+            llm_uncategorized_products=2,
+            unrecognized_llm_answers=0,
+            categorized_rows=0,
+            categorized_kilograms=0.0,
+        ),
+    ]
 
 
 def test_data_whose_recognizable_products_weigh_nothing_is_unusable(tmp_path: Path) -> None:

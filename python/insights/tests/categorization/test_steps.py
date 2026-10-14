@@ -189,7 +189,7 @@ def test_categorize_with_llm_dedupes_identical_cleaned_names(
     )
     llm = KeywordLlmClient()
 
-    result = categorize_with_llm(products_df, llm)
+    result, unrecognized = categorize_with_llm(products_df, llm)
 
     assert llm.calls == [("match", "chicken breast")]
     pd.testing.assert_frame_equal(
@@ -199,6 +199,7 @@ def test_categorize_with_llm_dedupes_identical_cleaned_names(
             match_type=pd.Series(["llm"] * 2, dtype="object"),
         ),
     )
+    assert unrecognized == 0
     assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
 
 
@@ -213,10 +214,11 @@ def test_categorize_with_llm_skips_the_llm_when_everything_is_already_categorize
     )
     llm = KeywordLlmClient()
 
-    result = categorize_with_llm(products_df, llm)
+    result, unrecognized = categorize_with_llm(products_df, llm)
 
     assert llm.calls == []
     pd.testing.assert_frame_equal(result, products_df)
+    assert unrecognized == 0
 
 
 def test_categorize_with_llm_resolves_near_misses_and_counts_the_rest(
@@ -243,7 +245,7 @@ def test_categorize_with_llm_resolves_near_misses_and_counts_the_rest(
         }
     )
 
-    result = categorize_with_llm(products_df, Scripted())
+    result, unrecognized = categorize_with_llm(products_df, Scripted())
 
     pd.testing.assert_frame_equal(
         result,
@@ -258,6 +260,7 @@ def test_categorize_with_llm_resolves_near_misses_and_counts_the_rest(
             match_type=["llm"] * 4 + ["raw_product_history"],
         ),
     )
+    assert unrecognized == 2
     assert [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING] == [
         "2 of 4 LLM answers were not recognized; most common: [('Chicken', 2)]"
     ]
@@ -276,9 +279,10 @@ def test_categorize_with_llm_resolves_every_category_named_in_lower_case() -> No
         {"category": [pd.NA] * len(categories), "cleaned_item_names": categories}
     )
 
-    result = categorize_with_llm(products_df, LowerCase())
+    result, unrecognized = categorize_with_llm(products_df, LowerCase())
 
     assert result["category"].tolist() == categories
+    assert unrecognized == 0
 
 
 # ----------------------------------------------------------------------
