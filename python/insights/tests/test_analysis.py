@@ -426,9 +426,16 @@ def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -
     request = _request(tmp_path, unit_system="lb")
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
 
-    analyze(request, llm=KeywordLlmClient())
+    reported: list[Telemetry] = []
+
+    analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
 
     assert fake_report.rows["kilos_total"].tolist() == [pytest.approx(10 * LB_TO_KG)]
+    (input_summary,) = [record for record in reported if isinstance(record, InputSummary)]
+    (categorization,) = [record for record in reported if isinstance(record, CategorizationSummary)]
+    assert (input_summary.kilograms, categorization.categorized_kilograms) == pytest.approx(
+        (10 * LB_TO_KG, 10 * LB_TO_KG)
+    )
 
 
 @pytest.mark.parametrize(
@@ -527,9 +534,10 @@ def test_reports_each_stages_summary_and_time_in_order(
 
     analyze(request, report_telemetry=reported.append, llm=llm)
 
-    summaries = [record for record in reported if not isinstance(record, StageFinished)]
-    assert summaries == [
+    assert _without_times(reported) == [
+        StageFinished("read", ms=0),
         InputSummary(rows=21, kilograms=210.0, products=6, cache_products=3),
+        StageFinished("categorize", ms=0),
         CategorizationSummary(
             raw_product_history_products=2,
             cleaned_name_history_products=1,
@@ -540,13 +548,18 @@ def test_reports_each_stages_summary_and_time_in_order(
             categorized_rows=12,
             categorized_kilograms=120.0,
         ),
+        StageFinished("report", ms=0),
+        StageFinished("pdf", ms=0),
+        StageFinished("xlsx", ms=0),
     ]
-    assert len([op for op, _ in llm.calls if op == "clean"]) == 1 + 3
-    assert [
-        record.stage if isinstance(record, StageFinished) else type(record).__name__
+
+
+def _without_times(reported: Sequence[Telemetry]) -> list[Telemetry]:
+    """Zeroes each stage's time, which varies from run to run."""
+    return [
+        dataclasses.replace(record, ms=0) if isinstance(record, StageFinished) else record
         for record in reported
-    ] == ["read", "InputSummary", "categorize", "CategorizationSummary", "report", "pdf", "xlsx"]
-    assert all(record.ms >= 0 for record in reported if isinstance(record, StageFinished))
+    ]
 
 
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
@@ -612,16 +625,22 @@ def test_data_with_almost_no_recognizable_products_is_unusable_and_reports_why(
 
     with pytest.raises(UnusableDataError, match="Over 80% of products were eliminated"):
         analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
-    assert reported[-1] == CategorizationSummary(
-        raw_product_history_products=0,
-        cleaned_name_history_products=0,
-        llm_products=2,
-        history_uncategorized_products=0,
-        llm_uncategorized_products=2,
-        unrecognized_llm_answers=0,
-        categorized_rows=0,
-        categorized_kilograms=0.0,
-    )
+    # No time for the failed "report" stage, and no cache file, so no cached products.
+    assert _without_times(reported) == [
+        StageFinished("read", ms=0),
+        InputSummary(rows=6, kilograms=60.0, products=2, cache_products=0),
+        StageFinished("categorize", ms=0),
+        CategorizationSummary(
+            raw_product_history_products=0,
+            cleaned_name_history_products=0,
+            llm_products=2,
+            history_uncategorized_products=0,
+            llm_uncategorized_products=2,
+            unrecognized_llm_answers=0,
+            categorized_rows=0,
+            categorized_kilograms=0.0,
+        ),
+    ]
 
 
 def test_data_whose_recognizable_products_weigh_nothing_is_unusable(tmp_path: Path) -> None:

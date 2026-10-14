@@ -288,7 +288,16 @@ def test_summarize_categorization_counts_a_match_type_no_product_has_as_zero() -
         categorize_unique_products(df, KeywordLlmClient(), EMPTY_CACHE)
     )
 
-    assert (summary.raw_product_history_products, summary.cleaned_name_history_products) == (0, 0)
+    assert summary == CategorizationSummary(
+        raw_product_history_products=0,
+        cleaned_name_history_products=0,
+        llm_products=1,
+        history_uncategorized_products=0,
+        llm_uncategorized_products=0,
+        unrecognized_llm_answers=0,
+        categorized_rows=1,
+        categorized_kilograms=1.0,
+    )
 
 
 def _categorized(products: pd.DataFrame, rows: Sequence[str]) -> CategorizedProducts:
