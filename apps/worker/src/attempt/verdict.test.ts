@@ -81,6 +81,51 @@ describe('classifyVerdict', () => {
       });
     });
 
+    describe('an unknown failure', () => {
+      const unknown = (traceback: string | null): DocumentRead => ({
+        kind: 'failure',
+        failure: { reason: 'unknown', detail: 'division by zero', traceback },
+      });
+
+      test('appends its traceback to the detail', () => {
+        const traceback = 'Traceback (most recent call last):\n  ZeroDivisionError\n';
+        expect(classifyVerdict(anEnding({ outcome: EXITED_1, read: unknown(traceback) }))).toEqual({
+          kind: 'failed',
+          reason: 'unknown',
+          detail: `division by zero\n${traceback}`,
+        });
+      });
+
+      test('without a traceback keeps the detail alone', () => {
+        expect(classifyVerdict(anEnding({ outcome: EXITED_1, read: unknown(null) }))).toEqual({
+          kind: 'failed',
+          reason: 'unknown',
+          detail: 'division by zero',
+        });
+      });
+
+      test('truncates a long traceback from its start, keeping the raising line', () => {
+        const traceback = `${'frame\n'.repeat(STDERR_TAIL_BYTES)}ZeroDivisionError: boom`;
+        const verdict = classifyVerdict(anEnding({ outcome: EXITED_1, read: unknown(traceback) }));
+        const detail = (verdict as { detail: string }).detail;
+        expect(detail.length).toBeLessThanOrEqual(STDERR_TAIL_BYTES);
+        expect(detail.startsWith('division by zero\n(truncated)… ')).toBe(true);
+        expect(detail.endsWith('ZeroDivisionError: boom')).toBe(true);
+      });
+
+      test('other reasons ignore the traceback', () => {
+        const read: DocumentRead = {
+          kind: 'failure',
+          failure: { ...A_FAILURE, traceback: 'Traceback…' },
+        };
+        expect(classifyVerdict(anEnding({ outcome: EXITED_1, read }))).toEqual({
+          kind: 'failed',
+          reason: A_FAILURE.reason,
+          detail: A_FAILURE.detail,
+        });
+      });
+    });
+
     test('a success outranks a kill for being hung, hard-timeout, shutting-down, or a progress violation', () => {
       const kills: Kill[] = [
         { reason: 'hung' },

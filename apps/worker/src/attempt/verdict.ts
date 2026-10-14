@@ -73,7 +73,12 @@ function classify(ending: ChildEnding): Verdict {
     return { kind: 'succeeded', result: read.result };
   }
   if (outcome.kind === 'exited' && outcome.exitCode === 1 && read.kind === 'failure') {
-    return { kind: 'failed', reason: read.failure.reason, detail: read.failure.detail };
+    const { reason, detail, traceback } = read.failure;
+    return {
+      kind: 'failed',
+      reason,
+      detail: reason === 'unknown' ? withTraceback(detail, traceback) : detail,
+    };
   }
 
   if (kill !== undefined) {
@@ -136,6 +141,20 @@ function classify(ending: ChildEnding): Verdict {
 
 function crashDetail(head: string, stderrTail: string): string {
   return stderrTail.length > 0 ? `${head}\n${stderrTail}` : head;
+}
+
+/** `unknown` is the one reason whose detail (`str(error)`) does not say where it was raised.
+ * Truncation keeps the traceback's end, which names the raising line, rather than its start.
+ */
+function withTraceback(detail: string, traceback: string | null): string {
+  if (traceback === null) return detail;
+  const head = `${detail}\n`;
+  const room = STDERR_TAIL_BYTES - head.length;
+  if (traceback.length <= room) return head + traceback;
+  const marker = '(truncated)… ';
+  return room > marker.length
+    ? head + marker + traceback.slice(-(room - marker.length))
+    : head + traceback;
 }
 
 function truncate(detail: string): string {

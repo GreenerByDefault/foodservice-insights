@@ -97,9 +97,6 @@ landed) that shape the design:
 - **Nothing says which build ran an attempt.** `worker_id` is `hostname-pid-uuid`. The SHA
   exists only as the image's OCI label, and both Python packages are version `0.0.0`. Prompts,
   categories and thresholds are packaged files, so the SHA identifies them too.
-- **`failure.json`'s traceback is parsed and thrown away.** `verdict.ts` keeps only `reason`
-  and `detail`, and for `unknown` the detail is just `str(error)`. The web app never shows
-  `failure_detail`.
 - **`mock-llm` is what `pnpm test:system` runs** (`partial(analyze, llm=KeywordLlmClient())`).
   So no tier sends a real `OpenAiLlmClient`'s usage through the real parent; the contract
   fixtures on both sides close that gap.
@@ -162,7 +159,6 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 | Available | Decision |
 | --- | --- |
 | **The worker's git SHA** | Stored at claim, so abandoned and timed-out attempts carry it too |
-| **`failure.json`'s traceback** | Appended to `failure_detail` for `unknown`, as `crashDetail` appends stderr |
 | Child runtime (`spawn.ts` `durationMs`); download, upload and park times | The stage timings cover the child; `claimed_at`→`finished_at` covers the rest. Log fields, not columns |
 | `WORKER_MODE`, contract version | Production only ever runs `live`; the SHA implies the contract |
 | Row count of the upload (computed on the server, then dropped) | Redundant with the child's rows read |
@@ -504,21 +500,7 @@ Independent of PRs 2–3 except PR 1's column. This touches CI and the image, wh
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
   commit.
 
-## PR 5 — keep the traceback of an `unknown` failure
-
-`apps/worker` only. Independent.
-
-- `attempt/verdict.ts`: a child `failed` verdict whose reason is `unknown` appends the traceback
-  to `detail`, the way `crashDetail` appends the stderr tail. Truncation keeps the traceback's
-  end, which names the raising line, within `STDERR_TAIL_BYTES`. `failure_detail` is never shown
-  to users.
-- `verdict.test.ts`:
-  - with a traceback;
-  - without one;
-  - one long enough to truncate, keeping its end.
-- `ARCHITECTURE.md` § Failure modes, if it describes `failure_detail`'s contents.
-
-## PR 6 — the views and panels
+## PR 5 — the views and panels
 
 This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 
@@ -553,11 +535,10 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - and, on an impact dashboard, CO2e analyzed and plant share per month.
 - `metrics-dashboards.md` loses AI cost from its Out of scope.
 - This PR deletes this plan. If the metrics plan has not reached PR 1 by then, end this plan at
-  PR 5. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
+  PR 4. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: 1, then 2, then 3. PRs 4 and 5 can go any time, 4 after 1.
-PR 6 is last.
+Order: 1, then 2, then 3. PR 4 can go any time after 1. PR 5 is last.
 
 ## Failure paths
 
@@ -602,5 +583,5 @@ Then by hand, against the dev stack:
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
 - After PR 4's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
-- After PR 6: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
+- After PR 5: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.
