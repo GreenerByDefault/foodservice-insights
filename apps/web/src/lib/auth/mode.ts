@@ -3,7 +3,7 @@
  * - `placeholder`: signing in takes the site password (`SITE_PASSWORD`), and whoever does is the one
  *   seeded user from `pnpm seed:identity`. No mail, and Supabase Auth is never contacted. How a
  *   hosted environment runs until there is an email provider. Temporary: deleted once production
- *   has email (`.claude/plans/email-provider.md`).
+ *   has email (`.claude/plans/production-sign-in.md`).
  * - `supabase`: a request is whoever its Supabase Auth session cookie says it is.
  *
  * Required, with no default: defaulting to `placeholder` would serve a deploy that forgot the

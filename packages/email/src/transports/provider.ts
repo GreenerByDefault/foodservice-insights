@@ -1,11 +1,9 @@
-/** **Stub:** the production transport, pending the provider decision.
+/** **Stub:** the production transport, until it sends through Postmark (ARCHITECTURE.md § Email).
  *
- * ARCHITECTURE.md § Stack still marks the provider **Open**. Everything above the `EmailTransport`
- * seam is written and tested against a stand-in transport, so choosing one means writing a `send`
- * here — a `fetch` with that provider's body shape — and pointing `EMAIL_TRANSPORT` at it. Every
- * candidate — Resend, Postmark, SendGrid, SES — offers a JSON API, which also leaves the provider's
- * MIME handling (`multipart/alternative`, encoded-words, header folding) to the provider rather
- * than to us.
+ * Everything above the `EmailTransport` seam is written and tested against a stand-in transport,
+ * so wiring Postmark up means writing a `send` here — a `fetch` with its body shape — and pointing
+ * `EMAIL_TRANSPORT` at it. Its JSON API also leaves MIME handling (`multipart/alternative`,
+ * encoded-words, header folding) to Postmark rather than to us.
  */
 
 import type { EmailTransport } from '../client.ts';
@@ -18,7 +16,7 @@ export function providerTransport(): EmailTransport {
       return Promise.reject(
         new EmailError(
           'No email provider is configured. Set EMAIL_TRANSPORT=mailpit for local development, ' +
-            'or implement providerTransport once a provider is chosen — see ARCHITECTURE.md.',
+            'or implement providerTransport for Postmark — see ARCHITECTURE.md § Email.',
         ),
       );
     },

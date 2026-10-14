@@ -300,7 +300,7 @@ Follow security best practices for web development.
 - Workers can be scaled horizontally and vertically.
   - *Rejected for now: autoscaling.* It would have to key off queue depth rather than CPU
     utilization, which implies a much more complex hosting vendor (Google Cloud rather than
-    Railway or Render). The system should be designed so autoscaling can be added later.
+    DigitalOcean App Platform). The system should be designed so autoscaling can be added later.
 - Database queries are optimized.
 
 ### Resilience
