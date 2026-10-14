@@ -44,10 +44,11 @@ class CategorizedProducts:
 
 @dataclass(frozen=True)
 class CategorizationSummary:
-    """Unique products by how they were categorized, and the rows categorization left usable."""
+    """The upload's unique products by how each was categorized, and the upload's rows that
+    categorization left usable. The three match types partition the unique products."""
 
-    raw_product_history_products: int
-    cleaned_name_history_products: int
+    raw_product_history_products: int  # the cache had the product itself
+    cleaned_name_history_products: int  # the cache had its LLM-cleaned name
     llm_products: int
     # "No Matches Found" from the cache, which counts as a hit, or from the LLM.
     history_uncategorized_products: int

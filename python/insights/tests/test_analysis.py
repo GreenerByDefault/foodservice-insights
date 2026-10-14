@@ -536,7 +536,7 @@ def test_reports_each_stages_summary_and_time_in_order(
 
     assert _without_times(reported) == [
         StageFinished("read", ms=0),
-        InputSummary(rows=21, kilograms=210.0, products=6, cache_products=3),
+        InputSummary(rows=21, kilograms=210.0, unique_products=6, cache_entries=3),
         StageFinished("categorize", ms=0),
         CategorizationSummary(
             raw_product_history_products=2,
@@ -625,10 +625,10 @@ def test_data_with_almost_no_recognizable_products_is_unusable_and_reports_why(
 
     with pytest.raises(UnusableDataError, match="Over 80% of products were eliminated"):
         analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
-    # No time for the failed "report" stage, and no cache file, so no cached products.
+    # No time for the failed "report" stage, and no cache file, so an empty cache.
     assert _without_times(reported) == [
         StageFinished("read", ms=0),
-        InputSummary(rows=6, kilograms=60.0, products=2, cache_products=0),
+        InputSummary(rows=6, kilograms=60.0, unique_products=2, cache_entries=0),
         StageFinished("categorize", ms=0),
         CategorizationSummary(
             raw_product_history_products=0,

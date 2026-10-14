@@ -50,10 +50,11 @@ landed) that shape the design:
   `LlmCall`, `LlmOperation`, `cost_micro_usd` and `CategorizationSummary`, so `worker_child`
   imports only from the seam. `type Telemetry = LlmCall | InputSummary | CategorizationSummary |
   StageFinished`. `analyze` reports, in order:
-  - `StageFinished("read", ms)`, then `InputSummary(rows, kilograms, products, cache_products)`.
-    The read stage includes loading the cache, kilograms are after lb→kg, products are counted
-    after stripping, as `categorize_unique_products` strips, and `cache_products` is 0 when the
-    cache CSV is missing.
+  - `StageFinished("read", ms)`, then `InputSummary(rows, kilograms, unique_products,
+    cache_entries)`. The read stage includes loading the cache. The first three describe the
+    upload: kilograms are after lb→kg, and unique products are counted after stripping, as
+    `categorize_unique_products` strips. `cache_entries` is the whole cache's size, not this
+    upload's hits, and 0 means every product goes to the LLM.
   - `StageFinished("categorize", ms)`, then `CategorizationSummary`, from the pure
     `summarize_categorization` in `categorization/pipeline.py`. It holds the unique products per
     match type, the "No Matches Found" products split by history or LLM, the unrecognized LLM
@@ -89,8 +90,8 @@ landed) that shape the design:
   summary, which also subtracts the non-entree rows.
 - **The cache is the cost lever, and its "hit" is not "categorized".** `raw_product_history`
   also counts products whose cached category *is* "No Matches Found". A missing cache CSV only
-  warns, and then sends every product to the LLM. That is `caches-to-supabase.md`'s launch blocker,
-  invisible per attempt today.
+  warns, and then sends every product to the LLM. That is `caches-to-supabase.md`'s launch blocker.
+  `cache_entries` reports it, but nothing records it per attempt yet.
 - **Nothing says which build ran an attempt.** `worker_id` is `hostname-pid-uuid`. The SHA
   exists only as the image's OCI label, and both Python packages are version `0.0.0`. Prompts,
   categories and thresholds are packaged files, so the SHA identifies them too.
@@ -146,7 +147,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 
 | Stage | Available | Decision |
 | --- | --- | --- |
-| Read | **Rows**, **kilograms** (after lb→kg), **unique products**, **products in the cache** | Rows and products are the size of the work. A cache of 0 is the missing-CSV alarm |
+| Read | **Rows**, **kilograms** (after lb→kg), **unique products**, **entries in the cache** | Rows and products are the size of the work. An empty cache is the alarm, whether a missing CSV today or an empty verified table after `caches-to-supabase.md` |
 | Categorize | **Unique products by match type**; **uncategorized, split by whether the history or the LLM said "No Matches Found"**; **unrecognized LLM answers**; **rows** and **kilograms categorized** | The share of weight left uncategorized is the coverage figure the customer never sees. The products share is what the 20% cutoff tests, so successful runs show how close they came. `MergeCounts`' other fields are redundant with these |
 | Report | **`quality_status`**; **per check and status, the number of findings**; **total kg CO2e**, **kg CO2e per diner or meal**, **plant %**, **plant-protein %** | Findings' messages, samples and thresholds are text or constants. `quality_status` can only be `pass` or `warning` today, because no check emits `error`. The impact numbers are for a cross-customer dashboard |
 | Every stage | **Milliseconds per stage** (read, categorize, report, pdf, xlsx); **peak memory** | Tests REQUIREMENTS § Performance's "almost entirely the AI tool", and sizes `maxConcurrentAttempts`. A killed run's stage timings say how far it got |
@@ -183,7 +184,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   finish.**
   - Identity: `analysis_attempt_id`, `report_id`, `organization_id`, `recorded_at`. They are raw
     ids, per § Telemetry outlives what it describes.
-  - Input: `input_rows`, `input_kilograms`, `input_products`, `cache_products`.
+  - Input: `input_rows`, `input_kilograms`, `input_unique_products`, `cache_entries`.
   - Categorization:
     - `raw_product_history_products`, `cleaned_name_history_products`, `llm_products`;
     - `history_uncategorized_products`, `llm_uncategorized_products`,
@@ -195,7 +196,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
     `peak_memory_kib`.
 
   Each group is all null or all set, by named CHECK. The sums the child guarantees are CHECKs
-  too: the three match types add up to `input_products`, and categorized rows are at most rows
+  too: the three match types add up to `input_unique_products`, and categorized rows are at most rows
   read. So a dashboard can tell "never reached the report" from "zero".
   *Rejected: a table per stage.* Every panel would join three or four 1:1 tables.
 - **`analysis_attempt_quality_check`: one row per attempt × check × status**, holding the number
@@ -370,7 +371,7 @@ Python only, still unwired.
     hard-delete script and one on `(recorded_at)` for the views.
   - The column groups from § Decisions, with one all-or-none CHECK per group.
   - Categorization requires input, and report requires categorization.
-  - The match types sum to `input_products`.
+  - The match types sum to `input_unique_products`.
   - Categorized rows and kilograms are at most those read.
   - Every count and millisecond is non-negative, `peak_memory_kib > 0`, and the percentages
     are 0–100.

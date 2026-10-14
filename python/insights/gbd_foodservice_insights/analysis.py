@@ -68,10 +68,15 @@ Stage = Literal["read", "categorize", "report", "pdf", "xlsx"]
 
 @dataclass(frozen=True)
 class InputSummary:
+    """The upload's size, and the size of the categorization cache it is matched against."""
+
     rows: int
     kilograms: float
-    products: int  # unique, after stripping
-    cache_products: int  # 0 when the cache file is missing, so every product goes to the LLM
+    unique_products: int  # after stripping, as categorization matches them
+    # Every entry in the cache, not only those this upload matches. Size alone says nothing of
+    # coverage — `CategorizationSummary` counts the hits — but 0 means every product goes to the
+    # LLM.
+    cache_entries: int
 
 
 @dataclass(frozen=True)
@@ -195,8 +200,8 @@ def _summarize_input(df: pd.DataFrame, cache: CategorizationCache) -> InputSumma
         rows=len(df),
         kilograms=float(df["weight"].sum()),
         # Stripped as `categorize_unique_products` strips, so the match types sum to this.
-        products=df["product"].str.strip().nunique(),
-        cache_products=len(cache.products),
+        unique_products=df["product"].str.strip().nunique(),
+        cache_entries=len(cache.products),
     )
 
 
