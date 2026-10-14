@@ -3,13 +3,16 @@ import io
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Final, Literal
+from typing import Final
 
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisOutcome,
     AnalysisRequest,
+    LlmOperation,
     ReportProgress,
+    ReportTelemetry,
+    Telemetry,
 )
 from gbd_foodservice_insights.input_csv import INPUT_COLUMNS
 
@@ -23,26 +26,34 @@ def _ignore() -> None:
     pass
 
 
+def _ignore_telemetry(telemetry: Telemetry) -> None:
+    pass
+
+
 def stub_analysis(
     request: AnalysisRequest,
     *,
     report_progress: ReportProgress = _ignore,
+    report_telemetry: ReportTelemetry = _ignore_telemetry,
     write_pdf: bool = True,
     write_xlsx: bool = True,
     progress_calls: int = 2,
+    telemetry: Sequence[Telemetry] = (),
     raises: type[AnalysisError] | None = None,
 ) -> AnalysisOutcome:
     """The library's own definition of a valid `analyze()`, shipped for `worker_child`'s
     tests the same way `@gbd/db/testing` ships fakes for its consumers.
 
     It exists to test the *wrapper*, producing outcomes a mocked LLM never could — a missing
-    declared file, an out-of-range cost, each exception type on demand. Every keyword names
-    an outcome of the seam, not a library internal, so the port landing won't change what it
-    expresses. Writes real files with real magic bytes into `request.output_directory`,
-    unless told to skip one.
+    declared file, each exception type on demand. Every keyword names an outcome of the seam,
+    not a library internal, so the port landing won't change what it expresses. Writes real
+    files with real magic bytes into `request.output_directory`, unless told to skip one.
     """
     for _ in range(progress_calls):
         report_progress()
+    # Before `raises`, as a real run reports what it spent before failing.
+    for record in telemetry:
+        report_telemetry(record)
 
     if raises is not None:
         raise raises(f"stub_analysis: raising {raises.__name__} on request")
@@ -86,8 +97,6 @@ KEYWORD_CATEGORIES: Final[tuple[tuple[str, str], ...]] = (
     ("brown rice", "Whole Grains"),
 )
 NO_MATCH: Final = "No Matches Found"
-
-type LlmOperation = Literal["clean", "match"]
 
 
 @dataclass

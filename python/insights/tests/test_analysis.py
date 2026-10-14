@@ -17,12 +17,15 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     CountsBasis,
     InvalidInputError,
+    LlmCall,
+    Telemetry,
     UnitSystem,
     UnusableDataError,
     UpstreamApiError,
     analyze,
 )
 from gbd_foodservice_insights.categorization import cache
+from gbd_foodservice_insights.categorization.llm import OnLlmCall
 from gbd_foodservice_insights.report import pdf
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding
@@ -463,8 +466,37 @@ def test_hands_the_report_the_forms_answers(
 
 
 # ----------------------------------------------------------------------
-# Tests for progress reporting and the categorization cache
+# Tests for progress and telemetry reporting, and the categorization cache
 # ----------------------------------------------------------------------
+
+
+def test_the_default_llm_reports_its_calls_as_telemetry(
+    tmp_path: Path, fake_report: FakeReport, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    received: list[OnLlmCall] = []
+
+    def from_env(*, on_call: OnLlmCall) -> KeywordLlmClient:
+        received.append(on_call)
+        return KeywordLlmClient()
+
+    monkeypatch.setattr(analysis.OpenAiLlmClient, "from_env", from_env)
+    request = _request(tmp_path)
+    request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
+    reported: list[Telemetry] = []
+
+    analyze(request, report_telemetry=reported.append)
+
+    assert received == [reported.append]
+
+
+def test_a_passed_llm_reports_no_calls(tmp_path: Path, fake_report: FakeReport) -> None:
+    request = _request(tmp_path)
+    request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
+    reported: list[Telemetry] = []
+
+    analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
+
+    assert [record for record in reported if isinstance(record, LlmCall)] == []
 
 
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
