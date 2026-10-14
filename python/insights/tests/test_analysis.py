@@ -527,12 +527,22 @@ def test_reports_each_stages_summary_and_time_in_order(
         }
     ).to_csv(cache_path, index=False)
     request = _request(tmp_path)
-    products = ("House Blend 7", "Paper Towels", "Pork Loin", " Pork Loin", "Chicken Thigh")
-    request.input_csv.write_text(sample_input_csv((*products, "Dish Soap", "Mystery Meat")))
-    llm = MysteryMeatLlmClient()
+    request.input_csv.write_text(
+        sample_input_csv(
+            (
+                "House Blend 7",
+                "Paper Towels",
+                "Pork Loin",
+                " Pork Loin",
+                "Chicken Thigh",
+                "Dish Soap",
+                "Mystery Meat",
+            )
+        )
+    )
     reported: list[Telemetry] = []
 
-    analyze(request, report_telemetry=reported.append, llm=llm)
+    analyze(request, report_telemetry=reported.append, llm=MysteryMeatLlmClient())
 
     assert _without_times(reported) == [
         StageFinished("read", ms=0),

@@ -118,22 +118,24 @@ def summarize_categorization(categorized: CategorizedProducts) -> Categorization
     """Reads only `categorize_unique_products`' frames, so it can run before
     `merge_categorizations` rejects them. The rows it counts as categorized are the ones that
     merge keeps."""
-    products = categorized.unique_products_df
-    match_type = products["match_type"]
+    match_type = categorized.unique_products_df["match_type"]
     known = match_type.isin([MATCH_TYPE_RAW, MATCH_TYPE_CLEANED, MATCH_TYPE_LLM])
     if not known.all():
         raise ValueError(f"Unknown match types: {sorted(set(match_type[~known].astype(str)))}")
 
     products_by_type = match_type.value_counts()
-    uncategorized = products["category"] == NO_MATCHES_FOUND
+    uncategorized = categorized.unique_products_df["category"] == NO_MATCHES_FOUND
     from_llm = match_type == MATCH_TYPE_LLM
 
-    rows = categorized.cleaned_df
-    row_category = rows["product"].map(products.set_index("product")["category"])
+    row_category = categorized.cleaned_df["product"].map(
+        categorized.unique_products_df.set_index("product")["category"]
+    )
     # As in `merge_categorizations`: counted, not named, since product names are customer data.
     n_missing = row_category.isna().sum()
     if n_missing > 0:
-        raise ValueError(f"No categorization for {n_missing} of {len(rows)} rows.")
+        raise ValueError(
+            f"No categorization for {n_missing} of {len(categorized.cleaned_df)} rows."
+        )
     kept = row_category != NO_MATCHES_FOUND
 
     return CategorizationSummary(
@@ -144,5 +146,5 @@ def summarize_categorization(categorized: CategorizedProducts) -> Categorization
         llm_uncategorized_products=int((uncategorized & from_llm).sum()),
         unrecognized_llm_answers=categorized.unrecognized_llm_answers,
         categorized_rows=int(kept.sum()),
-        categorized_kilograms=float(rows.loc[kept, "weight"].sum()),
+        categorized_kilograms=float(categorized.cleaned_df.loc[kept, "weight"].sum()),
     )

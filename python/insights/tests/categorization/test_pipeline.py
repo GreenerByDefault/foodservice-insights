@@ -300,27 +300,21 @@ def test_summarize_categorization_counts_a_match_type_no_product_has_as_zero() -
     )
 
 
-def _categorized(products: pd.DataFrame, rows: Sequence[str]) -> CategorizedProducts:
+def _pork_loin_categorized(match_type: str, row_products: Sequence[str]) -> CategorizedProducts:
     return CategorizedProducts(
-        cleaned_df=pd.DataFrame({"product": rows, "weight": 1.0}),
-        unique_products_df=products,
+        cleaned_df=pd.DataFrame({"product": row_products, "weight": 1.0}),
+        unique_products_df=pd.DataFrame(
+            {"product": ["Pork Loin"], "category": ["Pork (pig meat)"], "match_type": [match_type]}
+        ),
         unrecognized_llm_answers=0,
     )
 
 
 def test_summarize_categorization_rejects_an_unknown_match_type() -> None:
-    products = pd.DataFrame(
-        {"product": ["Pork Loin"], "category": ["Pork (pig meat)"], "match_type": ["guess"]}
-    )
-
     with pytest.raises(ValueError, match=r"Unknown match types: \['guess'\]"):
-        summarize_categorization(_categorized(products, ["Pork Loin"]))
+        summarize_categorization(_pork_loin_categorized("guess", ["Pork Loin"]))
 
 
 def test_summarize_categorization_rejects_a_row_whose_product_was_not_categorized() -> None:
-    products = pd.DataFrame(
-        {"product": ["Pork Loin"], "category": ["Pork (pig meat)"], "match_type": ["llm"]}
-    )
-
     with pytest.raises(ValueError, match="No categorization for 1 of 2 rows"):
-        summarize_categorization(_categorized(products, ["Pork Loin", "Dish Soap"]))
+        summarize_categorization(_pork_loin_categorized("llm", ["Pork Loin", "Dish Soap"]))
