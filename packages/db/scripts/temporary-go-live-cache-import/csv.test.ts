@@ -17,11 +17,12 @@ describe('readCsv', () => {
     ]);
   });
 
-  test('normalizes a BOM and CRLF line endings, inside quotes too', () => {
-    const text = '﻿product,category\r\n"a\r\nb",Beef\r\n';
+  test('strips a BOM and reads CRLF and CR line endings between records', () => {
+    const text = '﻿product,category\r\n"a\nb",Beef\r"c",Ham\r\n';
 
     expect(readCsv(text, ['product', 'category'])).toEqual([
       { line: 2, values: { product: 'a\nb', category: 'Beef' } },
+      { line: 4, values: { product: 'c', category: 'Ham' } },
     ]);
   });
 
@@ -50,6 +51,7 @@ describe('readCsv', () => {
     ['an unclosed quote', 'product,category\n"Steak,Beef\n', 'Line 2: a quoted field never closes'],
     ['a quote in an unquoted field', 'product,category\nSt"eak,Beef', 'Line 2: a quote inside'],
     ['text after a closing quote', 'product,category\n"Steak"x,Beef', "Line 2: 'x' after"],
+    ['a carriage return inside quotes', 'product,category\n"a\r\nb",Beef', 'Line 2: a carriage'],
   ])('throws on %s', (_, text, message) => {
     expect(() => readCsv(text, ['product', 'category'])).toThrow(message);
   });

@@ -81,9 +81,10 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   `category_names()` returns, not the short `name`) unless it differs only in case. Its upsert
   promotes an unverified row and leaves a verified one alone, so a re-run never clobbers a
   reviewer's edit. Without `--write` it rolls back after printing what it would do. A local run
-  takes `DB_CONNECTION_STRING` from `.env` and refuses any host but loopback; `--production`
+  takes `DB_CONNECTION_STRING` from `.env` and refuses any host but loopback; either way it
+  refuses a connection string with query parameters, which could override the host or TLS; `--production`
   ignores the environment, needs a person at a terminal, reads the `postgres` connection string
-  from a prompt that does not echo it, and commits only after that person reads the counts and
+  from a prompt that does not echo it, verifies TLS against `supabase-ca.crt`, and commits only after that person reads the counts and
   types `COMMIT`.
 - **Two data scientists run the lab locally and will keep doing so.** They rely heavily on AI
   agents when writing code, so any credential they hold is one an agent may misuse. Their

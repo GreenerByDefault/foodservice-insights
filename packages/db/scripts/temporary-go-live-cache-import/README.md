@@ -42,8 +42,9 @@ them blocks the pipeline from ever suggesting a fix for those products. Do a cle
 first.
 
 1. Get the direct connection string, as `postgres`, from the Supabase dashboard's Connect
-   dialog, with `sslmode=verify-full&sslrootcert=…` (see `hosted-database.md` § TLS). It needs
-   the project's IPv4 add-on, or an IPv6 network.
+   dialog, exactly as it shows it: no query parameters, which the script refuses. It verifies the
+   server against the repo's `supabase-ca.crt` itself. It needs the project's IPv4 add-on, or an
+   IPv6 network.
 2. Run with `--production` from your own terminal. It ignores `.env` and asks you to paste the
    connection string; what you paste is not shown, and it never reaches `.env` or shell history.
    It refuses to run without an interactive terminal, so an agent cannot run it.
@@ -55,6 +56,8 @@ first.
 
 3. Read the report. Repeat until nothing is refused and every skip makes sense.
 4. Run the same command with `--write`. It prints the counts with the transaction still open
-   and commits only if you type `COMMIT`; anything else rolls back.
+   and commits only if you type `COMMIT`; anything else rolls back. Until you answer, a worker run that
+   suggests one of the imported products waits on you, as does a deploy whose migration alters
+   these tables, so don't run it during a deploy or leave the prompt sitting.
 5. Check each table's count in Studio against the CSV's rows minus the reported skips, and
    spot-check a `No Matches Found` row and a product that spans lines.

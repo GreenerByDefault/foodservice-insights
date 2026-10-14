@@ -11,6 +11,9 @@ export type CsvRecord<Column extends string> = {
  *
  * Throws on malformed quoting and on a record whose field count differs from the header's. A
  * blank line is not a record, as for Python's `csv` module and pandas.
+ *
+ * Records may end in LF, CRLF or CR, but a carriage return inside a quoted field throws rather
+ * than being rewritten: the field may be a cache key, which must keep matching an upload exactly.
  */
 export function readCsv<Column extends string>(
   text: string,
@@ -43,10 +46,10 @@ export function readCsv<Column extends string>(
 
 type RawRecord = { line: number; fields: string[] };
 
-const UNQUOTED_FIELD = /[^,\n]*/y;
+const UNQUOTED_FIELD = /[^,\r\n]*/y;
 
 function parseCsv(text: string): RawRecord[] {
-  const source = text.replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const source = text.replace(/^﻿/, '');
   const records: RawRecord[] = [];
   let position = 0;
   let line = 1;
@@ -72,10 +75,11 @@ function parseCsv(text: string): RawRecord[] {
       value += '"';
       position++;
     }
+    if (value.includes('\r')) throw new Error(`Line ${opening}: a carriage return inside quotes`);
     line += value.split('\n').length - 1;
 
     const next = source[position];
-    if (next !== undefined && next !== ',' && next !== '\n') {
+    if (next !== undefined && next !== ',' && next !== '\n' && next !== '\r') {
       throw new Error(`Line ${line}: '${next}' after a closing quote`);
     }
     return value;
@@ -88,8 +92,8 @@ function parseCsv(text: string): RawRecord[] {
       position++;
       fields.push(readField());
     }
-    // Past the newline, or past the end.
-    position++;
+    // Past the line ending, or past the end.
+    position += source.startsWith('\r\n', position) ? 2 : 1;
     line++;
     if (fields.length > 1 || fields[0] !== '') records.push({ line: recordLine, fields });
   }

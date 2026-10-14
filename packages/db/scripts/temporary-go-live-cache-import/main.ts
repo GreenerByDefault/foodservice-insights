@@ -20,7 +20,7 @@ import {
   UNIT_COLUMNS,
 } from './clean.ts';
 import { readCsv } from './csv.ts';
-import { ask, connectionStringFor, describeConnectionString, type Target } from './target.ts';
+import { ask, connectionFor, describeConnectionString, type Target } from './target.ts';
 import {
   importInOneTransaction,
   type TableImport,
@@ -60,12 +60,13 @@ async function main(): Promise<number> {
   }
 
   const target: Target = args.production ? 'production' : 'local';
-  const connectionString = await connectionStringFor(target);
+  const { connectionString, sslCa } = await connectionFor(target);
   const description = describeConnectionString(connectionString);
   console.log(`\nTarget: ${target === 'production' ? 'PRODUCTION' : 'local'}, ${description}`);
 
   const database = initializeDatabase({
     connectionString,
+    sslCa,
     // Long enough for a person to read the counts before confirming a production commit, during
     // which the transaction is open.
     limits: { minConnections: 0, maxConnections: 1, idleInTransactionSessionTimeoutMs: 1_800_000 },

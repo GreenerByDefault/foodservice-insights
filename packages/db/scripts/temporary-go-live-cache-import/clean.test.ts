@@ -73,6 +73,15 @@ describe('cleanProductCategorizations', () => {
     });
   });
 
+  test("strips the product as Python's str.strip does, not as JavaScript's trim", () => {
+    const cleaned = cleanProductCategorizations(
+      records(product('\x1cSteak\x85', 'Beef'), product('Ham\ufeff', 'Beef')),
+      VOCABULARY,
+    );
+
+    expect(cleaned.rows.map((row) => row.product)).toEqual(['Steak', 'Ham\ufeff']);
+  });
+
   test('imports a blank cleaned name as null', () => {
     const cleaned = cleanProductCategorizations(
       records(product('Widget', NO_MATCHES_FOUND, ' ')),

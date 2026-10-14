@@ -32,6 +32,21 @@ describe('throwIfWrongTarget', () => {
       );
     },
   );
+
+  test.each([
+    ['local', 'postgresql://postgres:pw@localhost:5432/postgres?host=db.abc.supabase.co', 'host'],
+    ['production', `${HOSTED}?sslmode=no-verify&password=secret`, 'sslmode, password'],
+  ] as const)('refuses a %s string with a query parameter', (target, connectionString, names) => {
+    expect(() => throwIfWrongTarget(target, connectionString)).toThrow(
+      `Remove the connection string's query parameters (${names})`,
+    );
+  });
+
+  test("never shows a query parameter's value, which may be a password", () => {
+    expect(() => throwIfWrongTarget('production', `${HOSTED}?password=hunter2`)).toThrow(
+      /^(?!.*hunter2)/s,
+    );
+  });
 });
 
 describe('describeConnectionString', () => {

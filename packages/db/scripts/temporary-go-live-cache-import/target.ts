@@ -10,22 +10,31 @@
 //   `.env` by mistake therefore cannot be written to by forgetting a flag.
 // - `--production`: never reads `.env` or the environment. It needs a person at a terminal, who
 //   pastes the connection string into a prompt that does not echo it, so the `postgres` password
-//   lands in neither `.env` nor shell history, and an agent or a pipe cannot run it at all.
+//   lands in neither `.env` nor shell history, and an agent or a pipe cannot run it at all. It
+//   verifies the server against the committed `supabase-ca.crt`, as `DB_SSL_CA` does for the apps.
+//
+// Either way, a connection string with a query parameter is refused. node-postgres lets one
+// override what this file checks: `?host=` redirects the connection away from the hostname, and
+// `?sslmode=` replaces the CA.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
-import { loadLocalEnv, requireEnv } from '@gbd/core/env';
+import { findRepoRoot, loadLocalEnv, requireEnv } from '@gbd/core/env';
 
 export type Target = 'local' | 'production';
 
+export type Connection = { connectionString: string; sslCa: string | undefined };
+
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
-export async function connectionStringFor(target: Target): Promise<string> {
+export async function connectionFor(target: Target): Promise<Connection> {
   if (target === 'local') {
     loadLocalEnv();
     const connectionString = requireEnv('DB_CONNECTION_STRING');
     throwIfWrongTarget('local', connectionString);
-    return connectionString;
+    return { connectionString, sslCa: undefined };
   }
 
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -36,12 +45,21 @@ export async function connectionStringFor(target: Target): Promise<string> {
     { echo: false },
   );
   throwIfWrongTarget('production', connectionString);
-  return connectionString;
+  return { connectionString, sslCa: readFileSync(join(findRepoRoot(), 'supabase-ca.crt'), 'utf8') };
 }
 
-/** Throws unless a connection string's host is loopback exactly when `target` is local. */
+/** Throws unless a connection string's host is loopback exactly when `target` is local, or if it
+ * has a query parameter. */
 export function throwIfWrongTarget(target: Target, connectionString: string): void {
-  const { hostname } = parseConnectionString(connectionString);
+  const { hostname, searchParams } = parseConnectionString(connectionString);
+  // Names only: `?password=` is valid too.
+  const parameters = [...searchParams.keys()];
+  if (parameters.length > 0) {
+    throw new Error(
+      `Remove the connection string's query parameters (${parameters.join(', ')}): they can ` +
+        'change its host or its TLS, which this script sets itself',
+    );
+  }
   const isLoopback = LOOPBACK_HOSTS.has(hostname);
   if (target === 'local' && !isLoopback) {
     throw new Error(

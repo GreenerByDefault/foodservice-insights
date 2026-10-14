@@ -83,7 +83,7 @@ export function cleanProductCategorizations(
   const byLowercase = new Map(vocabulary.map((name) => [name.toLowerCase(), name]));
 
   const outcomes = records.map(({ line, values }): Outcome<ProductCategorizationRow> => {
-    const product = values.product.trim();
+    const product = stripLikePython(values.product);
     const category = values.category.trim();
     if (product === '') return { kind: 'skip', line, reason: 'blank product' };
     if (category === '') return { kind: 'skip', line, reason: 'blank category' };
@@ -112,7 +112,7 @@ export function cleanEntreeClassifications(
   records: readonly CsvRecord<EntreeColumn>[],
 ): Cleaned<EntreeClassificationRow> {
   const outcomes = records.map(({ line, values }): Outcome<EntreeClassificationRow> => {
-    const product = values.product.trim();
+    const product = stripLikePython(values.product);
     if (product === '') return { kind: 'skip', line, reason: 'blank product' };
     const keyProblem = checkKey(product);
     if (keyProblem) return { kind: 'refuse', line, reason: keyProblem };
@@ -215,6 +215,17 @@ function checkKey(key: string): string | undefined {
     ? `key of ${bytes} bytes, over the ${MAX_CACHE_KEY_BYTES}-byte limit`
     : undefined;
 }
+
+/** Python's `str.strip`, which the pipeline applies to an upload's products before matching them
+ * against the cache. JavaScript's `trim` differs at the edges: it keeps U+001C–U+001F and U+0085,
+ * and strips U+FEFF. */
+function stripLikePython(value: string): string {
+  return value.replace(PYTHON_EDGE_WHITESPACE, '');
+}
+
+/** Every character for which Python's `str.isspace` is true. */
+const PYTHON_WHITESPACE = String.raw`[\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]`;
+const PYTHON_EDGE_WHITESPACE = new RegExp(`^${PYTHON_WHITESPACE}+|${PYTHON_WHITESPACE}+$`, 'g');
 
 function nullIfBlank(value: string): string | null {
   return value.trim() === '' ? null : value;
