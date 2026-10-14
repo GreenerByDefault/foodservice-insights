@@ -3,7 +3,8 @@
 //
 // Every import row lands verified. A conflicting row that is still unverified, such as a worker's
 // harvested suggestion, is overwritten with the golden value; a verified one is left alone, so a
-// re-run never clobbers a reviewer's edit.
+// re-run never clobbers a reviewer's edit. A local `--mirror` run instead empties each table
+// first, so the table becomes exactly the file.
 
 import { type Kysely, type RawBuilder, sql } from 'kysely';
 import type { Database, DatabaseExecutor } from '../../src/schema.ts';
@@ -11,27 +12,38 @@ import type { EntreeClassificationRow, ProductCategorizationRow, UnitWeightRow }
 
 export type UpsertCounts = { inserted: number; promoted: number; alreadyVerified: number };
 
+export type ImportCounts = UpsertCounts & { deleted: number };
+
+const KYSELY_TABLE_NAMES = {
+  product_categorization: 'productCategorization',
+  entree_classification: 'entreeClassification',
+  unit_weight: 'unitWeight',
+} as const;
+
 export type TableImport = {
-  table: 'product_categorization' | 'entree_classification' | 'unit_weight';
+  table: keyof typeof KYSELY_TABLE_NAMES;
   upsert: (db: DatabaseExecutor) => Promise<UpsertCounts>;
 };
 
-export type ImportOutcome = { counts: UpsertCounts[]; committed: boolean };
+export type ImportOutcome = { counts: ImportCounts[]; committed: boolean };
 
 class RolledBack extends Error {}
 
 /** Run every upsert in one transaction, and commit only if `shouldCommit` agrees once it has the
  * counts. So a dry run reports exactly what a real run would do, and a run that fails partway,
- * or is turned down, writes nothing to any table. */
+ * or is turned down, writes nothing to any table. With `mirror`, each table is emptied first. */
 export async function importInOneTransaction(
   database: Kysely<Database>,
   imports: readonly TableImport[],
-  shouldCommit: (counts: readonly UpsertCounts[]) => Promise<boolean>,
+  { mirror }: { mirror: boolean },
+  shouldCommit: (counts: readonly ImportCounts[]) => Promise<boolean>,
 ): Promise<ImportOutcome> {
-  const counts: UpsertCounts[] = [];
+  const counts: ImportCounts[] = [];
   try {
     await database.transaction().execute(async (transaction) => {
-      for (const { upsert } of imports) counts.push(await upsert(transaction));
+      for (const tableImport of imports) {
+        counts.push(await importTable(transaction, tableImport, { mirror }));
+      }
       // Kysely rolls back when the callback throws.
       if (!(await shouldCommit(counts))) throw new RolledBack();
     });
@@ -40,6 +52,20 @@ export async function importInOneTransaction(
     throw error;
   }
   return { counts, committed: true };
+}
+
+export async function importTable(
+  db: DatabaseExecutor,
+  { table, upsert }: TableImport,
+  { mirror }: { mirror: boolean },
+): Promise<ImportCounts> {
+  const deleted = mirror ? await deleteEveryRow(db, table) : 0;
+  return { deleted, ...(await upsert(db)) };
+}
+
+async function deleteEveryRow(db: DatabaseExecutor, table: TableImport['table']): Promise<number> {
+  const { numDeletedRows } = await db.deleteFrom(KYSELY_TABLE_NAMES[table]).executeTakeFirst();
+  return Number(numDeletedRows);
 }
 
 /** Keeps each statement far below Postgres's 65,535 bind parameters. */

@@ -2,10 +2,26 @@
 // (.claude/plans/caches-to-supabase.md). This directory is deleted once that import is checked.
 
 import { describe, expect, test } from 'vitest';
-import { describeConnectionString, throwIfWrongTarget } from './target.ts';
+import { describeConnectionString, targetFor, throwIfWrongTarget } from './target.ts';
 
 const HOSTED =
   'postgresql://postgres.abcdef:secret@aws-0-us-east-1.pooler.supabase.com:5432/postgres';
+
+describe('targetFor', () => {
+  test.each([
+    [{ production: false, mirror: false }, 'local'],
+    [{ production: false, mirror: true }, 'local'],
+    [{ production: true, mirror: false }, 'production'],
+  ] as const)('maps %o to %s', (args, target) => {
+    expect(targetFor(args)).toBe(target);
+  });
+
+  test('refuses --mirror with --production', () => {
+    expect(() => targetFor({ production: true, mirror: true })).toThrow(
+      '--mirror is for a local database only',
+    );
+  });
+});
 
 describe('throwIfWrongTarget', () => {
   test.each([

@@ -14,6 +14,7 @@ import type { ProductCategorizationRow } from './clean.ts';
 import {
   CHUNK_SIZE,
   importInOneTransaction,
+  importTable,
   upsertEntreeClassifications,
   upsertProductCategorizations,
   upsertUnitWeights,
@@ -244,6 +245,86 @@ describe('upsertUnitWeights', () => {
   });
 });
 
+describe('importTable', () => {
+  function productImport(rows: readonly ProductCategorizationRow[]) {
+    return {
+      table: 'product_categorization' as const,
+      upsert: (db: DatabaseExecutor) => upsertProductCategorizations(db, rows, SUGGESTED_BY),
+    };
+  }
+
+  test('without mirror, keeps the rows the file lacks', async () => {
+    await withRollback(DATABASE, async (transaction) => {
+      const { product } = await insertProductCategorization(transaction, { isVerified: true });
+
+      const counts = await importTable(transaction, productImport([]), { mirror: false });
+
+      expect(counts).toEqual({ deleted: 0, inserted: 0, promoted: 0, alreadyVerified: 0 });
+      expect(await readProducts(transaction, [product])).toHaveLength(1);
+    });
+  });
+
+  describe('mirroring', () => {
+    test('leaves exactly the rows of the file, deleting verified and unverified rows', async () => {
+      const fileRows = [{ product: randomProduct(), category: 'Beef', cleanedName: null }];
+
+      await withRollback(DATABASE, async (transaction) => {
+        const verified = await insertProductCategorization(transaction, { isVerified: true });
+        const harvested = await insertProductCategorization(transaction);
+
+        const counts = await importTable(transaction, productImport(fileRows), { mirror: true });
+
+        // Other suites' committed rows, if any, are deleted too, so only a lower bound holds.
+        expect(counts).toEqual({
+          deleted: expect.any(Number),
+          inserted: 1,
+          promoted: 0,
+          alreadyVerified: 0,
+        });
+        expect(counts.deleted).toBeGreaterThanOrEqual(2);
+        expect(await readProducts(transaction, [verified.product, harvested.product])).toEqual([]);
+        expect(
+          await readProducts(
+            transaction,
+            fileRows.map((row) => row.product),
+          ),
+        ).toEqual([
+          {
+            ...fileRows[0],
+            isVerified: true,
+            suggestedBy: SUGGESTED_BY,
+            updatedAt: expect.any(Date),
+          },
+        ]);
+      });
+    });
+
+    test('a second run ends in the same rows', async () => {
+      const fileRows = [
+        { product: randomProduct(), category: 'Beef', cleanedName: null },
+        { product: randomProduct(), category: 'No Matches Found', cleanedName: 'x' },
+      ];
+      const products = fileRows.map((row) => row.product);
+
+      await withRollback(DATABASE, async (transaction) => {
+        await importTable(transaction, productImport(fileRows), { mirror: true });
+        const before = await readProducts(transaction, products);
+
+        const counts = await importTable(transaction, productImport(fileRows), { mirror: true });
+
+        expect(counts).toEqual({
+          deleted: expect.any(Number),
+          inserted: 2,
+          promoted: 0,
+          alreadyVerified: 0,
+        });
+        expect(counts.deleted).toBeGreaterThanOrEqual(2);
+        expect(await readProducts(transaction, products)).toEqual(before);
+      });
+    });
+  });
+});
+
 // These commit nothing, so they run against the database itself rather than inside
 // `withRollback`, which would hide whether the import rolled back on its own.
 describe('importInOneTransaction', () => {
@@ -263,11 +344,12 @@ describe('importInOneTransaction', () => {
             ),
         },
       ],
+      { mirror: false },
       async () => false,
     );
 
     expect(outcome).toEqual({
-      counts: [{ inserted: 1, promoted: 0, alreadyVerified: 0 }],
+      counts: [{ deleted: 0, inserted: 1, promoted: 0, alreadyVerified: 0 }],
       committed: false,
     });
     expect(await readProducts(DATABASE, [product])).toEqual([]);
@@ -293,6 +375,7 @@ describe('importInOneTransaction', () => {
           upsert: () => Promise.reject(new Error('unit_weight failed')),
         },
       ],
+      { mirror: false },
       async () => true,
     );
 
