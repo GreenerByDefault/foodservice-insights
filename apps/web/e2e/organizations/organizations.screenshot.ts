@@ -28,6 +28,7 @@ test('the full switcher, past the cap', async ({ page, organizations }) => {
     names.map((name) => organizations.create({ name, role: 'member' })),
   );
 
+  if (!current) throw new Error('no organization created');
   await page.goto(`/orgs/${current.slug}`);
   await ensureHydrated(page);
 

@@ -20,15 +20,14 @@ test('a report that finishes while the list is open updates in place, without a 
   db,
 }) => {
   const name = 'Live update report';
-  const {
-    slug: organizationSlug,
-    reportIds: [reportId],
-  } = await organizations.create({
+  const { slug: organizationSlug, reportIds } = await organizations.create({
     name: `Reports list live update test org ${crypto.randomUUID()}`,
     // Must be recent: a report older than `QUEUE_WARNING_AFTER_MS` renders as delayed rather
     // than 'Queued', which the assertion below needs.
     reports: [{ name, createdAt: dbMsAgo(0), status: 'pending' }],
   });
+  const [reportId] = reportIds;
+  if (!reportId) throw new Error('no report created');
 
   // Installed before navigation so it is in place before the page's own timer is armed on mount.
   await page.clock.install();

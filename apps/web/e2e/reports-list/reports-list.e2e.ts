@@ -12,13 +12,12 @@ test('a report appears in the organization list and links to its report page', a
   organizations,
 }) => {
   const name = 'List report';
-  const {
-    slug: organizationSlug,
-    reportIds: [reportId],
-  } = await organizations.create({
+  const { slug: organizationSlug, reportIds } = await organizations.create({
     name: `Reports list test org ${crypto.randomUUID()}`,
     reports: [{ name, createdAt: dbMsAgo(0), status: 'pending' }],
   });
+  const [reportId] = reportIds;
+  if (!reportId) throw new Error('no report created');
 
   await page.goto(`/orgs/${organizationSlug}`);
 
