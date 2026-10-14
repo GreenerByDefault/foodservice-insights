@@ -3,8 +3,11 @@
 Loads GBD's three cache CSVs into `product_categorization`, `entree_classification` and
 `unit_weight` once, as verified rows, when the caches move to Supabase
 ([`.claude/plans/caches-to-supabase.md`](../../../../.claude/plans/caches-to-supabase.md) § Go-live).
-**This directory is deleted as soon as that import is checked.** After that, rows reach the
-tables only through the worker's harvest, the lab's push, or Studio. Don't build on it.
+Until then, it is also how a developer loads the CSVs into their local database, which local
+runs read once the product stops reading the CSV (the plan's § The dress rehearsal).
+**This directory is deleted as soon as the production import is checked.** After that, rows
+reach the tables only through the worker's harvest, the lab's push, or Studio. Don't build on
+it.
 
 ## What it does
 
@@ -19,21 +22,32 @@ numbers:
   Send the lines back to whoever owns the CSV, and run again on the fixed file.
 
 Then it prints, per table, how many rows it inserted, promoted from an unverified suggestion,
-and left alone because they were already verified. A re-run never overwrites a verified row.
-Without `--write`, it rolls everything back after printing those counts.
+and left alone because they were already verified. A re-run never overwrites a verified row, so
+running the same file twice writes nothing the second time. Without `--write`, it rolls
+everything back after printing those counts.
 
 ## Running it locally
 
-Safe, and the way to check a new CSV before production. It writes to the database in `.env`'s
-`DB_CONNECTION_STRING`, and refuses any that isn't on this machine.
+Safe. It writes to the database in `.env`'s `DB_CONNECTION_STRING`, and refuses any that isn't
+on this machine. Relative paths are relative to where you run the command.
+
+To load your local cache, pass `--mirror`, and run it again whenever the CSVs change or the dev
+database is emptied (a fresh clone, `pnpm truncate`, `scripts/supabase db reset`). Every worktree
+shares the dev database, so once per machine is enough.
 
 ```sh
-pnpm --filter @gbd/db temporary-go-live-cache-import \
-  --products <csv> --entrees <csv> --units <csv>      # dry run; pass any of the three
-pnpm --filter @gbd/db temporary-go-live-cache-import --products <csv> --write
+pnpm --filter @gbd/db temporary-go-live-cache-import --mirror --write \
+  --products <csv> --entrees <csv> --units <csv>      # pass any of the three
 ```
 
-Relative paths are relative to where you run the command.
+`--mirror` makes each table exactly the file's usable rows, as reading the CSV did: it deletes
+every row of each table it imports first, verified or not, and imports around refused rows
+instead of stopping. That is right for a laptop and wrong for production, where a verified row
+may be a reviewer's edit and a refused row goes back to the data scientist, so `--production`
+rejects it.
+
+To check a new CSV the way production will see it, run without `--mirror` or `--write`; that dry
+run stops on any refused row.
 
 ## Running it against production
 

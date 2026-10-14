@@ -20,11 +20,11 @@ import {
   UNIT_COLUMNS,
 } from './clean.ts';
 import { readCsv } from './csv.ts';
-import { ask, connectionFor, describeConnectionString, type Target } from './target.ts';
+import { ask, connectionFor, describeConnectionString, targetFor } from './target.ts';
 import {
+  type ImportCounts,
   importInOneTransaction,
   type TableImport,
-  type UpsertCounts,
   upsertEntreeClassifications,
   upsertProductCategorizations,
   upsertUnitWeights,
@@ -43,11 +43,13 @@ const { values: args } = parseArgs({
     units: { type: 'string' },
     write: { type: 'boolean', default: false },
     production: { type: 'boolean', default: false },
+    mirror: { type: 'boolean', default: false },
   },
   strict: true,
 });
 
 async function main(): Promise<number> {
+  const target = targetFor(args);
   const imports = planImports();
   if (imports.length === 0) {
     console.error('Pass at least one of --products, --entrees and --units.');
@@ -55,11 +57,13 @@ async function main(): Promise<number> {
   }
   for (const planned of imports) printCleaning(planned);
   if (imports.some(({ cleaned }) => cleaned.refused.length > 0)) {
-    console.error('\nRefused: fix the rows above in the CSV, then run this again.');
-    return 1;
+    if (!args.mirror) {
+      console.error('\nRefused: fix the rows above in the CSV, then run this again.');
+      return 1;
+    }
+    console.log('\n--mirror imports without the refused rows. Production would refuse to run.');
   }
 
-  const target: Target = args.production ? 'production' : 'local';
   const { connectionString, sslCa } = await connectionFor(target);
   const description = describeConnectionString(connectionString);
   console.log(`\nTarget: ${target === 'production' ? 'PRODUCTION' : 'local'}, ${description}`);
@@ -73,15 +77,20 @@ async function main(): Promise<number> {
     log: 'console',
   });
   try {
-    const { committed } = await importInOneTransaction(database, imports, async (counts) => {
-      printCounts(imports, counts);
-      if (!args.write) return false;
-      if (target === 'local') return true;
-      const answer = await ask(
-        `\nType COMMIT to write these rows to ${description}. Anything else rolls back: `,
-      );
-      return answer === 'COMMIT';
-    });
+    const { committed } = await importInOneTransaction(
+      database,
+      imports,
+      { mirror: args.mirror },
+      async (counts) => {
+        printCounts(imports, counts);
+        if (!args.write) return false;
+        if (target === 'local') return true;
+        const answer = await ask(
+          `\nType COMMIT to write these rows to ${description}. Anything else rolls back: `,
+        );
+        return answer === 'COMMIT';
+      },
+    );
     if (committed) console.log('\nCommitted.');
     else if (args.write) console.log('\nRolled back: not confirmed.');
     else console.log('\nDry run: rolled back. Run again with --write to commit.');
@@ -170,12 +179,13 @@ function printNotes(verb: string, notes: readonly Note[]): void {
   }
 }
 
-function printCounts(imports: readonly PlannedImport[], counts: readonly UpsertCounts[]): void {
+function printCounts(imports: readonly PlannedImport[], counts: readonly ImportCounts[]): void {
   console.log('');
   imports.forEach(({ table }, index) => {
-    const { inserted, promoted, alreadyVerified } = counts[index] as UpsertCounts;
+    const { deleted, inserted, promoted, alreadyVerified } = counts[index] as ImportCounts;
+    const deletion = args.mirror ? `${deleted} deleted, ` : '';
     console.log(
-      `${table}: ${inserted} inserted, ${promoted} promoted from unverified, ` +
+      `${table}: ${deletion}${inserted} inserted, ${promoted} promoted from unverified, ` +
         `${alreadyVerified} left alone as already verified`,
     );
   });

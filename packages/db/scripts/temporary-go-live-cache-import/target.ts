@@ -29,6 +29,19 @@ export type Connection = { connectionString: string; sslCa: string | undefined }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+/** `--mirror` deletes verified rows, which in production may be a reviewer's edits, and imports
+ * around refused rows, which in production go back to whoever owns the CSV. */
+export function targetFor({
+  production,
+  mirror,
+}: {
+  production: boolean;
+  mirror: boolean;
+}): Target {
+  if (production && mirror) throw new Error('--mirror is for a local database only');
+  return production ? 'production' : 'local';
+}
+
 export async function connectionFor(target: Target): Promise<Connection> {
   if (target === 'local') {
     loadLocalEnv();
