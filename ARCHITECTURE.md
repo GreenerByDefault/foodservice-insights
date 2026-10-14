@@ -31,8 +31,10 @@ keep settled decisions settled — read them before proposing a change.
 | End-to-end tests | Playwright |
 | Edge / DDoS | Cloudflare |
 | Registry | GHCR, `ghcr.io/greenerbydefault/foodservice-insights/{web,worker}`, tagged by commit SHA |
-| Hosting | **Open:** Railway vs Render vs DigitalOcean |
-| Email | (**Open:** which provider), using HTTP and generated emails. |
+| Hosting | DigitalOcean App Platform — [§ Hosting](#hosting) |
+| Email | Postmark, using HTTP and generated emails — [§ Email](#email) |
+| Logs and uptime monitoring | Better Stack ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#22-where-they-go)) |
+| Dashboards and data alerts | Grafana Cloud ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#31-why-grafana-cloud)) |
 
 ## Components
 
@@ -350,10 +352,9 @@ kills the old container outright. Two mitigations, both required:
   are. An analysis attempt still running when the grace expires gets `failed('shut_down')`.
 
 **The trap: the hosting platform's own shutdown grace has to exceed the worker's drain grace, and
-that relation lives on the platform, not in this repo** — nothing here can check it. Render's
-shutdown delay defaults to 30s (configurable to 300s); Railway's
-`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` defaults to **0**, which SIGKILLs the worker mid-drain and
-looks exactly like a worker bug.
+that relation lives on the platform, not in this repo** — nothing here can check it. DigitalOcean's
+default grace is two minutes at most, far short of the drain; a grace that short SIGKILLs the
+worker mid-drain, which looks exactly like a worker bug.
 
 ### Bad deploys are fixed forward
 
@@ -366,14 +367,16 @@ undo one with a new migration instead.
 When an outage can't wait for CI, the hosting provider's own rollback redeploys an earlier image.
 Land the revert before the next worker deploy, which would otherwise run ahead of the web.
 
-### Choosing a host
+### Hosting
 
-What we care about: manual horizontal and vertical scaling; reliability, including automatic
-restarts and draining the existing container on deploy; price; logging; continuous deployment with
-web and worker deployed separately; and overall simplicity over time. We explicitly do not care
-about autoscaling.
+Web and worker run on **DigitalOcean App Platform**. It was the only candidate that documented
+everything this pipeline depends on: deploying a digest-pinned GHCR image from CI with a real exit
+code, a shutdown grace long enough to drain the worker, and CPU and memory alerts
+([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/hosting-provider.md)).
+We explicitly do not care about autoscaling.
 
-**Open:** Railway vs Render vs DigitalOcean.
+*Rejected: Railway and Render.* Railway documents neither a digest deploy nor a long shutdown
+grace; Render caps its grace at five minutes and has no native CPU or memory alerts.
 
 ## Blob store
 
@@ -391,9 +394,8 @@ for real.
 Every other test fakes the transport with an in-memory `recordingEmailer()`, asserting only that
 the right email was asked for.
 
-**Open:** decide which email provider. See
-[`.claude/plans/email-provider.md`](.claude/plans/email-provider.md) for the evaluation and
-recommendation.
+The provider is **Postmark**, chosen above all for deliverability
+([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/email-provider.md)).
 
 The `packages/email` code does not retry failures. Instead, callers must decide how to handle
 failure.
