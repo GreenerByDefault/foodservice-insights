@@ -1,9 +1,9 @@
 """Interactive comparison helpers for baseline procurement vs serving workbooks.
 
-This module is designed for analyst-facing Hydrogen files. It loads legacy
-``*_full_summary.xlsx`` workbooks, compares the broad category story between
-procurement and serving, and returns display-ready tables plus matplotlib
-figures for interactive review.
+This module is designed for analyst-facing Hydrogen files. It loads the client
+workbooks step 2 writes, compares the broad category story between procurement
+and serving, and returns display-ready tables plus matplotlib figures for
+interactive review.
 """
 
 from pathlib import Path
@@ -19,7 +19,9 @@ from gbd_foodservice_insights.plotting_utils import (
     set_title_font,
     setup_gbd_fonts,
 )
+from gbd_foodservice_insights.report.metric import KILOS, Metric
 
+from gbd_foodservice_insights_lab.food_report.serving import SERVINGS
 from gbd_foodservice_insights_lab.plotting_extras import clean_category_label
 
 __all__ = [
@@ -42,8 +44,10 @@ __all__ = [
 
 PROCUREMENT_SUBFOLDER = "purchasing-procurement data"
 SERVING_SUBFOLDER = "sales-serving data"
-LEGACY_WORKBOOK_PATTERN = "*_full_summary.xlsx"
-REQUIRED_SHEETS = ("Monthly Category Data", "Template Data", "Diner Numbers")
+# Step 2's client workbook, from `food_report.artifacts.build_report_artifact_paths`. Searched
+# recursively, since step 2 writes it under `outputs/<stem>/` beside its input.
+WORKBOOK_PATTERN = "food_report_*.xlsx"
+QA_WORKBOOK_SUFFIX = "_qa.xlsx"
 
 
 def _ensure_path(value: str | Path) -> Path:
@@ -52,19 +56,21 @@ def _ensure_path(value: str | Path) -> Path:
 
 
 def _find_single_workbook(folder: Path) -> Path:
-    """Return the single legacy workbook inside ``folder`` or raise clearly."""
-    matches = sorted(path for path in folder.glob(LEGACY_WORKBOOK_PATTERN) if path.is_file())
+    """Return the single client workbook under ``folder`` or raise clearly."""
+    matches = sorted(
+        path
+        for path in folder.rglob(WORKBOOK_PATTERN)
+        if path.is_file() and not path.name.endswith(QA_WORKBOOK_SUFFIX)
+    )
     if len(matches) == 1:
         return matches[0]
 
     if not matches:
-        raise FileNotFoundError(
-            f"No workbook matching '{LEGACY_WORKBOOK_PATTERN}' found in {folder}."
-        )
+        raise FileNotFoundError(f"No workbook matching '{WORKBOOK_PATTERN}' found in {folder}.")
 
     raise ValueError(
-        f"Expected exactly one workbook matching '{LEGACY_WORKBOOK_PATTERN}' in {folder}, "
-        f"but found {len(matches)}: {[path.name for path in matches]}"
+        f"Expected exactly one workbook matching '{WORKBOOK_PATTERN}' in {folder}, "
+        f"but found {len(matches)}: {[str(path.relative_to(folder)) for path in matches]}"
     )
 
 
@@ -91,21 +97,35 @@ def find_baseline_summary_workbooks(baseline_folder: str | Path) -> dict[str, st
     }
 
 
-def _load_workbook_sheets(workbook_path: str | Path) -> dict[str, pd.DataFrame]:
-    """Load the required legacy workbook sheets."""
+def _load_workbook_sheets(workbook_path: str | Path, metric: Metric) -> dict[str, pd.DataFrame]:
+    """Load the client workbook's sheets, renaming its columns to the ones this module uses.
+
+    The per-head column and the count sheet are named for diners or meals, whichever the
+    workbook counted; ``{unit} per person`` and ``value`` stand for either.
+    """
     workbook = _ensure_path(workbook_path)
     excel_file = pd.ExcelFile(workbook)
-    missing = [sheet for sheet in REQUIRED_SHEETS if sheet not in excel_file.sheet_names]
-    if missing:
+    sheet_names = set(excel_file.sheet_names)
+    count_sheets = sorted(sheet_names & {"Diners", "Meals"})
+    if not {"Monthly by Category", "Template"} <= sheet_names or len(count_sheets) != 1:
         raise ValueError(
-            f"Workbook {workbook.name} is missing required sheets: {missing}. "
-            f"Found sheets: {excel_file.sheet_names}"
+            f"Workbook {workbook.name} needs 'Monthly by Category', 'Template', and exactly one "
+            f"of 'Diners' or 'Meals'. Found sheets: {excel_file.sheet_names}"
         )
+    count_sheet = count_sheets[0]
+    diner_or_meal = "diner" if count_sheet == "Diners" else "meal"
 
     return {
-        "monthly_category_data": pd.read_excel(workbook, sheet_name="Monthly Category Data"),
-        "template_data": pd.read_excel(workbook, sheet_name="Template Data"),
-        "diner_numbers": pd.read_excel(workbook, sheet_name="Diner Numbers"),
+        "monthly_category_data": pd.read_excel(excel_file, sheet_name="Monthly by Category").rename(
+            columns={
+                metric.column: f"{metric.per_head_stem} total",
+                metric.per_head(diner_or_meal): f"{metric.per_head_stem} per person",
+            }
+        ),
+        "template_data": pd.read_excel(excel_file, sheet_name="Template"),
+        "diner_numbers": pd.read_excel(excel_file, sheet_name=count_sheet).rename(
+            columns={count_sheet.lower(): "value"}
+        ),
     }
 
 
@@ -134,8 +154,7 @@ def _prepare_monthly_category_data(
     missing = required - set(df.columns)
     if missing:
         raise ValueError(
-            f"Monthly Category Data is missing columns: {sorted(missing)}. "
-            f"Found: {list(df.columns)}"
+            f"Monthly by Category is missing columns: {sorted(missing)}. Found: {list(df.columns)}"
         )
 
     prepared = df.loc[:, ["month_year", "category", total_col, per_person_col]].copy()
@@ -156,7 +175,7 @@ def _prepare_monthly_category_data(
 def _prepare_template_data(df: pd.DataFrame, lookup: dict[str, str]) -> pd.DataFrame:
     """Clean the template sheet and remove the synthetic total row."""
     if "category" not in df.columns:
-        raise ValueError(f"Template Data is missing 'category'. Found: {list(df.columns)}")
+        raise ValueError(f"Template is missing 'category'. Found: {list(df.columns)}")
 
     prepared = df.copy()
     prepared["category"] = prepared["category"].map(
@@ -168,19 +187,16 @@ def _prepare_template_data(df: pd.DataFrame, lookup: dict[str, str]) -> pd.DataF
 
 
 def _prepare_diner_numbers(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert the one-row diner numbers sheet into a long format table."""
+    """Clean the per-month diner or meal counts."""
     if df.empty:
-        raise ValueError("Diner Numbers sheet is empty.")
+        raise ValueError("The Diners or Meals sheet is empty.")
 
-    row = df.iloc[0]
-    diner_data = pd.DataFrame(
+    return pd.DataFrame(
         {
-            "month_year": [str(column).strip() for column in row.index],
-            "value": [pd.to_numeric(row[column], errors="coerce") for column in row.index],
+            "month_year": df["month_year"].astype(str).str.strip(),
+            "value": pd.to_numeric(df["value"], errors="coerce").astype(float),
         }
     )
-    diner_data["value"] = diner_data["value"].astype(float)
-    return diner_data
 
 
 def _build_full_comparison_category_list(
@@ -664,8 +680,8 @@ def load_baseline_workbook_data(
     """Load and prepare the workbook data needed for each visible comparison step."""
     setup_gbd_fonts()
     official_gbd_category_list, lookup = _official_gbd_category_lookup()
-    procurement_workbook = _load_workbook_sheets(procurement_workbook_path)
-    serving_workbook = _load_workbook_sheets(serving_workbook_path)
+    procurement_workbook = _load_workbook_sheets(procurement_workbook_path, KILOS)
+    serving_workbook = _load_workbook_sheets(serving_workbook_path, SERVINGS)
 
     procurement_monthly = _prepare_monthly_category_data(
         procurement_workbook["monthly_category_data"],
@@ -845,7 +861,6 @@ def plot_diner_number_comparison(
 ) -> plt.Figure:
     """Plot procurement and serving diner or meal counts by month."""
     data = comparison_result["diner_number_comparison"]["table"].copy()
-    data = data.loc[data["month_year"].str.lower() != "total"].copy()
 
     fig, ax = plt.subplots(figsize=figsize)
     if data.empty:
