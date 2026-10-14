@@ -61,9 +61,8 @@ Facts from the tree (2026-09-27) that shape the design:
   panel check on the test stack draws on one `metrics_reader` allowance.
 - **The repo is public.** No Grafana file can hold a secret, and the hosted project's hostnames
   stay out of it too.
-- **`deploy.yml` does not migrate yet.** [`hosted-database.md`](hosted-database.md) adds that
-  step, and the push to Grafana Cloud has to run after it, so a dashboard never reaches Cloud
-  before the view it reads.
+- **`deploy-web` migrates before it deploys**, and the push to Grafana Cloud has to run after
+  the migrate step, so a dashboard never reaches Cloud before the view it reads.
 
 Out of scope: metrics beyond the first few; the data alerts, which ride this plan's pipe but wait
 on `observability-vendors.md` § 4 for where they are delivered; database and host health
@@ -228,7 +227,7 @@ user country, which Cloudflare's dashboard already shows.
   - It reads `METRICS_DB_CONNECTION_STRING`, the address as Grafana sees it:
     `host.docker.internal` in `.env.example` and `.env.test`, and in a GitHub secret the hosted
     project's direct connection as `metrics_reader`, carrying TLS as `sslmode` and `sslrootcert`
-    the way every hand-composed string does ([`hosted-database.md`](hosted-database.md) § TLS).
+    the way every hand-composed string does ([`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Supabase).
   - One API call upserts it into the dev, test or Cloud Grafana.
   - Grafana's pool is capped at 4, below the role's `CONNECTION LIMIT` (§ Access), so Grafana
     waits for a free connection instead of being refused one.
@@ -466,8 +465,8 @@ This PR needs PR 3's generator and PR 2's data source builder.
 - `.github/actions/setup-gcx`: installs gcx at a pinned version, through its install script,
   which verifies the release checksum.
 - A step at the end of `deploy-web` runs it, with the conditions from Decisions and a comment
-  explaining why it comes after both the migration and the deploy. This PR follows
-  `hosted-database.md`, which adds the migrate step and the Node setup this step reuses.
+  explaining why it comes after both the migration and the deploy. It reuses the Node
+  setup the migrate step already does.
 - Before the first deploy, press the data source's Test button in Grafana Cloud: it proves
   Grafana Cloud reaches the direct host over the IPv4 add-on and trusts the CA it was given.
   Grafana's egress ranges would need adding to an allowlist only if Supabase's network

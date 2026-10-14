@@ -116,7 +116,7 @@ minus `killGraceMs` and one terminal write, in [`config.ts`](../../apps/worker/s
 
 Render and DigitalOcean have **no outbound IPv6**; Railway has a per-service toggle. Supabase's
 direct connection is IPv6-only without its IPv4 add-on, which
-[`hosted-database.md`](hosted-database.md) buys so that every process, the CI migrate step
+the hosted project buys ([`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Supabase) so that every process, the CI migrate step
 included, connects directly rather than through the shared pooler. Not a differentiator.
 
 ## 7. Reliability in 2026
@@ -166,8 +166,8 @@ Five things, whichever provider wins:
    and `PLATFORM_SHUTDOWN_GRACE_MS` set beside it. `live` refuses to start without it, and derives
    `drainGraceMs` from it ([`config.ts`](../../apps/worker/src/config.ts)).
 3. Set the production secrets in the provider — the same database and bucket values the
-   `production` GitHub Environment holds ([`hosted-database.md`](hosted-database.md) § The hosted
-   project): the direct connection, with `DB_SSL_CA` beside it.
+   `production` GitHub Environment holds (the `env:` of
+   [`deploy.yml`](../../.github/workflows/deploy.yml)'s migrate step lists them): the direct connection, with `DB_SSL_CA` beside it.
    Until there is an email provider, production runs as the placeholder identity behind a site
    password: set `PUBLIC_AUTH_MODE=placeholder`; the deploy's migrate step seeds the identity
    ([`apps/web/README.md`](../../apps/web/README.md#auth)). The site password is then

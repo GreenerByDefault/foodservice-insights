@@ -61,6 +61,12 @@ is Supabase Auth, which the client talks to directly.
 **We use Supabase Storage through its S3 API**, not the Supabase JavaScript SDK, to reduce vendor
 lock-in. We can switch blob store providers if cost becomes an issue.
 
+**Every process connects to the database directly**, not through Supabase's pooler, over TLS
+verified against the committed [`supabase-ca.crt`](supabase-ca.crt). The hosted project has the
+IPv4 add-on, without which the direct host is unreachable from IPv4-only clients like GitHub's
+runners. Every client's share of `max_connections`, Supabase's own included, is budgeted in
+[`budget.ts`](packages/db/src/budget.ts), which owns the reasoning and the numbers.
+
 ## Web app
 
 SvelteKit covers both the frontend and the backend, using its default rendering strategy:
@@ -290,8 +296,7 @@ Note that `asyncio` is *not* the right tool inside `gbd_foodservice_insights`; u
 
 Every lever multiplies API load: `max concurrent API calls = workers × child processes × threads`.
 Watch upstream rate limits when tuning any of them. More workers, or more attempts per worker, also
-spend database connections, which [`budget.ts`](packages/db/src/budget.ts) holds under the hosted
-project's `max_connections`.
+spend database connections from that same budget (see [Supabase](#supabase-database-auth-and-blob-store)).
 
 We will probably start with 2 workers, handling 4–6 concurrent attempts depending on whether each
 worker runs 2 or 3.
@@ -458,6 +463,10 @@ belongs to a fixed set of values.
 
 Secrets load as environment variables. Locally they all live in one gitignored file, `.env`,
 templated by `.env.example`. `.env.test` is committed because every value in it is safe in version control and needed for tests.
+
+GitHub Actions also holds the database and blob store credentials, for the migrate step in
+[`deploy.yml`](.github/workflows/deploy.yml) — only in the `production` Environment, which only
+`main` can deploy from, never as repo secrets.
 
 **Server config is read at runtime, not inlined at build time** — every variable in
 `apps/web/src/env.ts` is dynamic, never `static: true`. One build artifact therefore runs against

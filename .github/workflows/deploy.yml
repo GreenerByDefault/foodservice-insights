@@ -8,7 +8,8 @@ name: Deploy
 # full suite on the very commit that lands, so every image built here is of a tested commit.
 #
 # Web deploys on every push to main because it runs the database migrations, which the worker
-# may later need.
+# may later need. deploy-web migrates the database and the blob store, then deploys: from the
+# workspace checkout rather than the image, which ships no migrations Node can import.
 #
 # The worker only ever deploys via workflow_dispatch from main, at the commit the web runs. This is
 # because deploying the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
@@ -92,8 +93,8 @@ jobs:
       # *backwards*. Skip a run once main has moved past its SHA. The same check makes re-running
       # an old failed run safe.
       #
-      # This check must sit above the migrate step deploy-migrations.md will add, so a
-      # superseded run does nothing at all rather than migrating and then declining to deploy.
+      # This check must sit above the migrate step, so a superseded run does nothing at all rather
+      # than migrating and then declining to deploy.
       - name: Skip if main has moved past this commit
         shell: bash
         run: |
@@ -102,6 +103,32 @@ jobs:
             echo "::notice::Skipping: main has moved on to $(git rev-parse --short "$current_tip"), whose own deploy will ship instead."
             echo "superseded=true" >> "$GITHUB_ENV"
           fi
+
+      - uses: ./.github/actions/setup-node
+        if: env.superseded != 'true'
+
+      # Runs in both @gbd/db, which retries on lock timeouts, and @gbd/storage, which creates the
+      # bucket. A failure here fails the run before anything deploys.
+      - name: Migrate
+        if: env.superseded != 'true'
+        run: pnpm exec turbo run migrate
+        env:
+          DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
+          DB_SSL_CA: ${{ vars.DB_SSL_CA }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+          S3_REGION: ${{ vars.S3_REGION }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+
+      # Production runs PUBLIC_AUTH_MODE=placeholder, which cannot serve a request without these
+      # rows. Idempotent.
+      - name: Seed the placeholder identity
+        if: env.superseded != 'true'
+        run: pnpm exec turbo run seed:identity
+        env:
+          DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
+          DB_SSL_CA: ${{ vars.DB_SSL_CA }}
 
       - uses: ./.github/actions/deploy-service
         id: deploy

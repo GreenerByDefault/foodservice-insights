@@ -7,7 +7,7 @@
  *
  * **Open:** whether `placeholder` mode outlives production's switch to `supabase`. If it doesn't,
  * delete this file along with `scripts/seed-identity.ts`, the `seed:identity` task in
- * `turbo.json`, and the `placeholder` branches of `identifyUser`
+ * `turbo.json` and its step in `.github/workflows/deploy.yml`, and the `placeholder` branches of `identifyUser`
  * (`apps/web/src/lib/server/auth/identify.ts`) and the browser-testing fixtures.
  */
 

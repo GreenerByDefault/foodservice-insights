@@ -97,8 +97,6 @@ landed) that shape the design:
   - A hard delete on request is a GBD-run script, still TBD.
   - `audit_event` already keeps raw `organization_id` and user ids with no FK, so it outlives what
     it names. "The raw user ID stays in the audit log" is the stated precedent.
-- **`deploy.yml` does not migrate yet** (`hosted-database.md`). Until it does, each migration
-  here is hand-run against production before the worker deploy that writes to it.
 
 Out of scope:
 
