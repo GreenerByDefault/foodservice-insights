@@ -32,7 +32,7 @@ from gbd_foodservice_insights_lab.pilot.plots import (
 def sample_monthly_product_data():
     """Sample monthly product data with baseline and pilot periods."""
     data = {
-        "product_name": [
+        "product": [
             "Apple",
             "Banana",
             "Orange",
@@ -84,7 +84,7 @@ def test_calculate_product_overlap_basic(sample_monthly_product_data):
 
 def test_calculate_product_overlap_no_overlap():
     data = {
-        "product_name": ["Apple", "Banana", "Orange", "Grapes", "Melon", "Kiwi"],
+        "product": ["Apple", "Banana", "Orange", "Grapes", "Melon", "Kiwi"],
         "period": ["baseline", "baseline", "baseline", "pilot", "pilot", "pilot"],
         "month_year": ["2023-01", "2023-01", "2023-02", "2023-03", "2023-03", "2023-04"],
     }
@@ -99,7 +99,7 @@ def test_calculate_product_overlap_no_overlap():
 
 def test_calculate_product_overlap_complete_overlap():
     data = {
-        "product_name": ["Apple", "Banana", "Apple", "Banana", "Orange"],
+        "product": ["Apple", "Banana", "Apple", "Banana", "Orange"],
         "period": ["baseline", "baseline", "pilot", "pilot", "pilot"],
         "month_year": ["2023-01", "2023-01", "2023-03", "2023-03", "2023-04"],
     }
@@ -114,7 +114,7 @@ def test_calculate_product_overlap_complete_overlap():
 
 def test_calculate_product_overlap_partial_overlap():
     data = {
-        "product_name": ["Apple", "Banana", "Orange", "Melon", "Apple", "Kiwi", "Grapes"],
+        "product": ["Apple", "Banana", "Orange", "Melon", "Apple", "Kiwi", "Grapes"],
         "period": ["baseline", "baseline", "baseline", "baseline", "pilot", "pilot", "pilot"],
         "month_year": ["2023-01", "2023-01", "2023-02", "2023-02", "2023-03", "2023-03", "2023-04"],
     }
@@ -129,7 +129,7 @@ def test_calculate_product_overlap_partial_overlap():
 
 def test_calculate_product_overlap_empty_baseline():
     data = {
-        "product_name": ["Apple", "Banana"],
+        "product": ["Apple", "Banana"],
         "period": ["pilot", "pilot"],
         "month_year": ["2023-03", "2023-03"],
     }

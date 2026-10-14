@@ -302,3 +302,49 @@ def test_update_metadata_with_categorization_stats_serializes_numpy_scalars(tmp_
         updated["categorization_stats"]["row_elimination_details"]["rows_eliminated_uncategorized"]
         == 10
     )
+
+
+def _touch_report(data_dir: Path, name: str) -> Path:
+    path = data_dir / "outputs" / "stem" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+    return path
+
+
+def test_pilot_step_reads_each_periods_qa_workbook(tmp_path, monkeypatch):
+    baseline_dir = _create_baseline_procurement_dir(tmp_path)
+    pilot_dir = tmp_path / "client" / "pilot" / "purchasing-procurement data"
+    pilot_dir.mkdir(parents=True)
+    baseline_qa = _touch_report(baseline_dir, "food_report_stem_qa.xlsx")
+    pilot_qa = _touch_report(pilot_dir, "food_report_stem_qa.xlsx")
+    _touch_report(pilot_dir, "food_report_stem.xlsx")
+    monkeypatch.chdir(pilot_dir)
+
+    config = detect_client_structure(has_sub_client=False, step="pilot")
+
+    assert config["baseline_input_file"] == str(baseline_qa)
+    assert config["pilot_input_file"] == str(pilot_qa)
+
+
+def test_pilot_step_requires_step_2_in_both_periods(tmp_path, monkeypatch):
+    _create_baseline_procurement_dir(tmp_path)
+    pilot_dir = tmp_path / "client" / "pilot" / "purchasing-procurement data"
+    pilot_dir.mkdir(parents=True)
+    _touch_report(pilot_dir, "food_report_stem_qa.xlsx")
+    monkeypatch.chdir(pilot_dir)
+
+    with pytest.raises(FileNotFoundError, match=r"No food_report_\*_qa.xlsx under .*baseline"):
+        detect_client_structure(has_sub_client=False, step="pilot")
+
+
+def test_pilot_step_rejects_two_qa_workbooks_in_a_period(tmp_path, monkeypatch):
+    baseline_dir = _create_baseline_procurement_dir(tmp_path)
+    pilot_dir = tmp_path / "client" / "pilot" / "purchasing-procurement data"
+    pilot_dir.mkdir(parents=True)
+    _touch_report(baseline_dir, "food_report_stem_qa.xlsx")
+    _touch_report(baseline_dir, "food_report_other_qa.xlsx")
+    _touch_report(pilot_dir, "food_report_stem_qa.xlsx")
+    monkeypatch.chdir(pilot_dir)
+
+    with pytest.raises(ValueError, match=r"Expected one food_report_\*_qa.xlsx"):
+        detect_client_structure(has_sub_client=False, step="pilot")
