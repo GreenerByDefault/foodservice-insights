@@ -25,10 +25,10 @@ describe('sitePassword', () => {
     expect(sitePassword()).toBe(PASSWORD);
   });
 
-  test('refuses one shorter than 16 characters', () => {
-    env.password = 'fifteen-chars-x';
+  test('refuses one shorter than 12 characters', () => {
+    env.password = 'eleven-char';
 
-    expect(sitePassword).toThrow('SITE_PASSWORD is 15 characters; it must be at least 16');
+    expect(sitePassword).toThrow('SITE_PASSWORD is 11 characters; it must be at least 12');
   });
 });
 

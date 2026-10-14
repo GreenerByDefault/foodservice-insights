@@ -20,7 +20,7 @@ export const SITE_SESSION_COOKIE_NAME = 'fsi-site-session';
 
 export const SITE_SESSION_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 
-export const MIN_SITE_PASSWORD_LENGTH = 16;
+export const MIN_SITE_PASSWORD_LENGTH = 12;
 
 export function sitePassword(): string {
   const password = requirePrivateVar('SITE_PASSWORD');
