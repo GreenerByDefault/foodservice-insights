@@ -30,7 +30,9 @@ pnpm seed:identity
 
 `pnpm seed:identity` creates the placeholder user that you sign in as, with `.env`'s
 `SITE_PASSWORD`, in the default `PUBLIC_AUTH_MODE=placeholder`. The app cannot sign anyone in
-without it.
+without it. `.env.example` ships a working `SITE_PASSWORD`; if you change it, keep it at or above the
+minimum length in [`site-password.ts`](apps/web/src/lib/server/auth/site-password.ts), or sign-in
+errors.
 
 Optionally, you can also get the `previously_categorized_items.csv` cache from Greener by Default and place it in
 [`python/insights/gbd_foodservice_insights/data_files/`](python/insights/gbd_foodservice_insights/data_files/).
@@ -56,7 +58,7 @@ pnpm dev:worker
 
 Alternatively, `pnpm dev` runs both in one terminal, with their logs interleaved.
 
-Open <http://localhost:5173> and upload a CSV.
+Open <http://localhost:5173> and upload a CSV. Enter the `SITE_PASSWORD` from `.env`, which defaults to `local-password`.
 You can use [`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) for an example CSV. The report page
 updates on its own once the analysis finishes. Emails the app sends arrive at
 <http://localhost:55324>. When you're done, run `scripts/supabase stop` to free the memory the
