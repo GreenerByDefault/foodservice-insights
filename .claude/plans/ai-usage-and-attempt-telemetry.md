@@ -32,16 +32,24 @@ default-usage pattern, the `_require` checks, and fixture names like `negative-o
 Facts from the tree (2026-10-12, `main` at `10b8388c`, after `notebook-era-leftovers.md`
 landed) that shape the design:
 
-- **One place makes every product LLM call.** `OpenAiLlmClient._complete`
-  (`categorization/llm.py`):
+- **One place makes every product LLM call, and it already reports each one.**
+  `OpenAiLlmClient._complete` (`categorization/llm.py`):
   - calls `chat.completions.create` on `gpt-4.1-mini`, with `max_tokens=30` and `temperature=0`;
   - retries in a hand-written loop of 5 requests, with the SDK's own retries off;
-  - reads only `choices[0].message.content`.
+  - hands its `on_call` one frozen `LlmCall` per call, in a `finally`, however the call ended:
+    the operation, requested and served model, requests, failed requests and the 429s among
+    them, whether the answer hit `MAX_TOKENS`, and the last response's input, cached input and
+    output tokens (0 where `usage` or its details are missing).
 
-  It serves two operations, `clean_product_name` and `match_product_to_category`, one request per
-  product, from `map_concurrently`'s thread pool (`LLM_CONCURRENCY = 3`, whose comment says
-  "conservative until measured"). Anything that records calls must be thread-safe, as
-  `progress_reporter` already is.
+  It serves two operations (`LlmOperation`, `"clean" | "match"`), one request per product, from
+  `map_concurrently`'s thread pool (`LLM_CONCURRENCY = 3`, whose comment says "conservative until
+  measured"). So `on_call` runs on any of those threads, and anything that records calls must be
+  thread-safe, as `progress_reporter` already is.
+- **`analyze(…, report_telemetry=…)` exists, and nothing passes it yet.** `analysis.py` defines
+  `type Telemetry = LlmCall` and `ReportTelemetry`, hands the reporter to
+  `OpenAiLlmClient.from_env(on_call=…)`, and re-exports `LlmCall`, `LlmOperation` and
+  `cost_micro_usd`, so `worker_child` imports only from the seam. `stub_analysis` takes
+  `report_telemetry=` and `telemetry=`, and reports those records before `raises`.
 - **Calls scale with uncached products.** Each uncached raw name costs one `clean` call, and each
   unique uncached cleaned name one `match` call. A first upload can make thousands; a repeat
   upload almost none. Each call is about 1k input tokens, nearly all of it the fixed system
@@ -221,16 +229,17 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 
 ### Cost: list price, computed by the child
 
-- **`MODEL_PRICES` sits beside `DEFAULT_MODEL` in `llm.py`**, in integer micro-USD per million
-  tokens. `gpt-4.1-mini` is 400_000 input, 100_000 cached input and 1_600_000 output, from its
-  page on developers.openai.com, checked 2026-10-12 (re-check `cache_write_tokens` then). The
-  comment carries the URL and date.
+- **`MODEL_PRICES` sits beside `DEFAULT_MODEL` in `llm.py`**, as `ModelPrice`s in integer
+  micro-USD per million tokens. `gpt-4.1-mini` is 400_000 input, 100_000 cached input and
+  1_600_000 output; the comment carries the page's URL and the date it was checked.
 - **`OpenAiLlmClient.__post_init__` refuses an unpriced model.** So a model switch cannot ship
-  without a price, and a lookup can never fail mid-run. The lab's `from_env()` gets the guard
-  too.
+  without a price, and a lookup can never fail mid-run. The lab's runscript builds the same class,
+  so it is guarded too.
 - **The child computes each row's cost from the row's totals**, with the library's
-  `cost_micro_usd()`, rounding half up once. Every number crossing the seam that counts or prices
-  is an integer. It assumes the `default` service tier, which is what we request. Tokens are
+  `cost_micro_usd(model, *, input_tokens, cached_input_tokens, output_tokens)`, rounding half up
+  once. It raises on impossible counts (cached above input, or a negative), so a fold bug fails
+  loudly instead of being priced. Every number crossing the seam that counts or prices is an
+  integer. It assumes the `default` service tier, which is what we request. Tokens are
   stored beside the cost, so a correction is an `UPDATE`.
   *Rejected: a price table in Postgres, joined by a view.* The model is chosen in Python, and a
   switch there would silently produce null cost until someone wrote a migration in the other
@@ -243,8 +252,9 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   peakMemoryKib}`. A stage's object is null until that stage finishes, and `stageMs` holds the
   stages done so far. There is no attempt id: the parent inserts under its own.
 - **The library reports facts; the child folds and writes them.** `analyze` takes
-  `report_telemetry: Callable[[Telemetry], None]`, where `Telemetry` is a union of typed records:
-  `LlmCall`, `InputSummary`, `CategorizationSummary`, `ReportSummary` and `StageFinished`.
+  `report_telemetry: ReportTelemetry`, and `Telemetry` widens from `LlmCall` to a union of typed
+  records: `LlmCall`, `InputSummary`, `CategorizationSummary`, `ReportSummary` and
+  `StageFinished`.
   - `OpenAiLlmClient` reports `LlmCall`s through its `on_call`.
   - `analyze` reports each summary and stage time as it gets one, and so *before* a later check
     raises.
@@ -264,12 +274,12 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   - **malformed**: one `error` log and no rows.
 - **`report_telemetry` reaches only the client `analyze` builds.** Pass `llm=` and no calls are
   reported, though the summaries still are. So `mock-llm` records everything but usage, and
-  `stubbed` scripts all of it. The docstring says so, and a test pins it.
+  `stubbed` scripts all of it. The seam's docstring says so, and `test_analysis.py` pins it.
 - **A write that fails** (a full disk) raises from whichever report triggered it. Inside
   `_complete`'s `finally`, that replaces the call's own error, so the run reads `unknown`.
   `progress.json` has the same exposure. Accepted.
 - **Two fsync'd writes per call, instead of one, are probably free**, since a call takes hundreds
-  of milliseconds and three are in flight. PR 5 measures it and has a fallback.
+  of milliseconds and three are in flight. PR 4 measures it and has a fallback.
 
 ### The parent records after the verdict, whatever the ending
 
@@ -303,52 +313,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **No `WORKER_CONTRACT_VERSION` bump.** The parent and child ship in one image, and every
   change is additive.
 
-## PR 1 — the library reports every LLM call
-
-Python only. Nothing in production changes, since nothing passes a reporter yet.
-
-- `categorization/llm.py`:
-  - `LlmOperation = Literal["clean", "match"]` moves here from `testing.py`, as a plain alias so
-    `get_args` works in `test_library_agreement.py`.
-  - The frozen `LlmCall(operation, model, served_model, requests, failed_requests,
-    rate_limited_requests, truncated, input_tokens, cached_input_tokens, output_tokens)`.
-  - `ModelPrice`, `MODEL_PRICES`, and `cost_micro_usd(model, *, input_tokens,
-    cached_input_tokens, output_tokens) -> int`.
-  - `OpenAiLlmClient` gains `on_call` (a no-op by default), a pricing `__post_init__`, and
-    `from_env(*, on_call=…)`.
-  - `_complete` takes the operation and counts every request and failure, 429s apart. It adds
-    `usage`, `model` and `finish_reason` as soon as a response arrives, *before* the `content is
-    None` check, so that path still reports billed tokens. Missing usage or details count as 0.
-    It calls `on_call` exactly once, in a `finally`.
-- `analysis.py`:
-  - `Telemetry = LlmCall` for now, `ReportTelemetry`, and `analyze(…, report_telemetry=…)`,
-    wired into `from_env`.
-  - The seam docstring gains the property: facts reported as they become known, from any
-    thread.
-  - Delete the AI-usage **Open**.
-  - Re-export the new types, so `worker_child` imports only from the seam.
-- `testing.py`: `stub_analysis(…, report_telemetry=…, telemetry=())` reports its records before
-  `raises`. Its docstring loses "an out-of-range cost".
-- Tests:
-  - `tests/categorization/test_llm.py`. `FakeOpenAi`'s `_completion` grows `usage`, `model` and
-    `finish_reason`. With `on_call=calls.append`, a full `==` on the reported calls for:
-    - success with cached tokens;
-    - four 429s, then success;
-    - a timeout, then a 500, then success;
-    - retries exhausted;
-    - a non-retryable 4xx;
-    - empty content (billed tokens still reported);
-    - a `length` finish;
-    - missing usage;
-    - each method's operation.
-
-    Also: an unpriced model is refused, and `cost_micro_usd` handles zero tokens, the cached
-    discount, and the rounding half.
-  - `tests/test_analysis.py`: `from_env` receives the reporter, and `llm=` leaves it uncalled.
-  - `tests/test_testing.py`: the stub reports even when it raises.
-- `just test-lab` too, since the lab builds `OpenAiLlmClient.from_env()`.
-
-## PR 2 — the library reports what each stage learned
+## PR 1 — the library reports what each stage learned
 
 Python only, still unwired. This restores to the product what #549 moved to the lab, now with a
 reader. It comes back as one typed summary, not the old `MergeCounts` and dict.
@@ -387,7 +352,7 @@ reader. It comes back as one typed summary, not the old `MergeCounts` and dict.
     - a run that fails the 20% check has still reported its `CategorizationSummary`.
 - `just test-lab`.
 
-## PR 3 — the library reports the report
+## PR 2 — the library reports the report
 
 Python only, still unwired.
 
@@ -407,7 +372,7 @@ Python only, still unwired.
   - the golden PDF's narrative is unchanged.
 - `just test-lab`.
 
-## PR 4 — the three tables and the build's SHA column
+## PR 3 — the three tables and the build's SHA column
 
 `packages/db`, migration `0NN_attempt_telemetry.ts`.
 
@@ -463,12 +428,12 @@ Python only, still unwired.
   removes it by organization. Drop the stale `ai_*` from its line 102 and from `apps/worker/src/attempt/queue.ts:8`,
   and rename the "ai columns" test titles in `lifecycle.test.ts` and `queue.test.ts`.
 
-PRs 1–3 and PR 4 are independent.
+PRs 1–2 and PR 3 are independent.
 
-## PR 5 — the contract, and the child writes `telemetry.json`
+## PR 4 — the contract, and the child writes `telemetry.json`
 
 Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet. This
-needs PRs 1–4.
+needs PRs 1–3.
 
 - `contract/contract.json`: `runDirectory.telemetry: "output/telemetry.json"`, plus the
   operation, quality-status, diagnostic-status and check vocabularies.
@@ -489,13 +454,13 @@ needs PRs 1–4.
   - `contract/messages.py`: `telemetry_payload(state)`, which sorts rows and `_require`s the
     invariants.
   - `writer.py`: `telemetry_reporter(run_directory)`, folding through a pure `fold_telemetry`,
-    with each usage row's cost recomputed from its totals.
+    with each usage row's cost recomputed from its totals by the seam's `cost_micro_usd`.
   - `run.py` passes it as `report_telemetry`.
   - Every fake `analyze` takes the keyword: `worker_child/testing.py`'s, the one in
     `tests/support/child.py`, and the local ones in `test_run.py`. A missing one surfaces as a
     `TypeError` turned into `failure.json`, so look for a wrong reason, not a crash.
   - `stubbed` reports a fixed `STUB_TELEMETRY` before every scenario, `!slow` and `!hang`
-    included. `tests/support/child.py` gains a `"telemetry"` key, reported before `hang` or
+    included, through `stub_analysis`'s `telemetry=`. `tests/support/child.py` gains a `"telemetry"` key, reported before `hang` or
     `raises`.
 - Tests:
   - `test_writer.py`:
@@ -522,7 +487,7 @@ needs PRs 1–4.
     second plus a final one.
   - Put the numbers in the PR.
 
-## PR 6 — the parent records telemetry on every ending
+## PR 5 — the parent records telemetry on every ending
 
 `apps/worker`. This is the first PR that writes telemetry in production.
 
@@ -559,13 +524,13 @@ needs PRs 1–4.
     post-verdict records get the bounded retry, then are dropped.
   - `REQUIREMENTS.md` § Persistence: both **Open**s become statements.
   - `packages/db/README.md`: who writes the tables.
-- Go-live: hand-run PR 4's migration against production before dispatching a worker deploy that
+- Go-live: hand-run PR 3's migration against production before dispatching a worker deploy that
   contains this PR. If someone forgets, every settle logs `42P01` and loses that telemetry, but
   verdicts are untouched.
 
-## PR 7 — the build's SHA on every attempt
+## PR 6 — the build's SHA on every attempt
 
-Independent of PRs 1–6 except PR 4's column. This touches CI and the image, which is this task.
+Independent of PRs 1–5 except PR 3's column. This touches CI and the image, which is this task.
 
 - `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
   images get it; the web's Dockerfile ignores it.
@@ -578,13 +543,13 @@ Independent of PRs 1–6 except PR 4's column. This touches CI and the image, wh
 - Tests:
   - `queue.test.ts`: a claim with and without a SHA;
   - `config.test.ts`: the variable's three cases;
-  - `packages/db`: the pattern CHECK (in PR 4).
+  - `packages/db`: the pattern CHECK (in PR 3).
 - `ARCHITECTURE.md` § Images: the image carries its SHA as an env var as well as the OCI label.
   Promotion keeps it true, since the SHA is the build's.
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
   commit.
 
-## PR 8 — keep the traceback of an `unknown` failure
+## PR 7 — keep the traceback of an `unknown` failure
 
 `apps/worker` only. Independent.
 
@@ -598,7 +563,7 @@ Independent of PRs 1–6 except PR 4's column. This touches CI and the image, wh
   - one long enough to truncate, keeping its end.
 - `ARCHITECTURE.md` § Failure modes, if it describes `failure_detail`'s contents.
 
-## PR 9 — the views and panels
+## PR 8 — the views and panels
 
 This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 
@@ -634,11 +599,11 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 - `metrics-dashboards.md` loses AI cost from its Out of scope. `observability-vendors.md`'s
   AI-cost follow-up becomes a pointer here.
 - This PR deletes this plan. If the metrics plan has not reached PR 1 by then, end this plan at
-  PR 8. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
+  PR 7. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: 1 → 2 → 3, in parallel with 4; then 5, then 6. PRs 7 and 8 can go any time, 7 after 4.
-PR 9 is last.
+Order: 1 → 2, in parallel with 3; then 4, then 5. PRs 6 and 7 can go any time, 6 after 3.
+PR 8 is last.
 
 ## Failure paths
 
@@ -662,26 +627,26 @@ PR 9 is last.
 
 Each PR runs its stack's gate:
 
-- Python: `just lint && just check && just test`, plus `just test-lab` for PRs 1–3.
-- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 5 and 6.
+- Python: `just lint && just check && just test`, plus `just test-lab` for PRs 1–2.
+- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 4 and 5.
 
 Then by hand, against the dev stack:
 
-- After PR 6, on `stubbed`:
+- After PR 5, on `stubbed`:
   - An upload leaves `STUB_TELEMETRY`'s rows in all three tables.
   - A `!slow` upload canceled from the waiting page leaves its usage and input group on a
     `canceled` attempt.
-- After PR 6, on `mock-llm`:
+- After PR 5, on `mock-llm`:
   - An upload leaves a full telemetry row, quality rows, and no usage.
   - Deleting that organization from the app leaves the telemetry and quality rows, with ids
     that no longer join.
   - An upload that is mostly unknown products fails `unusable_data`, with a categorized share
     under 20%.
-- After PR 6, on `live`, with a small real file:
+- After PR 5, on `live`, with a small real file:
   - Usage rows land for both operations, at about 1k input tokens per call.
   - `cost_micro_usd` matches the tokens times the list price, worked by hand.
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
-- After PR 7's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
-- After PR 9: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
+- After PR 6's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
+- After PR 8: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.

@@ -1,9 +1,12 @@
+import contextlib
 from pathlib import Path
 
 import pytest
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisRequest,
+    LlmCall,
+    Telemetry,
     UnusableDataError,
     UpstreamApiError,
 )
@@ -63,6 +66,32 @@ def test_stub_analysis_reports_progress_the_requested_number_of_times(tmp_path: 
 def test_stub_analysis_can_raise_on_demand(tmp_path: Path, error: type[AnalysisError]) -> None:
     with pytest.raises(error):
         stub_analysis(_request(tmp_path), raises=error)
+
+
+@pytest.mark.parametrize("raises", [None, UpstreamApiError])
+def test_stub_analysis_reports_its_telemetry_even_when_it_raises(
+    tmp_path: Path, raises: type[AnalysisError] | None
+) -> None:
+    call = LlmCall(
+        operation="clean",
+        model="gpt-4.1-mini",
+        served_model=None,
+        requests=5,
+        failed_requests=5,
+        rate_limited_requests=5,
+        truncated=False,
+        input_tokens=0,
+        cached_input_tokens=0,
+        output_tokens=0,
+    )
+    reported: list[Telemetry] = []
+
+    with pytest.raises(raises) if raises is not None else contextlib.nullcontext():
+        stub_analysis(
+            _request(tmp_path), report_telemetry=reported.append, telemetry=[call], raises=raises
+        )
+
+    assert reported == [call]
 
 
 def test_stub_analysis_writes_nothing_when_it_raises(tmp_path: Path) -> None:

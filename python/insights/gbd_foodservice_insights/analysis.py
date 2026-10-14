@@ -9,15 +9,14 @@ Two properties keep this seam agnostic and are worth preserving:
    the lab are unaffected. It carries no payload; the child's only use of it is to bump
    `sequence`. It is called after every LLM call, from whichever thread made it, so it must be
    thread-safe.
+3. **`report_telemetry` is handed facts as they become known**, so a run that later fails or is
+   killed has already reported what it spent. It too is called from any thread. It reaches only
+   the LLM client `analyze()` builds: pass `llm=` and no `LlmCall` is reported.
 
 **Open:** the categorization cache becomes a Postgres table with a human-approved flag; the parent
 materializes it into the run directory per run, and the child reports new values back through the
 contract. `AnalysisRequest` is where the cache will arrive. Until then the library's cache is
 read-only.
-
-**Open:** AI usage (model, tokens, cost) is dropped from this seam for now — REQUIREMENTS.md
-§ Persistence. `OpenAiLlmClient` is where token counts would be collected: each `_complete` call
-sees the response's `usage`.
 
 **Open:** structured result metadata (rows in, rows categorized, products uncategorized, ...) is
 dropped from this seam for the same reason — REQUIREMENTS.md § Persistence. The frames
@@ -39,7 +38,10 @@ import pandas as pd
 matplotlib.use("Agg")
 
 from gbd_foodservice_insights.categorization.cache import load_categorization_cache
+from gbd_foodservice_insights.categorization.llm import LlmCall as LlmCall
 from gbd_foodservice_insights.categorization.llm import LlmClient, OpenAiLlmClient
+from gbd_foodservice_insights.categorization.llm import LlmOperation as LlmOperation
+from gbd_foodservice_insights.categorization.llm import cost_micro_usd as cost_micro_usd
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
 from gbd_foodservice_insights.errors import AnalysisError as AnalysisError
@@ -53,6 +55,8 @@ from gbd_foodservice_insights.report.pdf import write_report_pdf
 from gbd_foodservice_insights.report.schema import DinerOrMeal
 
 type ReportProgress = Callable[[], None]
+type Telemetry = LlmCall
+type ReportTelemetry = Callable[[Telemetry], None]
 
 CountsBasis = Literal["people", "meals"]
 UnitSystem = Literal["lb", "kg"]
@@ -85,16 +89,22 @@ def _ignore() -> None:
     pass
 
 
+def _ignore_telemetry(telemetry: Telemetry) -> None:
+    pass
+
+
 def analyze(
     request: AnalysisRequest,
     *,
     report_progress: ReportProgress = _ignore,
+    report_telemetry: ReportTelemetry = _ignore_telemetry,
     llm: LlmClient | None = None,
 ) -> AnalysisOutcome:
     """`llm` defaults to `OpenAiLlmClient.from_env()`, which raises when `OPENAI_API_KEY` is
     unset — a deployment bug, so deliberately not an `AnalysisError`."""
     llm = _ReportingLlmClient(
-        llm if llm is not None else OpenAiLlmClient.from_env(), report_progress
+        llm if llm is not None else OpenAiLlmClient.from_env(on_call=report_telemetry),
+        report_progress,
     )
     df = read_input_csv(request.input_csv)
     if request.unit_system == "lb":
