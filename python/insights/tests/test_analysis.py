@@ -17,7 +17,6 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     CountsBasis,
     InvalidInputError,
-    LlmCall,
     Telemetry,
     UnitSystem,
     UnusableDataError,
@@ -496,7 +495,7 @@ def test_a_passed_llm_reports_no_calls(tmp_path: Path, fake_report: FakeReport) 
 
     analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
 
-    assert [record for record in reported if isinstance(record, LlmCall)] == []
+    assert reported == []
 
 
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:

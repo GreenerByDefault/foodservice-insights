@@ -284,10 +284,17 @@ def test_reports_exhausted_retries_with_no_usage() -> None:
     ]
 
 
-def test_reports_a_non_retryable_failure() -> None:
-    client, _, _, calls = _reporting_client(_status_error(400))
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(_status_error(400), id="non-retryable status"),
+        pytest.param(RuntimeError("bug"), id="not an API error"),
+    ],
+)
+def test_reports_a_failure_that_is_not_retried(error: Exception) -> None:
+    client, _, _, calls = _reporting_client(error)
 
-    with pytest.raises(openai.BadRequestError):
+    with pytest.raises(type(error)):
         client.match_product_to_category("cheddar", ["Cheese"])
 
     assert calls == [
@@ -386,6 +393,7 @@ def test_cost_micro_usd(
     [
         pytest.param(10, 11, 0, id="more cached than input"),
         pytest.param(10, -1, 0, id="negative cached"),
+        pytest.param(-1, 0, 0, id="negative input"),
         pytest.param(10, 0, -1, id="negative output"),
     ],
 )

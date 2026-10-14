@@ -156,6 +156,7 @@ def _llm_call(
         model=model,
         served_model=response.model if response is not None else None,
         requests=requests,
+        # A response ends the call, so at most the last request succeeded.
         failed_requests=requests if response is None else requests - 1,
         rate_limited_requests=rate_limited_requests,
         truncated=response is not None and response.choices[0].finish_reason == "length",

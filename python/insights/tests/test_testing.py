@@ -86,7 +86,7 @@ def test_stub_analysis_reports_its_telemetry_even_when_it_raises(
     )
     reported: list[Telemetry] = []
 
-    with contextlib.suppress(UpstreamApiError):
+    with pytest.raises(raises) if raises is not None else contextlib.nullcontext():
         stub_analysis(
             _request(tmp_path), report_telemetry=reported.append, telemetry=[call], raises=raises
         )
