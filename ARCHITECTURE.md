@@ -65,7 +65,7 @@ lock-in. We can switch blob store providers if cost becomes an issue.
 verified against the committed [`supabase-ca.crt`](supabase-ca.crt). The hosted project has the
 IPv4 add-on, without which the direct host is unreachable from IPv4-only clients like GitHub's
 runners. Every client's share of `max_connections`, Supabase's own included, is budgeted in
-[`budget.ts`](packages/db/src/budget.ts); a new client or a changed pool size updates it.
+[`budget.ts`](packages/db/src/budget.ts), which owns the reasoning and the numbers.
 
 ## Web app
 
@@ -296,8 +296,7 @@ Note that `asyncio` is *not* the right tool inside `gbd_foodservice_insights`; u
 
 Every lever multiplies API load: `max concurrent API calls = workers × child processes × threads`.
 Watch upstream rate limits when tuning any of them. More workers, or more attempts per worker, also
-spend database connections, which [`budget.ts`](packages/db/src/budget.ts) holds under the hosted
-project's `max_connections`.
+spend database connections from that same budget (see [Supabase](#supabase-database-auth-and-blob-store)).
 
 We will probably start with 2 workers, handling 4–6 concurrent attempts depending on whether each
 worker runs 2 or 3.
