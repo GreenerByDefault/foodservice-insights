@@ -13,21 +13,20 @@ Those two sources will rarely match perfectly, because they measure different
 things in different units, but they should usually tell a broadly similar
 category story. This file helps the analyst quickly judge whether they do.
 
-Required inputs (old pipeline artifacts):
-    This script compares the multi-tab Excel summary produced by the old pipeline's
-    `4 aggregate.ipynb` step. To identify a client that is ready for this comparison,
-    look for the following two files (one per side):
-        Client work/<client>/baseline/purchasing-procurement data/*_full_summary.xlsx
-        Client work/<client>/baseline/sales-serving data/*_full_summary.xlsx
-    Both workbooks must contain the sheets: "Monthly Category Data",
-    "Template Data", and "Diner Numbers". A client qualifies for this
-    comparison only if BOTH workbooks exist.
+Required inputs (step 2 artifacts):
+    This script compares the client workbooks `2. Produce Food Report.py` writes,
+    one per side. To identify a client that is ready for this comparison, look for
+    the following two files (step 2 writes them under `outputs/<stem>/`):
+        Client work/<client>/baseline/purchasing-procurement data/**/food_report_*.xlsx
+        Client work/<client>/baseline/sales-serving data/**/food_report_*.xlsx
+    The `food_report_*_qa.xlsx` workbooks beside them are ignored. A client
+    qualifies for this comparison only if BOTH workbooks exist.
 
 Instructions for AI agents running this analysis:
     When asked to run this comparison for a client, follow these steps in order.
 
-    1. Identify a qualifying client. Glob the repo for `*_full_summary.xlsx`
-       inside BOTH `baseline/purchasing-procurement data/` AND
+    1. Identify a qualifying client. Glob the repo for `food_report_*.xlsx`
+       (not `*_qa.xlsx`) under BOTH `baseline/purchasing-procurement data/` AND
        `baseline/sales-serving data/`. A client qualifies only if BOTH
        workbooks exist. Candidate clients are typically found under
        `Client work/<client>/baseline/` or `Client work/Pilot Completed/<client>/baseline/`.

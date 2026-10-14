@@ -3,6 +3,15 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.report.excel import write_client_workbook
+from gbd_foodservice_insights.report.food_report import build_food_report
+from gbd_foodservice_insights.report.metric import KILOS
+from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights_lab.food_report.serving import (
+    SERVINGS,
+    build_serving_report,
+    write_serving_workbook,
+)
 from gbd_foodservice_insights_lab.procurement_serving_comparison import (
     build_gap_tables,
     compare_diner_numbers,
@@ -19,94 +28,61 @@ from gbd_foodservice_insights_lab.procurement_serving_comparison import (
     summarize_procurement_serving_comparison,
 )
 
+JAN, FEB, MAR = pd.period_range("2024-01", periods=3, freq="M")
+BEEF = "Beef and Buffalo Meat"
+LEGUMES = "Legumes"
 
-def _write_legacy_summary_workbook(
-    path: Path,
-    *,
-    monthly_category_rows: list[dict],
-    template_rows: list[dict],
-    diner_numbers: dict[str, float],
-) -> None:
-    monthly_product_col = (
-        "kilos total" if "purchasing-procurement data" in str(path.parent) else "servings total"
-    )
-    monthly_per_person_col = (
-        "kilos per person" if monthly_product_col == "kilos total" else "servings per person"
-    )
+# One (month, category, amount) per row: kilos for procurement, servings for serving.
+Rows = list[tuple[pd.Period, str, float]]
 
-    monthly_product_data = pd.DataFrame(
+
+def _rows(rows: Rows, metric_column: str) -> pd.DataFrame:
+    return pd.DataFrame(
         {
-            "month_year": [row["month_year"] for row in monthly_category_rows],
-            "product": [f"{row['category']} item" for row in monthly_category_rows],
-            monthly_product_col: [row["total"] for row in monthly_category_rows],
-            monthly_per_person_col: [row["per_person"] for row in monthly_category_rows],
+            "date": [month.to_timestamp() + pd.Timedelta(days=14) for month, _, _ in rows],
+            "product": [f"{category} item" for _, category, _ in rows],
+            "category": [category for _, category, _ in rows],
+            metric_column: [amount for _, _, amount in rows],
         }
     )
-    monthly_category_data = pd.DataFrame(
-        {
-            "month_year": [row["month_year"] for row in monthly_category_rows],
-            "category": [row["category"] for row in monthly_category_rows],
-            monthly_product_col: [row["total"] for row in monthly_category_rows],
-            monthly_per_person_col: [row["per_person"] for row in monthly_category_rows],
-        }
-    )
-    monthly_product_pivot = monthly_product_data.pivot_table(
-        index="product",
-        columns="month_year",
-        values=monthly_product_col,
-        aggfunc="sum",
-        fill_value=0,
-    ).reset_index()
-    monthly_product_pivot["total"] = monthly_product_pivot.drop(columns=["product"]).sum(axis=1)
-    template_data = pd.DataFrame(template_rows)
-    diner_numbers_df = pd.DataFrame([diner_numbers])
 
-    with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        monthly_product_data.to_excel(writer, sheet_name="Monthly Product Data", index=False)
-        monthly_product_pivot.to_excel(
-            writer, sheet_name="Monthly Product Data pivotted", index=False
-        )
-        monthly_category_data.to_excel(writer, sheet_name="Monthly Category Data", index=False)
-        template_data.to_excel(writer, sheet_name="Template Data", index=False)
-        diner_numbers_df.to_excel(writer, sheet_name="Diner Numbers", index=False)
+
+def _workbook_path(data_folder: Path) -> Path:
+    """Where step 2 writes the client workbook for an input in ``data_folder``."""
+    out_dir = data_folder / "outputs" / "acme"
+    out_dir.mkdir(parents=True)
+    return out_dir / "food_report_acme.xlsx"
 
 
 def _make_baseline_pair(
     tmp_path: Path,
     *,
-    procurement_monthly_rows: list[dict],
-    serving_monthly_rows: list[dict],
-    procurement_diners: dict[str, float] | None = None,
-    serving_diners: dict[str, float] | None = None,
+    procurement_rows: Rows,
+    serving_rows: Rows,
+    procurement_counts: dict[pd.Period, float] | None = None,
+    serving_counts: dict[pd.Period, float] | None = None,
+    diner_or_meal: DinerOrMeal = "diner",
 ) -> Path:
     baseline = tmp_path / "client" / "baseline"
-    procurement_dir = baseline / "purchasing-procurement data"
-    serving_dir = baseline / "sales-serving data"
-    procurement_dir.mkdir(parents=True)
-    serving_dir.mkdir(parents=True)
-
-    procurement_path = (
-        procurement_dir / "client_baseline_purchasing-procurement data_full_summary.xlsx"
+    default_counts = {JAN: 1000, FEB: 1100, MAR: 1200}
+    write_client_workbook(
+        build_food_report(
+            _rows(procurement_rows, KILOS.column),
+            diner_meal_mapping=procurement_counts or default_counts,
+            region="us",
+            diner_or_meal=diner_or_meal,
+            top_n_drivers=5,
+        ),
+        _workbook_path(baseline / "purchasing-procurement data"),
     )
-    serving_path = serving_dir / "client_baseline_sales-serving data_full_summary.xlsx"
-
-    template_rows = [
-        {"category": "beef and buffalo meat", "2024-01": 10, "2024-02": 11, "total": 21},
-        {"category": "legumes", "2024-01": 5, "2024-02": 6, "total": 11},
-        {"category": "total", "2024-01": 15, "2024-02": 17, "total": 32},
-    ]
-
-    _write_legacy_summary_workbook(
-        procurement_path,
-        monthly_category_rows=procurement_monthly_rows,
-        template_rows=template_rows,
-        diner_numbers=procurement_diners or {"2024-01": 1000, "2024-02": 1100, "total": 2100},
-    )
-    _write_legacy_summary_workbook(
-        serving_path,
-        monthly_category_rows=serving_monthly_rows,
-        template_rows=template_rows,
-        diner_numbers=serving_diners or {"2024-01": 1000, "2024-02": 1100, "total": 2100},
+    write_serving_workbook(
+        build_serving_report(
+            _rows(serving_rows, SERVINGS.column),
+            diner_meal_mapping=serving_counts or default_counts,
+            diner_or_meal=diner_or_meal,
+            top_n_drivers=5,
+        ),
+        _workbook_path(baseline / "sales-serving data"),
     )
     return baseline
 
@@ -168,62 +144,102 @@ def _build_comparison_result(baseline: Path) -> dict:
     return comparison_result
 
 
-def test_find_baseline_summary_workbooks_finds_expected_pair(tmp_path: Path):
+def test_find_baseline_summary_workbooks_skips_the_qa_workbook(tmp_path: Path):
     baseline = _make_baseline_pair(
-        tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 10,
-                "per_person": 0.01,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 5, "per_person": 0.0045},
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 8,
-                "per_person": 0.008,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 7, "per_person": 0.0064},
-        ],
+        tmp_path, procurement_rows=[(JAN, BEEF, 10)], serving_rows=[(JAN, BEEF, 8)]
     )
+    qa_workbook = baseline / "sales-serving data" / "outputs" / "acme" / "food_report_acme_qa.xlsx"
+    qa_workbook.write_text("placeholder")
 
     result = find_baseline_summary_workbooks(baseline)
 
-    assert result["procurement_workbook_path"].endswith(
-        "_purchasing-procurement data_full_summary.xlsx"
+    assert (
+        Path(result["procurement_workbook_path"])
+        == (
+            baseline / "purchasing-procurement data" / "outputs" / "acme" / "food_report_acme.xlsx"
+        ).resolve()
     )
-    assert result["serving_workbook_path"].endswith("_sales-serving data_full_summary.xlsx")
+    assert (
+        Path(result["serving_workbook_path"])
+        == (
+            baseline / "sales-serving data" / "outputs" / "acme" / "food_report_acme.xlsx"
+        ).resolve()
+    )
 
 
 def test_find_baseline_summary_workbooks_raises_on_multiple_matches(tmp_path: Path):
     baseline = _make_baseline_pair(
-        tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 10,
-                "per_person": 0.01,
-            },
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 8,
-                "per_person": 0.008,
-            },
-        ],
+        tmp_path, procurement_rows=[(JAN, BEEF, 10)], serving_rows=[(JAN, BEEF, 8)]
     )
-    extra = baseline / "purchasing-procurement data" / "extra_full_summary.xlsx"
-    extra.write_text("placeholder")
+    extra = baseline / "purchasing-procurement data" / "outputs" / "other"
+    extra.mkdir()
+    (extra / "food_report_other.xlsx").write_text("placeholder")
 
     with pytest.raises(ValueError, match="Expected exactly one workbook"):
         find_baseline_summary_workbooks(baseline)
+
+
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
+def test_load_baseline_workbook_data_reads_step_2_workbooks(
+    tmp_path: Path, diner_or_meal: DinerOrMeal
+):
+    baseline = _make_baseline_pair(
+        tmp_path,
+        procurement_rows=[(JAN, BEEF, 10), (FEB, LEGUMES, 22)],
+        serving_rows=[(JAN, BEEF, 8)],
+        procurement_counts={JAN: 1000, FEB: 1100},
+        serving_counts={JAN: 1040},
+        diner_or_meal=diner_or_meal,
+    )
+    paths = find_baseline_summary_workbooks(baseline)
+
+    loaded = load_baseline_workbook_data(
+        paths["procurement_workbook_path"], paths["serving_workbook_path"]
+    )
+
+    pd.testing.assert_frame_equal(
+        loaded["procurement_monthly"],
+        pd.DataFrame(
+            {
+                "month_year": ["2024-01", "2024-02"],
+                "category": [BEEF, LEGUMES],
+                "kilos total": [10, 22],
+                "kilos per person": [0.01, 0.02],
+            }
+        ),
+    )
+    pd.testing.assert_frame_equal(
+        loaded["serving_monthly"],
+        pd.DataFrame(
+            {
+                "month_year": ["2024-01"],
+                "category": [BEEF],
+                "servings total": [8],
+                "servings per person": [8 / 1040],
+            }
+        ),
+    )
+    pd.testing.assert_frame_equal(
+        loaded["procurement_diners"],
+        pd.DataFrame({"month_year": ["2024-01", "2024-02"], "value": [1000.0, 1100.0]}),
+    )
+    pd.testing.assert_frame_equal(
+        loaded["serving_diners"], pd.DataFrame({"month_year": ["2024-01"], "value": [1040.0]})
+    )
+
+
+def test_load_baseline_workbook_data_rejects_a_workbook_missing_a_sheet(tmp_path: Path):
+    baseline = _make_baseline_pair(
+        tmp_path, procurement_rows=[(JAN, BEEF, 10)], serving_rows=[(JAN, BEEF, 8)]
+    )
+    paths = find_baseline_summary_workbooks(baseline)
+    with pd.ExcelWriter(paths["serving_workbook_path"], engine="openpyxl") as writer:
+        pd.DataFrame({"category": [BEEF]}).to_excel(writer, sheet_name="Template", index=False)
+
+    with pytest.raises(ValueError, match="needs 'Monthly by Category'"):
+        load_baseline_workbook_data(
+            paths["procurement_workbook_path"], paths["serving_workbook_path"]
+        )
 
 
 def test_stepwise_comparison_uses_official_gbd_category_list_and_surfaces_joint_inactivity(
@@ -231,86 +247,28 @@ def test_stepwise_comparison_uses_official_gbd_category_list_and_surfaces_joint_
 ):
     baseline = _make_baseline_pair(
         tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 10,
-                "per_person": 0.01,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 6, "per_person": 0.0055},
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 9,
-                "per_person": 0.009,
-            },
-        ],
+        procurement_rows=[(JAN, BEEF, 10), (FEB, LEGUMES, 6)],
+        serving_rows=[(JAN, BEEF, 9)],
     )
 
     result = _build_comparison_result(baseline)
     overall = result["overall_category_comparison"]
     inactive_categories = set(result["inactive_in_both"]["category"].tolist())
 
-    legumes_row = overall.loc[overall["category"].astype(str).str.lower() == "legumes"].iloc[0]
+    legumes_row = overall.loc[overall["category"] == LEGUMES].iloc[0]
 
-    assert len(result["official_gbd_category_list"]) > len({"beef and buffalo meat", "legumes"})
+    assert len(result["official_gbd_category_list"]) > len({BEEF, LEGUMES})
     assert len(inactive_categories) > 0
     assert legumes_row["activity_status"] == "active only in procurement"
     assert inactive_categories.issubset(set(result["official_gbd_category_list"]))
     assert "official_gbd_order" not in overall.columns
 
 
-def test_stepwise_comparison_tracks_non_gbd_categories_by_dataset(tmp_path: Path):
-    baseline = _make_baseline_pair(
-        tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "mystery procurement category",
-                "total": 10,
-                "per_person": 0.01,
-            },
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "mystery serving category",
-                "total": 9,
-                "per_person": 0.009,
-            },
-        ],
-    )
-
-    result = _build_comparison_result(baseline)
-
-    assert result["procurement_non_gbd_categories"] == ["mystery procurement category"]
-    assert result["serving_non_gbd_categories"] == ["mystery serving category"]
-
-
 def test_stepwise_comparison_builds_monthly_comparisons_when_months_match(tmp_path: Path):
     baseline = _make_baseline_pair(
         tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 12,
-                "per_person": 0.012,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 8, "per_person": 0.0073},
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 10,
-                "per_person": 0.01,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 9, "per_person": 0.0082},
-        ],
+        procurement_rows=[(JAN, BEEF, 12), (FEB, LEGUMES, 8)],
+        serving_rows=[(JAN, BEEF, 10), (FEB, LEGUMES, 9)],
     )
 
     result = _build_comparison_result(baseline)
@@ -322,24 +280,8 @@ def test_stepwise_comparison_builds_monthly_comparisons_when_months_match(tmp_pa
 def test_stepwise_comparison_skips_monthly_comparisons_when_months_differ(tmp_path: Path):
     baseline = _make_baseline_pair(
         tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 12,
-                "per_person": 0.012,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 8, "per_person": 0.0073},
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 10,
-                "per_person": 0.01,
-            },
-            {"month_year": "2024-03", "category": "legumes", "total": 9, "per_person": 0.0082},
-        ],
+        procurement_rows=[(JAN, BEEF, 12), (FEB, LEGUMES, 8)],
+        serving_rows=[(JAN, BEEF, 10), (MAR, LEGUMES, 9)],
     )
 
     result = _build_comparison_result(baseline)
@@ -353,24 +295,10 @@ def test_stepwise_comparison_skips_monthly_comparisons_when_months_differ(tmp_pa
 def test_stepwise_comparison_describes_diner_differences_without_failing(tmp_path: Path):
     baseline = _make_baseline_pair(
         tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 12,
-                "per_person": 0.012,
-            },
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 10,
-                "per_person": 0.01,
-            },
-        ],
-        procurement_diners={"2024-01": 1000, "2024-02": 1100, "total": 2100},
-        serving_diners={"2024-01": 1040, "2024-02": 1122, "total": 2162},
+        procurement_rows=[(JAN, BEEF, 12)],
+        serving_rows=[(JAN, BEEF, 10)],
+        procurement_counts={JAN: 1000, FEB: 1100},
+        serving_counts={JAN: 1040, FEB: 1122},
     )
 
     result = _build_comparison_result(baseline)
@@ -384,24 +312,8 @@ def test_stepwise_comparison_describes_diner_differences_without_failing(tmp_pat
 def test_plot_helpers_return_figures(tmp_path: Path):
     baseline = _make_baseline_pair(
         tmp_path,
-        procurement_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 12,
-                "per_person": 0.012,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 8, "per_person": 0.0073},
-        ],
-        serving_monthly_rows=[
-            {
-                "month_year": "2024-01",
-                "category": "beef and buffalo meat",
-                "total": 10,
-                "per_person": 0.01,
-            },
-            {"month_year": "2024-02", "category": "legumes", "total": 9, "per_person": 0.0082},
-        ],
+        procurement_rows=[(JAN, BEEF, 12), (FEB, LEGUMES, 8)],
+        serving_rows=[(JAN, BEEF, 10), (FEB, LEGUMES, 9)],
     )
     result = _build_comparison_result(baseline)
 
