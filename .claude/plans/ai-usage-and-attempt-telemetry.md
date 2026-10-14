@@ -45,11 +45,28 @@ landed) that shape the design:
   `map_concurrently`'s thread pool (`LLM_CONCURRENCY = 3`, whose comment says "conservative until
   measured"). So `on_call` runs on any of those threads, and anything that records calls must be
   thread-safe, as `progress_reporter` already is.
-- **`analyze(…, report_telemetry=…)` exists, and nothing passes it yet.** `analysis.py` defines
-  `type Telemetry = LlmCall` and `ReportTelemetry`, hands the reporter to
-  `OpenAiLlmClient.from_env(on_call=…)`, and re-exports `LlmCall`, `LlmOperation` and
-  `cost_micro_usd`, so `worker_child` imports only from the seam. `stub_analysis` takes
-  `report_telemetry=` and `telemetry=`, and reports those records before `raises`.
+- **`analyze(…, report_telemetry=…)` reports most of the run, and nothing passes it yet.**
+  `analysis.py` hands the reporter to `OpenAiLlmClient.from_env(on_call=…)`, and re-exports
+  `LlmCall`, `LlmOperation`, `cost_micro_usd` and `CategorizationSummary`, so `worker_child`
+  imports only from the seam. `type Telemetry = LlmCall | InputSummary | CategorizationSummary |
+  StageFinished`. `analyze` reports, in order:
+  - `StageFinished("read", ms)`, then `InputSummary(rows, kilograms, products, cache_products)`.
+    The read stage includes loading the cache, kilograms are after lb→kg, products are counted
+    after stripping, as `categorize_unique_products` strips, and `cache_products` is 0 when the
+    cache CSV is missing.
+  - `StageFinished("categorize", ms)`, then `CategorizationSummary`, from the pure
+    `summarize_categorization` in `categorization/pipeline.py`. It holds the unique products per
+    match type, the "No Matches Found" products split by history or LLM, the unrecognized LLM
+    answers, and the rows and kilograms categorized. `CategorizedProducts` carries
+    `unrecognized_llm_answers`, which `categorize_with_llm` now returns beside its frame; it
+    counts unique cleaned names sent to the LLM, not products.
+  - `StageFinished` for `report`, `pdf` and `xlsx`. The report stage begins with
+    `merge_categorizations`, so a run that fails the 20% check has already reported its
+    categorization summary and both earlier stage times. The pdf stage includes the charts.
+
+  A stage that raises reports no time, timed with `time.monotonic()` in whole milliseconds.
+  `stub_analysis` takes `report_telemetry=` and `telemetry=`, and reports those records before
+  `raises`.
 - **Calls scale with uncached products.** Each uncached raw name costs one `clean` call, and each
   unique uncached cleaned name one `match` call. A first upload can make thousands; a repeat
   upload almost none. Each call is about 1k input tokens, nearly all of it the fixed system
@@ -63,18 +80,13 @@ landed) that shape the design:
   change to a terminal row except the notification columns. So anything recorded after the
   verdict needs its own table, and a new column on the attempt must be written at claim or in the
   terminal `UPDATE`.
-- **What the run knows, `analyze()` discards.**
-  - #549 moved `MergeCounts` and `match_type_counts` to the lab, because the product discarded
-    them. The product now returns only the two frames (`CategorizedProducts.cleaned_df` and
-    `unique_products_df`, which carries `match_type`). `merge_categorizations` returns the
-    merged frame, after computing its products before and after for the 20% check and logging
-    them at INFO.
-  - The match-type breakdown and the cache size are likewise only logged at INFO, which the child
-    suppresses.
-  - The unrecognized-answer `Counter` in `steps.py` reaches only a WARNING.
+- **What the report knows, `analyze()` still discards.**
   - The findings' status counts are computed in `quality_lines` and dropped.
   - `ExecutiveNarrative`'s totals are built inside `write_report_pdf` and dropped.
-  - No stage is timed, and nothing measures memory.
+  - Nothing measures memory.
+
+  The lab keeps its own `MergeCounts.between` and `match_type` `value_counts` for the runscript's
+  summary, which also subtracts the non-entree rows.
 - **The cache is the cost lever, and its "hit" is not "categorized".** `raw_product_history`
   also counts products whose cached category *is* "No Matches Found". A missing cache CSV only
   warns, and then sends every product to the LLM. That is `caches-to-supabase.md`'s launch blocker,
@@ -252,9 +264,9 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   peakMemoryKib}`. A stage's object is null until that stage finishes, and `stageMs` holds the
   stages done so far. There is no attempt id: the parent inserts under its own.
 - **The library reports facts; the child folds and writes them.** `analyze` takes
-  `report_telemetry: ReportTelemetry`, and `Telemetry` widens from `LlmCall` to a union of typed
-  records: `LlmCall`, `InputSummary`, `CategorizationSummary`, `ReportSummary` and
-  `StageFinished`.
+  `report_telemetry: ReportTelemetry`, and `Telemetry` is a union of typed records: `LlmCall`,
+  `InputSummary`, `CategorizationSummary` and `StageFinished`, which PR 1 widens with
+  `ReportSummary`.
   - `OpenAiLlmClient` reports `LlmCall`s through its `on_call`.
   - `analyze` reports each summary and stage time as it gets one, and so *before* a later check
     raises.
@@ -279,7 +291,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   `_complete`'s `finally`, that replaces the call's own error, so the run reads `unknown`.
   `progress.json` has the same exposure. Accepted.
 - **Two fsync'd writes per call, instead of one, are probably free**, since a call takes hundreds
-  of milliseconds and three are in flight. PR 4 measures it and has a fallback.
+  of milliseconds and three are in flight. PR 3 measures it and has a fallback.
 
 ### The parent records after the verdict, whatever the ending
 
@@ -313,46 +325,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **No `WORKER_CONTRACT_VERSION` bump.** The parent and child ship in one image, and every
   change is additive.
 
-## PR 1 — the library reports what each stage learned
-
-Python only, still unwired. This restores to the product what #549 moved to the lab, now with a
-reader. It comes back as one typed summary, not the old `MergeCounts` and dict.
-
-- `categorization/steps.py`: `categorize_with_llm` returns its unrecognized-answer count beside
-  the frame. `CategorizedProducts` gains it as a third field.
-- `categorization/pipeline.py`: a pure `summarize_categorization(categorized) ->
-  CategorizationSummary`. It reads `cleaned_df` and `unique_products_df`, so it runs *before*
-  `merge_categorizations` can raise on the 20% check. It:
-  - fills zeros for the match types `value_counts` omits;
-  - raises on an unknown match type, which is a bug;
-  - splits "No Matches Found" by `match_type` (the history or the LLM);
-  - computes rows and kilograms categorized by mapping each row's product to its final category.
-
-  This is the same arithmetic as the 20% check, which stays where it is.
-- The lab is unchanged. Its `MergeCounts.between` and `match_type` `value_counts` serve the
-  runscript's summary, which also subtracts the non-entree rows. A later PR may have them read the
-  product's summary.
-- `analysis.py`:
-  - `InputSummary(rows, kilograms, products, cache_products)` is reported after reading the input
-    and loading the cache.
-  - `CategorizationSummary` is reported after categorizing.
-  - `StageFinished(stage, ms)` is reported for `read`, `categorize`, `report`, `pdf` and `xlsx`,
-    timed with `time.monotonic()`.
-  - `Telemetry` widens to the union.
-  - The result-metadata **Open** goes. Its pointer to the lab's `MergeCounts.between` becomes
-    the summary.
-- Tests:
-  - `test_pipeline.py`: the summary of a frame with all three match types, both "No Matches
-    Found" sources and an unrecognized answer. Rows and kilograms categorized equal what
-    `merge_categorizations` keeps for the same frames.
-  - `test_analysis.py`, keyword run:
-    - a full `==` on the summaries;
-    - `clean` calls equal `cleaned_name_history + llm`;
-    - the stages arrive in order;
-    - a run that fails the 20% check has still reported its `CategorizationSummary`.
-- `just test-lab`.
-
-## PR 2 — the library reports the report
+## PR 1 — the library reports the report
 
 Python only, still unwired.
 
@@ -364,7 +337,7 @@ Python only, still unwired.
 - `report/food_report.py`: a pure `summarize_report(report) -> ReportSummary`. It holds the
   quality status, the findings counted per check and status, `total_co2e_kg`, the kg per diner or
   meal, `plant_pct`, and `plant_protein_pct` or `None`. `analyze` reports it after
-  `build_food_report`.
+  `build_food_report`, inside the report stage, and `Telemetry` gains it.
 - Tests:
   - `summarize_report` on the golden report, with a full `==`;
   - a report without a protein share;
@@ -372,7 +345,7 @@ Python only, still unwired.
   - the golden PDF's narrative is unchanged.
 - `just test-lab`.
 
-## PR 3 — the three tables and the build's SHA column
+## PR 2 — the three tables and the build's SHA column
 
 `packages/db`, migration `0NN_attempt_telemetry.ts`.
 
@@ -428,12 +401,12 @@ Python only, still unwired.
   removes it by organization. Drop the stale `ai_*` from its line 102 and from `apps/worker/src/attempt/queue.ts:8`,
   and rename the "ai columns" test titles in `lifecycle.test.ts` and `queue.test.ts`.
 
-PRs 1–2 and PR 3 are independent.
+PRs 1 and 2 are independent.
 
-## PR 4 — the contract, and the child writes `telemetry.json`
+## PR 3 — the contract, and the child writes `telemetry.json`
 
 Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet. This
-needs PRs 1–3.
+needs PRs 1–2.
 
 - `contract/contract.json`: `runDirectory.telemetry: "output/telemetry.json"`, plus the
   operation, quality-status, diagnostic-status and check vocabularies.
@@ -487,7 +460,7 @@ needs PRs 1–3.
     second plus a final one.
   - Put the numbers in the PR.
 
-## PR 5 — the parent records telemetry on every ending
+## PR 4 — the parent records telemetry on every ending
 
 `apps/worker`. This is the first PR that writes telemetry in production.
 
@@ -524,13 +497,13 @@ needs PRs 1–3.
     post-verdict records get the bounded retry, then are dropped.
   - `REQUIREMENTS.md` § Persistence: both **Open**s become statements.
   - `packages/db/README.md`: who writes the tables.
-- Go-live: hand-run PR 3's migration against production before dispatching a worker deploy that
+- Go-live: hand-run PR 2's migration against production before dispatching a worker deploy that
   contains this PR. If someone forgets, every settle logs `42P01` and loses that telemetry, but
   verdicts are untouched.
 
-## PR 6 — the build's SHA on every attempt
+## PR 5 — the build's SHA on every attempt
 
-Independent of PRs 1–5 except PR 3's column. This touches CI and the image, which is this task.
+Independent of PRs 1–4 except PR 2's column. This touches CI and the image, which is this task.
 
 - `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
   images get it; the web's Dockerfile ignores it.
@@ -543,13 +516,13 @@ Independent of PRs 1–5 except PR 3's column. This touches CI and the image, wh
 - Tests:
   - `queue.test.ts`: a claim with and without a SHA;
   - `config.test.ts`: the variable's three cases;
-  - `packages/db`: the pattern CHECK (in PR 3).
+  - `packages/db`: the pattern CHECK (in PR 2).
 - `ARCHITECTURE.md` § Images: the image carries its SHA as an env var as well as the OCI label.
   Promotion keeps it true, since the SHA is the build's.
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
   commit.
 
-## PR 7 — keep the traceback of an `unknown` failure
+## PR 6 — keep the traceback of an `unknown` failure
 
 `apps/worker` only. Independent.
 
@@ -563,7 +536,7 @@ Independent of PRs 1–5 except PR 3's column. This touches CI and the image, wh
   - one long enough to truncate, keeping its end.
 - `ARCHITECTURE.md` § Failure modes, if it describes `failure_detail`'s contents.
 
-## PR 8 — the views and panels
+## PR 7 — the views and panels
 
 This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 
@@ -599,11 +572,11 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 - `metrics-dashboards.md` loses AI cost from its Out of scope. `observability-vendors.md`'s
   AI-cost follow-up becomes a pointer here.
 - This PR deletes this plan. If the metrics plan has not reached PR 1 by then, end this plan at
-  PR 7. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
+  PR 6. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: 1 → 2, in parallel with 3; then 4, then 5. PRs 6 and 7 can go any time, 6 after 3.
-PR 8 is last.
+Order: 1 in parallel with 2; then 3, then 4. PRs 5 and 6 can go any time, 5 after 2.
+PR 7 is last.
 
 ## Failure paths
 
@@ -627,26 +600,26 @@ PR 8 is last.
 
 Each PR runs its stack's gate:
 
-- Python: `just lint && just check && just test`, plus `just test-lab` for PRs 1–2.
-- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 4 and 5.
+- Python: `just lint && just check && just test`, plus `just test-lab` for PR 1.
+- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 3 and 4.
 
 Then by hand, against the dev stack:
 
-- After PR 5, on `stubbed`:
+- After PR 4, on `stubbed`:
   - An upload leaves `STUB_TELEMETRY`'s rows in all three tables.
   - A `!slow` upload canceled from the waiting page leaves its usage and input group on a
     `canceled` attempt.
-- After PR 5, on `mock-llm`:
+- After PR 4, on `mock-llm`:
   - An upload leaves a full telemetry row, quality rows, and no usage.
   - Deleting that organization from the app leaves the telemetry and quality rows, with ids
     that no longer join.
   - An upload that is mostly unknown products fails `unusable_data`, with a categorized share
     under 20%.
-- After PR 5, on `live`, with a small real file:
+- After PR 4, on `live`, with a small real file:
   - Usage rows land for both operations, at about 1k input tokens per call.
   - `cost_micro_usd` matches the tokens times the list price, worked by hand.
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
-- After PR 6's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
-- After PR 8: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
+- After PR 5's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
+- After PR 7: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.

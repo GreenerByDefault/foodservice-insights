@@ -160,13 +160,13 @@ def categorize_using_cleaned_name_history(
 def categorize_with_llm(
     products_df: pd.DataFrame,
     llm: LlmClient,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, int]:
     """Apply LLM-based categorization to products not matched historically.
 
     `products_df` needs 'category', 'cleaned_item_names' and 'match_type'. Returns a copy with
-    'category' filled and 'match_type' set for uncategorized rows. An answer is matched to a GBD
-    category ignoring case and punctuation; any other answer becomes "No Matches Found", counted in
-    one warning.
+    'category' filled and 'match_type' set for uncategorized rows, and how many answers were not
+    recognized. An answer is matched to a GBD category ignoring case and punctuation; any other
+    answer becomes "No Matches Found", counted in one warning.
     """
     products_df = products_df.copy()
     gbd_categories = category_names()
@@ -185,6 +185,7 @@ def categorize_with_llm(
 
     products_df.loc[mask_needs_categorization, "match_type"] = MATCH_TYPE_LLM
 
+    unrecognized: Counter[str] = Counter()
     if total_to_categorize > 0:
         items_to_categorize = products_df.loc[mask_needs_categorization, "cleaned_item_names"]
         # Categorize each unique cleaned name once, then fan the result back out
@@ -197,7 +198,6 @@ def categorize_with_llm(
             progress_prefix="Categorization",
         )
         name_to_category: dict[Any, str] = {}
-        unrecognized: Counter[str] = Counter()
         for name, answer in zip(unique_names, answers, strict=True):
             category = canonical_by_normalized.get(normalize_product_name(answer))
             if category is None:
@@ -220,7 +220,7 @@ def categorize_with_llm(
         )
 
     products_df["category"] = products_df["category"].fillna(NO_MATCHES_FOUND).astype(str)
-    return products_df
+    return products_df, unrecognized.total()
 
 
 # ----------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """The seam between `worker_child` and the analysis library. It takes a CSV and a form's
 answers, and returns either a report, or one of three failure reasons.
 
-Two properties keep this seam agnostic and are worth preserving:
+Three properties keep this seam agnostic and are worth preserving:
 
 1. **The library never sees the run directory, the contract's documents, or exit codes.** It is
    handed a CSV, an output directory, and the form's answers.
@@ -10,22 +10,20 @@ Two properties keep this seam agnostic and are worth preserving:
    `sequence`. It is called after every LLM call, from whichever thread made it, so it must be
    thread-safe.
 3. **`report_telemetry` is handed facts as they become known**, so a run that later fails or is
-   killed has already reported what it spent. It too is called from any thread. It reaches only
-   the LLM client `analyze()` builds: pass `llm=` and no `LlmCall` is reported.
+   killed has already reported what it spent and how far it got: each stage's summary and time
+   as the stage finishes, and so before a later check raises. It too is called from any thread.
+   `LlmCall`s come only from the LLM client `analyze()` builds: pass `llm=` and none are
+   reported, though the summaries and stage times still are.
 
 **Open:** the categorization cache becomes a Postgres table with a human-approved flag; the parent
 materializes it into the run directory per run, and the child reports new values back through the
 contract. `AnalysisRequest` is where the cache will arrive. Until then the library's cache is
 read-only.
-
-**Open:** structured result metadata (rows in, rows categorized, products uncategorized, ...) is
-dropped from this seam for the same reason — REQUIREMENTS.md § Persistence. The frames
-categorization returns hold it: `unique_products_df["match_type"]`, and the rows before and after
-`merge_categorizations`, from which the lab's `MergeCounts.between` derives its counts.
-`AnalysisOutcome` is where it would arrive.
 """
 
-from collections.abc import Callable, Mapping, Sequence
+import time
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal
@@ -37,12 +35,21 @@ import pandas as pd
 # backend would try to open a window.
 matplotlib.use("Agg")
 
-from gbd_foodservice_insights.categorization.cache import load_categorization_cache
+from gbd_foodservice_insights.categorization.cache import (
+    CategorizationCache,
+    load_categorization_cache,
+)
 from gbd_foodservice_insights.categorization.llm import LlmCall as LlmCall
 from gbd_foodservice_insights.categorization.llm import LlmClient, OpenAiLlmClient
 from gbd_foodservice_insights.categorization.llm import LlmOperation as LlmOperation
 from gbd_foodservice_insights.categorization.llm import cost_micro_usd as cost_micro_usd
-from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
+from gbd_foodservice_insights.categorization.pipeline import (
+    CategorizationSummary as CategorizationSummary,
+)
+from gbd_foodservice_insights.categorization.pipeline import (
+    categorize_unique_products,
+    summarize_categorization,
+)
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
 from gbd_foodservice_insights.errors import AnalysisError as AnalysisError
 from gbd_foodservice_insights.errors import InvalidInputError as InvalidInputError
@@ -54,12 +61,28 @@ from gbd_foodservice_insights.report.food_report import build_food_report, build
 from gbd_foodservice_insights.report.pdf import write_report_pdf
 from gbd_foodservice_insights.report.schema import DinerOrMeal
 
-type ReportProgress = Callable[[], None]
-type Telemetry = LlmCall
-type ReportTelemetry = Callable[[Telemetry], None]
-
 CountsBasis = Literal["people", "meals"]
 UnitSystem = Literal["lb", "kg"]
+Stage = Literal["read", "categorize", "report", "pdf", "xlsx"]
+
+
+@dataclass(frozen=True)
+class InputSummary:
+    rows: int
+    kilograms: float
+    products: int  # unique, after stripping
+    cache_products: int  # 0 when the cache file is missing, so every product goes to the LLM
+
+
+@dataclass(frozen=True)
+class StageFinished:
+    stage: Stage
+    ms: int
+
+
+type ReportProgress = Callable[[], None]
+type Telemetry = LlmCall | InputSummary | CategorizationSummary | StageFinished
+type ReportTelemetry = Callable[[Telemetry], None]
 
 
 @dataclass(frozen=True)
@@ -106,49 +129,75 @@ def analyze(
         llm if llm is not None else OpenAiLlmClient.from_env(on_call=report_telemetry),
         report_progress,
     )
-    df = read_input_csv(request.input_csv)
-    if request.unit_system == "lb":
-        df = df.assign(weight=df["weight"] * LB_TO_KG)
+    with _stage("read", report_telemetry):
+        df = read_input_csv(request.input_csv)
+        if request.unit_system == "lb":
+            df = df.assign(weight=df["weight"] * LB_TO_KG)
+        cache = load_categorization_cache()
+    report_telemetry(_summarize_input(df, cache))
 
-    categorized = categorize_unique_products(df, llm, load_categorization_cache())
-    df_final = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
+    with _stage("categorize", report_telemetry):
+        categorized = categorize_unique_products(df, llm, cache)
+    report_telemetry(summarize_categorization(categorized))
 
-    rows = df_final.rename(columns={"weight": "kilos_total"})[
-        ["date", "product", "category", "kilos_total"]
-    ].reset_index(drop=True)
-    # A `PeriodIndex` rather than `pd.Period(month)` per key, which pandas' stubs type as
-    # possibly `NaT`.
-    months = pd.PeriodIndex(list(request.monthly_counts), freq="M")
-    monthly_counts = {
-        month: float(count)
-        for month, count in zip(months, request.monthly_counts.values(), strict=True)
-    }
-    report = build_food_report(
-        rows,
-        diner_meal_mapping=monthly_counts,
-        region="us",
-        diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
-        top_n_drivers=5,
-        report_progress=report_progress,
-    )
-
-    report_progress()
-    pdf_path = request.output_directory / "report.pdf"
-    with build_report_charts(report) as charts:
-        report_progress()
-        write_report_pdf(
-            report,
-            charts,
-            pdf_path,
-            client_name=_title(request),
-            show_quality_successes=False,
+    with _stage("report", report_telemetry):
+        df_final = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
+        rows = df_final.rename(columns={"weight": "kilos_total"})[
+            ["date", "product", "category", "kilos_total"]
+        ].reset_index(drop=True)
+        # A `PeriodIndex` rather than `pd.Period(month)` per key, which pandas' stubs type as
+        # possibly `NaT`.
+        months = pd.PeriodIndex(list(request.monthly_counts), freq="M")
+        monthly_counts = {
+            month: float(count)
+            for month, count in zip(months, request.monthly_counts.values(), strict=True)
+        }
+        report = build_food_report(
+            rows,
+            diner_meal_mapping=monthly_counts,
+            region="us",
+            diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
+            top_n_drivers=5,
+            report_progress=report_progress,
         )
 
-    report_progress()
-    xlsx_path = request.output_directory / "report.xlsx"
-    write_client_workbook(report, xlsx_path)
+    with _stage("pdf", report_telemetry):
+        report_progress()
+        pdf_path = request.output_directory / "report.pdf"
+        with build_report_charts(report) as charts:
+            report_progress()
+            write_report_pdf(
+                report,
+                charts,
+                pdf_path,
+                client_name=_title(request),
+                show_quality_successes=False,
+            )
+
+    with _stage("xlsx", report_telemetry):
+        report_progress()
+        xlsx_path = request.output_directory / "report.xlsx"
+        write_client_workbook(report, xlsx_path)
 
     return AnalysisOutcome(pdf=pdf_path, xlsx=xlsx_path)
+
+
+@contextmanager
+def _stage(stage: Stage, report_telemetry: ReportTelemetry) -> Generator[None]:
+    """Reports the stage's time only when it finishes, so a failed stage reports none."""
+    start = time.monotonic()
+    yield
+    report_telemetry(StageFinished(stage, ms=round((time.monotonic() - start) * 1000)))
+
+
+def _summarize_input(df: pd.DataFrame, cache: CategorizationCache) -> InputSummary:
+    return InputSummary(
+        rows=len(df),
+        kilograms=float(df["weight"].sum()),
+        # Stripped as `categorize_unique_products` strips, so the match types sum to this.
+        products=df["product"].str.strip().nunique(),
+        cache_products=len(cache.products),
+    )
 
 
 def _title(request: AnalysisRequest) -> str:
