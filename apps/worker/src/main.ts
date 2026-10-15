@@ -54,6 +54,9 @@ async function main(): Promise<void> {
         ...resolved.overrides,
         maxConcurrentAttempts: optionalIntEnv('WORKER_MAX_CONCURRENT_ATTEMPTS'),
         drainGraceMs: optionalIntEnv('WORKER_DRAIN_GRACE_MS'),
+        // Unset locally. The image's `ARG` leaves an empty string if a build
+        // omits `GIT_SHA`, so empty counts as unset.
+        workerGitSha: process.env.WORKER_GIT_SHA || undefined,
       },
       platformShutdownGraceMs,
     );
@@ -67,7 +70,11 @@ async function main(): Promise<void> {
 
     const log = WORKER_LOG.child({ workerId: config.workerId });
     log.info(
-      { mode: resolved.mode, maxConcurrentAttempts: config.maxConcurrentAttempts },
+      {
+        mode: resolved.mode,
+        maxConcurrentAttempts: config.maxConcurrentAttempts,
+        workerGitSha: config.workerGitSha,
+      },
       'Worker started',
     );
     const worker = createWorker({

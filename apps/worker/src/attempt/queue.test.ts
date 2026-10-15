@@ -155,6 +155,23 @@ describe('claiming', () => {
     expect(attempt.claimedAt?.getTime()).toBeGreaterThan(attempt.createdAt.getTime());
   });
 
+  test.each([
+    ["records the claiming worker's build", 'a'.repeat(40)],
+    ['leaves it null for a build that does not know its own', null],
+  ])('%s', async (_name, workerGitSha) => {
+    const attempt = await withRollback(WORKER_DATABASE, async (transaction) => {
+      const { reportIds } = await pendingAttempt(transaction);
+      const attemptId = await claimNextAttempt(transaction, aWorkerId(), {
+        candidateReports: reportIds,
+        workerGitSha,
+      });
+      if (attemptId === undefined) throw new Error('the fixture attempt was not claimable');
+      return await readAnalysisAttemptRow(transaction, attemptId);
+    });
+
+    expect(attempt.workerGitSha).toBe(workerGitSha);
+  });
+
   test('finds nothing once the only attempt is claimed', async () => {
     const second = await withRollback(WORKER_DATABASE, async (transaction) => {
       const { reportIds } = await pendingAttempt(transaction);

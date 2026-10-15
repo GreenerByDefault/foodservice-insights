@@ -90,6 +90,10 @@ ENV PYTHON_BIN=/opt/venv/bin/python
 ENV WORKER_RUN_ROOT=/tmp/worker-runs
 RUN mkdir -p "$WORKER_RUN_ROOT" && chown 1001:0 "$WORKER_RUN_ROOT"
 
+# Last, so a new commit invalidates only this layer.
+ARG GIT_SHA
+ENV WORKER_GIT_SHA=$GIT_SHA
+
 USER 1001
 
 # `exec node` directly, never `pnpm ... start` — under pnpm, pnpm is PID 1 and SIGTERM never

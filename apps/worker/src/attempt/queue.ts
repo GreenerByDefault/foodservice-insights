@@ -43,6 +43,10 @@ import type { ChildResult, RunManifestInput } from '../contract/messages.ts';
 export const WORKER_CONTRACT_VERSION = 1;
 
 export type ClaimOptions = {
+  /** Recorded as `analysis_attempt.worker_git_sha`. Written at claim, since the row freezes once
+   * terminal and an abandoned attempt never gets another write from us. */
+  workerGitSha?: string | null;
+
   /** Narrows the queue to attempts on these reports.
    *
    * **Test isolation only; production passes nothing.** Turbo runs every package's `test:unit`
@@ -69,6 +73,7 @@ export async function claimNextAttempt(
     .set({
       status: 'processing',
       workerId,
+      workerGitSha: options.workerGitSha ?? null,
       claimedAt: sql<Date>`now()`,
       leaseRenewedAt: sql<Date>`now()`,
     })
