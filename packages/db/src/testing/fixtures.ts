@@ -14,35 +14,28 @@
 import { INVITE_LIFETIME_DAYS } from '@gbd/core';
 import { type RawBuilder, sql } from 'kysely';
 import type { UsersId } from '../generated/auth/Users.ts';
-import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
+import type { AnalysisAttempt, AnalysisAttemptId } from '../generated/public/AnalysisAttempt.ts';
 import type {
   AnalysisAttemptLlmUsage,
-  AnalysisAttemptLlmUsageOperation,
-  AnalysisAttemptLlmUsageRequestedModel,
   NewAnalysisAttemptLlmUsage,
 } from '../generated/public/AnalysisAttemptLlmUsage.ts';
 import type {
   AnalysisAttemptQualityCheck,
-  AnalysisAttemptQualityCheckQualityCheck,
-  AnalysisAttemptQualityCheckStatus,
   NewAnalysisAttemptQualityCheck,
 } from '../generated/public/AnalysisAttemptQualityCheck.ts';
 import type AnalysisAttemptStatus from '../generated/public/AnalysisAttemptStatus.ts';
 import type {
   AnalysisAttemptTelemetry,
-  AnalysisAttemptTelemetryAnalysisAttemptId,
   NewAnalysisAttemptTelemetry,
 } from '../generated/public/AnalysisAttemptTelemetry.ts';
 import type AnalysisFailureReason from '../generated/public/AnalysisFailureReason.ts';
 import type { AppUser } from '../generated/public/AppUser.ts';
-import type DiagnosticStatus from '../generated/public/DiagnosticStatus.ts';
 import type {
   EntreeClassification,
   NewEntreeClassification,
 } from '../generated/public/EntreeClassification.ts';
 import type { InputFile } from '../generated/public/InputFile.ts';
-import type LlmOperation from '../generated/public/LlmOperation.ts';
-import type { Organization } from '../generated/public/Organization.ts';
+import type { Organization, OrganizationId } from '../generated/public/Organization.ts';
 import type { OrganizationInvite } from '../generated/public/OrganizationInvite.ts';
 import type OrganizationInviteStatus from '../generated/public/OrganizationInviteStatus.ts';
 import type { OrganizationMember } from '../generated/public/OrganizationMember.ts';
@@ -51,8 +44,7 @@ import type {
   NewProductCategorization,
   ProductCategorization,
 } from '../generated/public/ProductCategorization.ts';
-import type QualityCheck from '../generated/public/QualityCheck.ts';
-import type { Report } from '../generated/public/Report.ts';
+import type { Report, ReportId } from '../generated/public/Report.ts';
 import type { ResultFile } from '../generated/public/ResultFile.ts';
 import type ResultFileKind from '../generated/public/ResultFileKind.ts';
 import type { NewUnitWeight, UnitWeight } from '../generated/public/UnitWeight.ts';
@@ -546,15 +538,14 @@ export async function insertUnitWeight(
  * to build a run that stopped earlier. */
 export async function insertAttemptTelemetry(
   database: DatabaseExecutor,
-  overrides: Partial<Omit<NewAnalysisAttemptTelemetry, 'analysisAttemptId'>> & {
-    analysisAttemptId?: string;
-  } = {},
+  overrides: Partial<NewAnalysisAttemptTelemetry> = {},
 ): Promise<AnalysisAttemptTelemetry> {
   return await database
     .insertInto('analysisAttemptTelemetry')
     .values({
-      reportId: crypto.randomUUID(),
-      organizationId: crypto.randomUUID(),
+      analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
+      reportId: crypto.randomUUID() as ReportId,
+      organizationId: crypto.randomUUID() as OrganizationId,
       countsBasis: 'people',
       inputRows: 1000,
       inputKilograms: 2500.5,
@@ -579,8 +570,6 @@ export async function insertAttemptTelemetry(
       xlsxDurationMs: 400,
       peakMemoryKib: 250_000,
       ...overrides,
-      analysisAttemptId: (overrides.analysisAttemptId ??
-        crypto.randomUUID()) as AnalysisAttemptTelemetryAnalysisAttemptId,
     })
     .returningAll()
     .executeTakeFirstOrThrow();
@@ -589,10 +578,7 @@ export async function insertAttemptTelemetry(
 /** Under a fresh telemetry row unless given one's `analysisAttemptId`. */
 export async function insertAttemptLlmUsage(
   database: DatabaseExecutor,
-  overrides: Partial<Omit<NewAnalysisAttemptLlmUsage, 'operation' | 'requestedModel'>> & {
-    operation?: LlmOperation;
-    requestedModel?: string;
-  } = {},
+  overrides: Partial<NewAnalysisAttemptLlmUsage> = {},
 ): Promise<AnalysisAttemptLlmUsage> {
   const analysisAttemptId =
     overrides.analysisAttemptId ?? (await insertAttemptTelemetry(database)).analysisAttemptId;
@@ -600,6 +586,8 @@ export async function insertAttemptLlmUsage(
   return await database
     .insertInto('analysisAttemptLlmUsage')
     .values({
+      operation: 'clean',
+      requestedModel: 'gpt-4.1-mini',
       calls: 100,
       requests: 103,
       failedRequests: 3,
@@ -612,9 +600,6 @@ export async function insertAttemptLlmUsage(
       servedModel: 'gpt-4.1-mini-2025-04-14',
       ...overrides,
       analysisAttemptId,
-      operation: (overrides.operation ?? 'clean') as AnalysisAttemptLlmUsageOperation,
-      requestedModel: (overrides.requestedModel ??
-        'gpt-4.1-mini') as AnalysisAttemptLlmUsageRequestedModel,
     })
     .returningAll()
     .executeTakeFirstOrThrow();
@@ -623,10 +608,7 @@ export async function insertAttemptLlmUsage(
 /** Under a fresh telemetry row unless given one's `analysisAttemptId`. */
 export async function insertAttemptQualityCheck(
   database: DatabaseExecutor,
-  overrides: Partial<Omit<NewAnalysisAttemptQualityCheck, 'qualityCheck' | 'status'>> & {
-    qualityCheck?: QualityCheck;
-    status?: DiagnosticStatus;
-  } = {},
+  overrides: Partial<NewAnalysisAttemptQualityCheck> = {},
 ): Promise<AnalysisAttemptQualityCheck> {
   const analysisAttemptId =
     overrides.analysisAttemptId ?? (await insertAttemptTelemetry(database)).analysisAttemptId;
@@ -634,12 +616,11 @@ export async function insertAttemptQualityCheck(
   return await database
     .insertInto('analysisAttemptQualityCheck')
     .values({
+      qualityCheck: 'outlier_line_items',
+      status: 'warning',
       findings: 1,
       ...overrides,
       analysisAttemptId,
-      qualityCheck: (overrides.qualityCheck ??
-        'outlier_line_items') as AnalysisAttemptQualityCheckQualityCheck,
-      status: (overrides.status ?? 'warning') as AnalysisAttemptQualityCheckStatus,
     })
     .returningAll()
     .executeTakeFirstOrThrow();

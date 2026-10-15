@@ -5,7 +5,6 @@ import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttemptId } from '../src/generated/public/AnalysisAttempt.ts';
-import type { AnalysisAttemptTelemetryAnalysisAttemptId } from '../src/generated/public/AnalysisAttemptTelemetry.ts';
 import {
   POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
@@ -330,13 +329,10 @@ describe('analysis_attempt_telemetry', () => {
 
     async function countRows(
       transaction: Transaction<Database>,
-      analysisAttemptId: AnalysisAttemptTelemetryAnalysisAttemptId,
+      analysisAttemptId: AnalysisAttemptId,
     ) {
       const [attempts, telemetry, llmUsage, qualityChecks] = await Promise.all([
-        transaction
-          .selectFrom('analysisAttempt')
-          .where('id', '=', analysisAttemptId as string as AnalysisAttemptId)
-          .execute(),
+        transaction.selectFrom('analysisAttempt').where('id', '=', analysisAttemptId).execute(),
         transaction
           .selectFrom('analysisAttemptTelemetry')
           .where('analysisAttemptId', '=', analysisAttemptId)
@@ -417,7 +413,7 @@ describe('analysis_attempt_llm_usage', () => {
   test('rejects a row with no telemetry row', async () => {
     await expectConstraintViolation(
       insertLlmUsage({
-        analysisAttemptId: crypto.randomUUID() as AnalysisAttemptTelemetryAnalysisAttemptId,
+        analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
       }),
       'analysis_attempt_llm_usage_analysis_attempt_id_fkey',
       POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
@@ -496,7 +492,7 @@ describe('analysis_attempt_quality_check', () => {
     await expectConstraintViolation(
       withRollback(DATABASE, (transaction) =>
         insertAttemptQualityCheck(transaction, {
-          analysisAttemptId: crypto.randomUUID() as AnalysisAttemptTelemetryAnalysisAttemptId,
+          analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
         }),
       ),
       'analysis_attempt_quality_check_analysis_attempt_id_fkey',

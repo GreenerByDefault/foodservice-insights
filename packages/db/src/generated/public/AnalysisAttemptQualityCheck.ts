@@ -1,5 +1,5 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
-import type { AnalysisAttemptTelemetryAnalysisAttemptId } from './AnalysisAttemptTelemetry.js';
+import type { AnalysisAttemptId } from './AnalysisAttempt.js';
 import type { default as DiagnosticStatus } from './DiagnosticStatus.js';
 import type { default as QualityCheck } from './QualityCheck.js';
 
@@ -18,23 +18,11 @@ export type AnalysisAttemptQualityCheckStatus = DiagnosticStatus & {
  * How many findings each quality check reported at each status, for an attempt whose report was built. Success rows are kept, so a firing rate has a denominator. Outlives the attempt, report and organization it describes, and holds no personal data.
  */
 export default interface AnalysisAttemptQualityCheckTable {
-  analysisAttemptId: ColumnType<
-    AnalysisAttemptTelemetryAnalysisAttemptId,
-    AnalysisAttemptTelemetryAnalysisAttemptId,
-    AnalysisAttemptTelemetryAnalysisAttemptId
-  >;
+  analysisAttemptId: ColumnType<AnalysisAttemptId, AnalysisAttemptId, AnalysisAttemptId>;
 
-  qualityCheck: ColumnType<
-    AnalysisAttemptQualityCheckQualityCheck,
-    AnalysisAttemptQualityCheckQualityCheck,
-    AnalysisAttemptQualityCheckQualityCheck
-  >;
+  qualityCheck: ColumnType<QualityCheck, QualityCheck, QualityCheck>;
 
-  status: ColumnType<
-    AnalysisAttemptQualityCheckStatus,
-    AnalysisAttemptQualityCheckStatus,
-    AnalysisAttemptQualityCheckStatus
-  >;
+  status: ColumnType<DiagnosticStatus, DiagnosticStatus, DiagnosticStatus>;
 
   findings: ColumnType<number, number, number>;
 }

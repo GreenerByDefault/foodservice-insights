@@ -1,15 +1,18 @@
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
+import type { UsersId } from '../src/generated/auth/Users.ts';
+import type { NewAuditEvent } from '../src/generated/public/AuditEvent.ts';
+import type { OrganizationId } from '../src/generated/public/Organization.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
-function anEvent(overrides: Record<string, unknown> = {}) {
+function anEvent(overrides: Partial<NewAuditEvent> = {}): NewAuditEvent {
   return {
     action: 'report.deleted',
-    actorKind: 'user' as const,
-    actorUserId: crypto.randomUUID(),
-    organizationId: crypto.randomUUID(),
+    actorKind: 'user',
+    actorUserId: crypto.randomUUID() as UsersId,
+    organizationId: crypto.randomUUID() as OrganizationId,
     targetType: 'report',
     targetId: crypto.randomUUID(),
     ...overrides,

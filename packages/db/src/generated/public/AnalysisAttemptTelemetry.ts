@@ -1,5 +1,8 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
+import type { AnalysisAttemptId } from './AnalysisAttempt.js';
 import type { default as CountsBasis } from './CountsBasis.js';
+import type { OrganizationId } from './Organization.js';
+import type { ReportId } from './Report.js';
 
 /** Identifier type for public.analysis_attempt_telemetry */
 export type AnalysisAttemptTelemetryAnalysisAttemptId = string & {
@@ -11,15 +14,11 @@ export type AnalysisAttemptTelemetryAnalysisAttemptId = string & {
  * One row per analysis attempt, written by the worker after the verdict on every ending the child left a telemetry document for. Each column group (input, categorization, report, and each stage time) fills in as its stage finishes, so a killed run keeps a prefix. Outlives the attempt, report and organization it names, and holds no personal data; a requested hard delete removes it by organization_id.
  */
 export default interface AnalysisAttemptTelemetryTable {
-  analysisAttemptId: ColumnType<
-    AnalysisAttemptTelemetryAnalysisAttemptId,
-    AnalysisAttemptTelemetryAnalysisAttemptId,
-    AnalysisAttemptTelemetryAnalysisAttemptId
-  >;
+  analysisAttemptId: ColumnType<AnalysisAttemptId, AnalysisAttemptId, AnalysisAttemptId>;
 
-  reportId: ColumnType<string, string, string>;
+  reportId: ColumnType<ReportId, ReportId, ReportId>;
 
-  organizationId: ColumnType<string, string, string>;
+  organizationId: ColumnType<OrganizationId, OrganizationId, OrganizationId>;
 
   countsBasis: ColumnType<CountsBasis, CountsBasis, CountsBasis>;
 
