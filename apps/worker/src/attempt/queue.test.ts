@@ -433,7 +433,7 @@ describe('renewLease', () => {
 });
 
 describe('finishing', () => {
-  test('records a success, its ai columns, and its result files', async () => {
+  test('records a success and its result files', async () => {
     // That this does not raise `analysis_attempt_terminal_is_final` is the assertion that the
     // terminal transition is a single UPDATE: a second statement touching the same row after it
     // reached `succeeded` would be rejected by the trigger.

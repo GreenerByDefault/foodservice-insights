@@ -86,6 +86,22 @@ landed) that shape the design:
   change to a terminal row except the notification columns. So anything recorded after the
   verdict needs its own table, and a new column on the attempt must be written at claim or in the
   terminal `UPDATE`.
+- **The tables exist.** `003_attempt_telemetry` created `analysis_attempt_telemetry`,
+  `analysis_attempt_llm_usage` and `analysis_attempt_quality_check`, the enums `llm_operation`,
+  `diagnostic_status` and `quality_check`, and `analysis_attempt.worker_git_sha`, with every CHECK
+  below named and tested in `packages/db/tests/attempt-telemetry.test.ts`. One more than this
+  plan named: kilograms and CO2e are non-negative, since `input_csv.py` refuses a negative
+  weight, so the contract fixtures mirror that too. `public-schema.sql`
+  is the shape to write against, not this plan. The quality table's key column is `check`, a
+  reserved word, so hand-written SQL quotes it or qualifies it (`q.check`). Fixtures:
+  `insertAttemptTelemetry` (every group set, fresh ids, nothing else needed),
+  `insertAttemptLlmUsage` and `insertAttemptQualityCheck` in `@gbd/db/testing`.
+  `REQUIREMENTS.md` § Data deletion already says what the telemetry holds and that it outlives
+  the organization.
+
+  The test stack prints floats with `extra_float_digits = 0`, so a `double precision` read back
+  through Kysely is rounded to 15 digits. A `toEqual` on a written row needs values that survive
+  that, such as the fixtures' `2500.5`.
 - **Nothing measures memory.** The report's numbers are reported now; peak memory is not.
 
   The lab keeps its own `MergeCounts.between` and `match_type` `value_counts` for the runscript's
@@ -106,10 +122,10 @@ landed) that shape the design:
     free-text columns from `metrics`. Its PR 6 makes a hard delete leave a tombstone in
     `metrics`, so its views keep deleted reports, attempts and users.
 
-  Neither has landed. Only `001_initial_schema.ts` exists, and two plans already claim `002`, so
-  each migration here takes the next free number at merge time. The shared test stack refuses to
-  migrate a branch that lacks a migration another worktree applied, so expect that error while
-  plans overlap.
+  Neither has landed. `002_caches` and this plan's `003_attempt_telemetry` exist, so a migration
+  here takes the next free number at merge time. The shared test stack refuses to migrate a
+  branch that lacks a migration another worktree applied, so test an unmerged migration against
+  a private database in the test cluster.
 - **Only deleting an organization removes data.**
   - Deleting a report is soft and "does not delete any data" (`REQUIREMENTS.md` § Data
     deletion). Deleting an organization hard-deletes its reports, which cascades to their
@@ -203,7 +219,8 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   drop the attempt's usage and quality rows with it.
   The integer sums the child guarantees are CHECKs too: the three match types add up to
   `input_unique_products`, and categorized rows are at most rows read. So a dashboard can tell
-  "never reached the report" from "zero".
+  "never reached the report" from "zero". The contract fixtures in PR 1 mirror these CHECKs, so
+  the child cannot write a document the parent's insert would refuse.
   *Rejected: `categorized_kilograms <= input_kilograms`.* The two are float sums over different
   rows, so they can differ in the last bit. In a simulation of 2,000 uploads of 5,000 rows each,
   where only zero-weight rows went uncategorized, 316 had more kilograms categorized than read.
@@ -306,7 +323,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   `_complete`'s `finally`, that replaces the call's own error, so the run reads `unknown`.
   `progress.json` has the same exposure. Accepted.
 - **Two fsync'd writes per call, instead of one, are probably free**, since a call takes hundreds
-  of milliseconds and three are in flight. PR 2 measures it and has a fallback.
+  of milliseconds and three are in flight. PR 1 measures it and has a fallback.
 
 ### The parent records after the verdict, whatever the ending
 
@@ -340,79 +357,13 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **No `WORKER_CONTRACT_VERSION` bump.** The parent and child ship in one image, and every
   change is additive.
 
-## PR 1 — the three tables and the build's SHA column
+## PR 1 — the contract, and the child writes `telemetry.json`
 
-`packages/db`, migration `0NN_attempt_telemetry.ts`.
-
-- Enums:
-  - `llm_operation ('clean','match')`
-  - `diagnostic_status ('success','info','warning','error')`
-  - `quality_check` (the six names)
-- `analysis_attempt_llm_usage`:
-  - PK `(analysis_attempt_id, operation, model)`, with the FK to the telemetry row.
-  - Named CHECKs:
-    - `calls >= 1`;
-    - `requests >= failed_requests >= rate_limited_requests >= 0`;
-    - `requests - failed_requests <= calls`;
-    - `truncated_calls <= calls`;
-    - `0 <= cached_input_tokens <= input_tokens`;
-    - the non-negatives;
-    - `model` and `served_model` match `^[a-z0-9][a-z0-9._:-]{0,99}$`.
-- `analysis_attempt_telemetry`:
-  - PK `analysis_attempt_id`, with *no* FK. Also `report_id` and `organization_id` (uuids, no
-    FK), `counts_basis` (the existing enum, `NOT NULL`) and `recorded_at timestamptz DEFAULT
-    now()`, with an index on `(organization_id)` for the hard-delete script and
-    `seed:history`, and one on `(recorded_at)` for the views.
-  - Named CHECKs:
-    - the input, categorization and report groups are each all null or all set;
-    - categorization requires input, and report requires categorization;
-    - each stage time requires the one before it (`categorize_ms` requires `read_ms`, through
-      `xlsx_ms` requiring `pdf_ms`), with no all-or-none rule across them;
-    - the match types sum to `input_unique_products`;
-    - `categorized_rows <= input_rows`, and no comparison between the two float kilograms, per
-      § Decisions;
-    - every count and millisecond is non-negative, `peak_memory_kib > 0`, and the percentages
-      are 0–100.
-- `analysis_attempt_quality_check`: PK `(analysis_attempt_id, check, status)`, with the FK to
-  the telemetry row, and `findings >= 1`.
-- `analysis_attempt.worker_git_sha text` with CHECK `^[0-9a-f]{40}$`, nullable.
-- The two child FKs are `ON DELETE CASCADE` from the telemetry row, so the hard-delete script
-  deletes one table.
-- Each table's `COMMENT` says:
-  - written after the verdict, on every ending the child left a document for;
-  - cost is list price at run time;
-  - groups fill as stages finish;
-  - the rows outlive the attempt, report and organization they name, and hold no personal data.
-    The migration's header carries § Telemetry outlives what it describes.
-- Regenerate `public-schema.sql` and `src/generated`. Add a fixture per table to
-  `src/testing/fixtures.ts`, with a case each.
-- `tests/attempt-telemetry.test.ts`, under `withRollback`, asserting `{code, constraint}`:
-  - every CHECK by name;
-  - the duplicate keys;
-  - a killed run's partial row inserts: input and categorization set, report null, `read_ms` and
-    `categorize_ms` set and the later stage times null;
-  - a fully categorized row whose `categorized_kilograms` exceeds `input_kilograms` by an ulp
-    inserts;
-  - deleting the organization leaves all three tables' rows;
-  - an insert for an attempt id that no longer exists succeeds;
-  - deleting the telemetry row cascades to its usage and quality rows.
-- `packages/db/README.md`: the three tables in the model, and one bullet on why they carry raw
-  ids rather than FKs. That bullet goes beside the conventions test's FK-index rule, which they
-  satisfy through their PKs.
-- `REQUIREMENTS.md` § Data deletion: analysis telemetry outlives organization deletion, and a
-  requested hard delete removes it by organization. It holds AI usage and cost, product counts,
-  stage times, which quality checks fired, and each report's headline figures: kilograms bought,
-  CO2e and plant share. It holds no names, product text, file names or user ids. Drop the stale `ai_*` from its line 102 and from `apps/worker/src/attempt/queue.ts:8`,
-  and rename the "ai columns" test titles in `lifecycle.test.ts` and `queue.test.ts`.
-
-## PR 2 — the contract, and the child writes `telemetry.json`
-
-Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet. This
-needs PR 1.
+Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet.
 
 - `contract/contract.json`: `runDirectory.telemetry: "output/telemetry.json"`, plus the
   operation, diagnostic-status and check vocabularies. The document's `report` section leaves
-  out `ReportSummary.quality_status`, since PR 1 stores no copy of it.
+  out `ReportSummary.quality_status`, since the database stores no copy of it.
   - One valid fixture: every section set, two usage rows, a null `plantProteinPct`.
   - A second valid fixture: killed during categorization, so `input` is set and the later
     sections are null.
@@ -463,7 +414,7 @@ needs PR 1.
     second plus a final one.
   - Put the numbers in the PR.
 
-## PR 3 — the parent records telemetry on every ending
+## PR 2 — the parent records telemetry on every ending
 
 `apps/worker`. This is the first PR that writes telemetry in production.
 
@@ -501,13 +452,13 @@ needs PR 1.
     post-verdict records get the bounded retry, then are dropped.
   - `REQUIREMENTS.md` § Persistence: both **Open**s become statements.
   - `packages/db/README.md`: who writes the tables.
-- Go-live: hand-run PR 1's migration against production before dispatching a worker deploy that
-  contains this PR. If someone forgets, every settle logs `42P01` and loses that telemetry, but
+- Go-live: hand-run `003_attempt_telemetry` against production before dispatching a worker deploy
+  that contains this PR, unless `deploy.yml` has already migrated it. If someone forgets, every settle logs `42P01` and loses that telemetry, but
   verdicts are untouched.
 
-## PR 4 — the build's SHA on every attempt
+## PR 3 — the build's SHA on every attempt
 
-Independent of PRs 2–3 except PR 1's column. This touches CI and the image, which is this task.
+Independent of PRs 1–2. This touches CI and the image, which is this task.
 
 - `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
   images get it; the web's Dockerfile ignores it.
@@ -519,8 +470,7 @@ Independent of PRs 2–3 except PR 1's column. This touches CI and the image, wh
   - `claimNextAttempt` sets `workerGitSha` beside `workerId`.
 - Tests:
   - `queue.test.ts`: a claim with and without a SHA;
-  - `config.test.ts`: the variable's three cases;
-  - `packages/db`: the pattern CHECK (in PR 1).
+  - `config.test.ts`: the variable's three cases.
 - `ARCHITECTURE.md` § Images: the image carries its SHA as an env var as well as the OCI label.
   Promotion keeps it true, since the SHA is the build's.
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
@@ -576,7 +526,7 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   PR 4. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: 1, then 2, then 3. PR 4 can go any time after 1. PR 5 is last.
+Order: 1, then 2. PR 3 can go any time. PR 5 is last.
 
 ## Failure paths
 
@@ -601,25 +551,25 @@ Order: 1, then 2, then 3. PR 4 can go any time after 1. PR 5 is last.
 Each PR runs its stack's gate:
 
 - Python: `just lint && just check && just test`.
-- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 2 and 3.
+- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 1 and 2.
 
 Then by hand, against the dev stack:
 
-- After PR 3, on `stubbed`:
+- After PR 2, on `stubbed`:
   - An upload leaves `STUB_TELEMETRY`'s rows in all three tables.
   - A `!slow` upload canceled from the waiting page leaves its usage and input group on a
     `canceled` attempt.
-- After PR 3, on `mock-llm`:
+- After PR 2, on `mock-llm`:
   - An upload leaves a full telemetry row, quality rows, and no usage.
   - Deleting that organization from the app leaves the telemetry and quality rows, with ids
     that no longer join.
   - An upload that is mostly unknown products fails `unusable_data`, with a categorized share
     under 20%.
-- After PR 3, on `live`, with a small real file:
+- After PR 2, on `live`, with a small real file:
   - Usage rows land for both operations, at about 1k input tokens per call.
   - `cost_micro_usd` matches the tokens times the list price, worked by hand.
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
-- After PR 4's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
+- After PR 3's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
 - After PR 5: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.

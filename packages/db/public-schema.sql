@@ -97,6 +97,20 @@ CREATE TYPE "public"."counts_basis" AS ENUM (
 ALTER TYPE "public"."counts_basis" OWNER TO "postgres";
 
 --
+-- Name: diagnostic_status; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE "public"."diagnostic_status" AS ENUM (
+    'success',
+    'info',
+    'warning',
+    'error'
+);
+
+
+ALTER TYPE "public"."diagnostic_status" OWNER TO "postgres";
+
+--
 -- Name: entree_classification_label; Type: TYPE; Schema: public; Owner: postgres
 --
 
@@ -107,6 +121,18 @@ CREATE TYPE "public"."entree_classification_label" AS ENUM (
 
 
 ALTER TYPE "public"."entree_classification_label" OWNER TO "postgres";
+
+--
+-- Name: llm_operation; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE "public"."llm_operation" AS ENUM (
+    'clean',
+    'match'
+);
+
+
+ALTER TYPE "public"."llm_operation" OWNER TO "postgres";
 
 --
 -- Name: organization_invite_status; Type: TYPE; Schema: public; Owner: postgres
@@ -135,6 +161,22 @@ CREATE TYPE "public"."organization_role" AS ENUM (
 
 
 ALTER TYPE "public"."organization_role" OWNER TO "postgres";
+
+--
+-- Name: quality_check; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE "public"."quality_check" AS ENUM (
+    'outlier_line_items',
+    'per_product_weight_bounds',
+    'month_over_month_total_volatility',
+    'diner_meal_count_reasonableness',
+    'missing_internal_months',
+    'date_distribution'
+);
+
+
+ALTER TYPE "public"."quality_check" OWNER TO "postgres";
 
 --
 -- Name: rejected_upload_reason; Type: TYPE; Schema: public; Owner: postgres
@@ -565,6 +607,7 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     "notification_claimed_by_worker_id" "text",
     "notification_attempts" integer DEFAULT 0 NOT NULL,
     "required_contract_version" smallint DEFAULT 1 NOT NULL,
+    "worker_git_sha" "text",
     CONSTRAINT "analysis_attempt_attempt_number_range" CHECK ((("attempt_number" >= 1) AND ("attempt_number" <= 5))),
     CONSTRAINT "analysis_attempt_cancel_requested_at_after_created_at" CHECK ((("cancel_requested_at" IS NULL) OR ("cancel_requested_at" >= "created_at"))),
     CONSTRAINT "analysis_attempt_canceled_is_not_notified" CHECK ((("notification_claimed_at" IS NULL) OR ("status" <> 'canceled'::"public"."analysis_attempt_status"))),
@@ -584,7 +627,8 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt" (
     CONSTRAINT "analysis_attempt_notification_sent_requires_claim" CHECK ((("notification_email_sent_at" IS NULL) OR ("notification_claimed_at" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_pending_is_unclaimed" CHECK ((("status" <> 'pending'::"public"."analysis_attempt_status") OR (("worker_id" IS NULL) AND ("claimed_at" IS NULL) AND ("lease_renewed_at" IS NULL)))),
     CONSTRAINT "analysis_attempt_processing_is_claimed" CHECK ((("status" <> 'processing'::"public"."analysis_attempt_status") OR (("worker_id" IS NOT NULL) AND ("claimed_at" IS NOT NULL) AND ("lease_renewed_at" IS NOT NULL) AND ("finished_at" IS NULL)))),
-    CONSTRAINT "analysis_attempt_required_contract_version_positive" CHECK (("required_contract_version" >= 1))
+    CONSTRAINT "analysis_attempt_required_contract_version_positive" CHECK (("required_contract_version" >= 1)),
+    CONSTRAINT "analysis_attempt_worker_git_sha_format" CHECK (("worker_git_sha" ~ '^[0-9a-f]{40}$'::"text"))
 );
 
 
@@ -645,6 +689,154 @@ COMMENT ON COLUMN "public"."analysis_attempt"."notification_attempts" IS 'Increm
 
 COMMENT ON COLUMN "public"."analysis_attempt"."required_contract_version" IS 'The lowest worker contract version that can safely claim this row, so an old worker leaves
        an attempt it cannot handle in the queue instead of claiming and failing it.';
+
+
+--
+-- Name: COLUMN "analysis_attempt"."worker_git_sha"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt"."worker_git_sha" IS 'The commit the claiming worker was built from, set at claim. Null for a build that does not know its own, such as a local one.';
+
+
+--
+-- Name: analysis_attempt_llm_usage; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_llm_usage" (
+    "analysis_attempt_id" "uuid" NOT NULL,
+    "operation" "public"."llm_operation" NOT NULL,
+    "model" "text" NOT NULL,
+    "served_model" "text",
+    "calls" integer NOT NULL,
+    "requests" integer NOT NULL,
+    "failed_requests" integer NOT NULL,
+    "rate_limited_requests" integer NOT NULL,
+    "truncated_calls" integer NOT NULL,
+    "input_tokens" integer NOT NULL,
+    "cached_input_tokens" integer NOT NULL,
+    "output_tokens" integer NOT NULL,
+    "cost_micro_usd" integer NOT NULL,
+    CONSTRAINT "analysis_attempt_llm_usage_cached_input_tokens_within_input" CHECK ((("cached_input_tokens" >= 0) AND ("cached_input_tokens" <= "input_tokens"))),
+    CONSTRAINT "analysis_attempt_llm_usage_calls_positive" CHECK (("calls" >= 1)),
+    CONSTRAINT "analysis_attempt_llm_usage_counts_non_negative" CHECK ((("truncated_calls" >= 0) AND ("output_tokens" >= 0) AND ("cost_micro_usd" >= 0))),
+    CONSTRAINT "analysis_attempt_llm_usage_model_format" CHECK (("model" ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'::"text")),
+    CONSTRAINT "analysis_attempt_llm_usage_requests_ordered" CHECK ((("requests" >= "failed_requests") AND ("failed_requests" >= "rate_limited_requests") AND ("rate_limited_requests" >= 0))),
+    CONSTRAINT "analysis_attempt_llm_usage_served_model_format" CHECK (("served_model" ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'::"text")),
+    CONSTRAINT "analysis_attempt_llm_usage_successful_requests_at_most_calls" CHECK ((("requests" - "failed_requests") <= "calls")),
+    CONSTRAINT "analysis_attempt_llm_usage_truncated_calls_at_most_calls" CHECK (("truncated_calls" <= "calls"))
+);
+
+
+ALTER TABLE "public"."analysis_attempt_llm_usage" OWNER TO "postgres";
+
+--
+-- Name: TABLE "analysis_attempt_llm_usage"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."analysis_attempt_llm_usage" IS 'One row per attempt, operation and requested model, written with its analysis_attempt_telemetry row. A report''s cost is the sum over its attempts, since a retry spends again. Outlives the attempt, report and organization it describes, and holds no personal data.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_llm_usage"."served_model"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."served_model" IS 'The model that answered, as OpenAI resolved the requested one. Null when no call got a response; the latest if it changed mid-run.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_llm_usage"."input_tokens"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."input_tokens" IS 'Including cached_input_tokens, as OpenAI counts them.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_llm_usage"."cost_micro_usd"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."cost_micro_usd" IS 'At the list price the run knew, computed from this row''s tokens. Tokens are stored beside it, so a price correction is an UPDATE.';
+
+
+--
+-- Name: analysis_attempt_quality_check; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_quality_check" (
+    "analysis_attempt_id" "uuid" NOT NULL,
+    "check" "public"."quality_check" NOT NULL,
+    "status" "public"."diagnostic_status" NOT NULL,
+    "findings" integer NOT NULL,
+    CONSTRAINT "analysis_attempt_quality_check_findings_positive" CHECK (("findings" >= 1))
+);
+
+
+ALTER TABLE "public"."analysis_attempt_quality_check" OWNER TO "postgres";
+
+--
+-- Name: TABLE "analysis_attempt_quality_check"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."analysis_attempt_quality_check" IS 'How many findings each quality check reported at each status, for an attempt whose report was built. Success rows are kept, so a firing rate has a denominator. Outlives the attempt, report and organization it describes, and holds no personal data.';
+
+
+--
+-- Name: analysis_attempt_telemetry; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_telemetry" (
+    "analysis_attempt_id" "uuid" NOT NULL,
+    "report_id" "uuid" NOT NULL,
+    "organization_id" "uuid" NOT NULL,
+    "counts_basis" "public"."counts_basis" NOT NULL,
+    "recorded_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "input_rows" integer,
+    "input_kilograms" double precision,
+    "input_unique_products" integer,
+    "cache_entries" integer,
+    "raw_product_history_products" integer,
+    "cleaned_name_history_products" integer,
+    "llm_products" integer,
+    "history_uncategorized_products" integer,
+    "llm_uncategorized_products" integer,
+    "unrecognized_llm_answers" integer,
+    "categorized_rows" integer,
+    "categorized_kilograms" double precision,
+    "total_co2e_kg" double precision,
+    "co2e_kg_per_diner_or_meal" double precision,
+    "plant_pct" double precision,
+    "plant_protein_pct" double precision,
+    "read_ms" integer,
+    "categorize_ms" integer,
+    "report_ms" integer,
+    "pdf_ms" integer,
+    "xlsx_ms" integer,
+    "peak_memory_kib" integer NOT NULL,
+    CONSTRAINT "analysis_attempt_telemetry_categorization_all_or_none" CHECK (("num_nulls"("raw_product_history_products", "cleaned_name_history_products", "llm_products", "history_uncategorized_products", "llm_uncategorized_products", "unrecognized_llm_answers", "categorized_rows", "categorized_kilograms") = ANY (ARRAY[0, 8]))),
+    CONSTRAINT "analysis_attempt_telemetry_categorization_requires_input" CHECK ((("categorized_rows" IS NULL) OR ("input_rows" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_categorize_ms_requires_read_ms" CHECK ((("categorize_ms" IS NULL) OR ("read_ms" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_categorized_rows_at_most_input_rows" CHECK (("categorized_rows" <= "input_rows")),
+    CONSTRAINT "analysis_attempt_telemetry_counts_non_negative" CHECK ((("input_rows" >= 0) AND ("input_unique_products" >= 0) AND ("cache_entries" >= 0) AND ("raw_product_history_products" >= 0) AND ("cleaned_name_history_products" >= 0) AND ("llm_products" >= 0) AND ("history_uncategorized_products" >= 0) AND ("llm_uncategorized_products" >= 0) AND ("unrecognized_llm_answers" >= 0) AND ("categorized_rows" >= 0) AND ("read_ms" >= 0) AND ("categorize_ms" >= 0) AND ("report_ms" >= 0) AND ("pdf_ms" >= 0) AND ("xlsx_ms" >= 0))),
+    CONSTRAINT "analysis_attempt_telemetry_input_all_or_none" CHECK (("num_nulls"("input_rows", "input_kilograms", "input_unique_products", "cache_entries") = ANY (ARRAY[0, 4]))),
+    CONSTRAINT "analysis_attempt_telemetry_match_types_sum_to_unique_products" CHECK (((("raw_product_history_products" + "cleaned_name_history_products") + "llm_products") = "input_unique_products")),
+    CONSTRAINT "analysis_attempt_telemetry_pdf_ms_requires_report_ms" CHECK ((("pdf_ms" IS NULL) OR ("report_ms" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_peak_memory_kib_positive" CHECK (("peak_memory_kib" > 0)),
+    CONSTRAINT "analysis_attempt_telemetry_percentages_in_range" CHECK (((("plant_pct" >= (0)::double precision) AND ("plant_pct" <= (100)::double precision)) AND (("plant_protein_pct" >= (0)::double precision) AND ("plant_protein_pct" <= (100)::double precision)))),
+    CONSTRAINT "analysis_attempt_telemetry_plant_protein_pct_requires_report" CHECK ((("plant_protein_pct" IS NULL) OR ("total_co2e_kg" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_quantities_non_negative" CHECK ((("input_kilograms" >= (0)::double precision) AND ("categorized_kilograms" >= (0)::double precision) AND ("total_co2e_kg" >= (0)::double precision) AND ("co2e_kg_per_diner_or_meal" >= (0)::double precision))),
+    CONSTRAINT "analysis_attempt_telemetry_report_all_or_none" CHECK (("num_nulls"("total_co2e_kg", "co2e_kg_per_diner_or_meal", "plant_pct") = ANY (ARRAY[0, 3]))),
+    CONSTRAINT "analysis_attempt_telemetry_report_ms_requires_categorize_ms" CHECK ((("report_ms" IS NULL) OR ("categorize_ms" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_report_requires_categorization" CHECK ((("total_co2e_kg" IS NULL) OR ("categorized_rows" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_xlsx_ms_requires_pdf_ms" CHECK ((("xlsx_ms" IS NULL) OR ("pdf_ms" IS NOT NULL)))
+);
+
+
+ALTER TABLE "public"."analysis_attempt_telemetry" OWNER TO "postgres";
+
+--
+-- Name: TABLE "analysis_attempt_telemetry"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."analysis_attempt_telemetry" IS 'One row per analysis attempt, written by the worker after the verdict on every ending the child left a telemetry document for. Each column group (input, categorization, report, and each stage time) fills in as its stage finishes, so a killed run keeps a prefix. Outlives the attempt, report and organization it names, and holds no personal data; a requested hard delete removes it by organization_id.';
 
 
 --
@@ -1055,6 +1247,14 @@ COMMENT ON COLUMN "public"."unit_weight"."suggested_by" IS 'Where the row came f
 
 
 --
+-- Name: analysis_attempt_llm_usage analysis_attempt_llm_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."analysis_attempt_llm_usage"
+    ADD CONSTRAINT "analysis_attempt_llm_usage_pkey" PRIMARY KEY ("analysis_attempt_id", "operation", "model");
+
+
+--
 -- Name: analysis_attempt analysis_attempt_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1063,11 +1263,27 @@ ALTER TABLE ONLY "public"."analysis_attempt"
 
 
 --
+-- Name: analysis_attempt_quality_check analysis_attempt_quality_check_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."analysis_attempt_quality_check"
+    ADD CONSTRAINT "analysis_attempt_quality_check_pkey" PRIMARY KEY ("analysis_attempt_id", "check", "status");
+
+
+--
 -- Name: analysis_attempt analysis_attempt_report_id_attempt_number; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY "public"."analysis_attempt"
     ADD CONSTRAINT "analysis_attempt_report_id_attempt_number" UNIQUE ("report_id", "attempt_number");
+
+
+--
+-- Name: analysis_attempt_telemetry analysis_attempt_telemetry_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."analysis_attempt_telemetry"
+    ADD CONSTRAINT "analysis_attempt_telemetry_pkey" PRIMARY KEY ("analysis_attempt_id");
 
 
 --
@@ -1271,6 +1487,20 @@ CREATE INDEX "analysis_attempt_processing_lease_renewed_at" ON "public"."analysi
 --
 
 CREATE INDEX "analysis_attempt_requested_by_user_id" ON "public"."analysis_attempt" USING "btree" ("requested_by_user_id");
+
+
+--
+-- Name: analysis_attempt_telemetry_organization_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "analysis_attempt_telemetry_organization_id" ON "public"."analysis_attempt_telemetry" USING "btree" ("organization_id");
+
+
+--
+-- Name: analysis_attempt_telemetry_recorded_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "analysis_attempt_telemetry_recorded_at" ON "public"."analysis_attempt_telemetry" USING "btree" ("recorded_at");
 
 
 --
@@ -1505,6 +1735,22 @@ CREATE OR REPLACE TRIGGER "unit_weight_set_verified_at" BEFORE INSERT OR UPDATE 
 
 
 --
+-- Name: analysis_attempt_llm_usage analysis_attempt_llm_usage_analysis_attempt_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."analysis_attempt_llm_usage"
+    ADD CONSTRAINT "analysis_attempt_llm_usage_analysis_attempt_id_fkey" FOREIGN KEY ("analysis_attempt_id") REFERENCES "public"."analysis_attempt_telemetry"("analysis_attempt_id") ON DELETE CASCADE;
+
+
+--
+-- Name: analysis_attempt_quality_check analysis_attempt_quality_check_analysis_attempt_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."analysis_attempt_quality_check"
+    ADD CONSTRAINT "analysis_attempt_quality_check_analysis_attempt_id_fkey" FOREIGN KEY ("analysis_attempt_id") REFERENCES "public"."analysis_attempt_telemetry"("analysis_attempt_id") ON DELETE CASCADE;
+
+
+--
 -- Name: analysis_attempt analysis_attempt_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1633,6 +1879,33 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "service_role";
+
+
+--
+-- Name: TABLE "analysis_attempt_llm_usage"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_llm_usage" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_llm_usage" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_llm_usage" TO "service_role";
+
+
+--
+-- Name: TABLE "analysis_attempt_quality_check"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_quality_check" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_quality_check" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_quality_check" TO "service_role";
+
+
+--
+-- Name: TABLE "analysis_attempt_telemetry"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "service_role";
 
 
 --

@@ -71,7 +71,7 @@ function fileNameFor(row: { kind: 'pdf' | 'xlsx' }): string {
 }
 
 describe('a successful attempt, end to end', () => {
-  test('uploads every declared file and records the ai columns', async () => {
+  test('uploads every declared file', async () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
       const steps: FakeChildStep[] = [

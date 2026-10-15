@@ -62,6 +62,17 @@ suggested it.
   [`tests/caches.test.ts`](tests/caches.test.ts) asserts. Its password is set by hand on the
   hosted project and nowhere else.
 
+Each attempt's telemetry lands in **`analysis_attempt_telemetry`**: its input and categorization
+counts, its report's headline numbers, and its stage times. Two tables hang off it:
+**`analysis_attempt_llm_usage`**, per LLM operation and model, and
+**`analysis_attempt_quality_check`**, per check and status.
+
+- **They carry the attempt, report and organization ids raw, with no foreign key to any of
+  them.** Like `audit_event`, they outlive what they describe, so deleting an organization keeps
+  its spend and coverage in the history. They hold no personal data; the reasoning is in
+  [`migrations/003_attempt_telemetry.ts`](migrations/003_attempt_telemetry.ts). The two child
+  tables' foreign keys to the telemetry row are served by their primary keys.
+
 Design reasoning:
 
 - **`input_file.storage_key` points at the normalized CSV file the worker reads.** `input_file.is_modified` says whether it
@@ -136,7 +147,7 @@ The invariants themselves are the named constraints and triggers in
 code that writes to this column:
 
 - **A transition to a terminal status must be one `UPDATE`.** Checks cannot be deferred, so
-  `status`, `finished_at`, `failure_reason`, and the `ai_*` columns have to be set together.
+  `status`, `finished_at` and `failure_reason` have to be set together.
 - **Guard terminal updates** with `WHERE id = $1 AND status = 'processing' AND worker_id = $2`, so
   losing the reaping race is a zero-row update rather than an exception.
 

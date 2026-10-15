@@ -237,8 +237,13 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
   either delete the whole organization or promote another admin.
 - **An admin deleting an organization** *does* hard-delete all of the organization's reports and input files. It
   does not delete any user accounts.
+- **Analysis telemetry outlives organization deletion.** It holds each attempt's AI usage and
+  cost, product counts, stage times, which quality checks fired, and its report's headline
+  figures: kilograms bought, CO2e and plant share. It holds no names, product text, file names or
+  user IDs.
 - A user can email GBD to request a hard delete. GBD admins do it with a script or in the
-  Supabase UI (TBD which approach).
+  Supabase UI (TBD which approach), and that removes the organization's analysis telemetry
+  too.
 
 ### Account recovery
 

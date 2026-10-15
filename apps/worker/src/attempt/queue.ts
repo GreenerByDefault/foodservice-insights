@@ -5,8 +5,8 @@
  * [`@gbd/db`'s README](../../../../packages/db/README.md#the-analysis-attempt-state-machine):
  *
  * 1. **A transition to a terminal status is one `UPDATE`.** Checks cannot be deferred, so
- *    `status`, `finished_at`, `failure_reason` and the `ai_*` columns are set together or the
- *    row is rejected part-way.
+ *    `status`, `finished_at` and `failure_reason` are set together or the row is rejected
+ *    part-way.
  * 2. **Terminal updates are guarded** by `status = 'processing' AND worker_id = $ours`. Losing
  *    the reaping race is then a zero-row update — a `false` return — rather than the
  *    `analysis_attempt_terminal_is_final` exception, which is the database's backstop for a

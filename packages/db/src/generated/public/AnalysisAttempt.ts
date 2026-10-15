@@ -59,6 +59,9 @@ export default interface AnalysisAttemptTable {
 
   /** The lowest worker contract version that can safely claim this row, so an old worker leaves\n       an attempt it cannot handle in the queue instead of claiming and failing it. */
   requiredContractVersion: ColumnType<number, number | undefined, number>;
+
+  /** The commit the claiming worker was built from, set at claim. Null for a build that does not know its own, such as a local one. */
+  workerGitSha: ColumnType<string | null, string | null, string | null>;
 }
 
 export type AnalysisAttempt = Selectable<AnalysisAttemptTable>;
