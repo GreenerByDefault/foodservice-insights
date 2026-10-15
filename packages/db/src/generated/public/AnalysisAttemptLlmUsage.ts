@@ -1,5 +1,5 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
-import type { AnalysisAttemptTelemetryAnalysisAttemptId } from './AnalysisAttemptTelemetry.js';
+import type { AnalysisAttemptId } from './AnalysisAttempt.js';
 import type { default as LlmOperation } from './LlmOperation.js';
 
 /** Identifier type for public.analysis_attempt_llm_usage */
@@ -17,23 +17,11 @@ export type AnalysisAttemptLlmUsageRequestedModel = string & {
  * One row per attempt, operation and requested model, written with its analysis_attempt_telemetry row. A report's cost is the sum over its attempts, since a retry spends again. Outlives the attempt, report and organization it describes, and holds no personal data.
  */
 export default interface AnalysisAttemptLlmUsageTable {
-  analysisAttemptId: ColumnType<
-    AnalysisAttemptTelemetryAnalysisAttemptId,
-    AnalysisAttemptTelemetryAnalysisAttemptId,
-    AnalysisAttemptTelemetryAnalysisAttemptId
-  >;
+  analysisAttemptId: ColumnType<AnalysisAttemptId, AnalysisAttemptId, AnalysisAttemptId>;
 
-  operation: ColumnType<
-    AnalysisAttemptLlmUsageOperation,
-    AnalysisAttemptLlmUsageOperation,
-    AnalysisAttemptLlmUsageOperation
-  >;
+  operation: ColumnType<LlmOperation, LlmOperation, LlmOperation>;
 
-  requestedModel: ColumnType<
-    AnalysisAttemptLlmUsageRequestedModel,
-    AnalysisAttemptLlmUsageRequestedModel,
-    AnalysisAttemptLlmUsageRequestedModel
-  >;
+  requestedModel: ColumnType<string, string, string>;
 
   /** The model that answered, as OpenAI resolved the requested one. Null when no call got a response; the latest if it changed mid-run. */
   servedModel: ColumnType<string | null, string | null, string | null>;

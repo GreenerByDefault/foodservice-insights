@@ -1,5 +1,7 @@
 import type { ColumnType, Insertable, Selectable, Updateable } from 'kysely';
+import type { UsersId } from '../auth/Users.js';
 import type { default as AuditActorKind } from './AuditActorKind.js';
+import type { OrganizationId } from './Organization.js';
 
 /** Identifier type for public.audit_event */
 export type AuditEventId = string & { __brand: 'public.audit_event' };
@@ -15,11 +17,11 @@ export default interface AuditEventTable {
 
   action: ColumnType<string, string, string>;
 
-  actorUserId: ColumnType<string | null, string | null, string | null>;
+  actorUserId: ColumnType<UsersId | null, UsersId | null, UsersId | null>;
 
   actorKind: ColumnType<AuditActorKind, AuditActorKind, AuditActorKind>;
 
-  organizationId: ColumnType<string | null, string | null, string | null>;
+  organizationId: ColumnType<OrganizationId | null, OrganizationId | null, OrganizationId | null>;
 
   targetType: ColumnType<string | null, string | null, string | null>;
 
