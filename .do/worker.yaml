@@ -1,0 +1,58 @@
+# The worker's App Platform spec. See README.md before changing it.
+
+name: foodservice-insights-worker
+region: ric
+
+workers:
+  - name: worker
+    image:
+      registry_type: GHCR
+      registry: greenerbydefault
+      repository: foodservice-insights/worker
+      digest: ${IMAGE_DIGEST}
+    # `budget.test.ts` holds the count to `WORKER_INSTANCES`. **Open:** drop to `apps-s-1vcpu-1gb`
+    # once production shows the parent plus three children staying well under 1 GB.
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 2
+    # App Platform's maximum. Its default of 120 would SIGKILL the worker mid-drain, which looks
+    # exactly like a worker bug. `config.test.ts` holds `PLATFORM_SHUTDOWN_GRACE_MS` to it.
+    termination:
+      grace_period_seconds: 600
+
+    envs:
+      # Not `live` until the categorization caches are in Supabase
+      # (`.claude/plans/caches-to-supabase.md` § Go-live), which also adds `OPENAI_API_KEY`.
+      - key: WORKER_MODE
+        value: mock-llm
+      - key: PLATFORM_SHUTDOWN_GRACE_MS
+        value: "600000"
+
+      - key: DB_CONNECTION_STRING
+        type: SECRET
+        value: ${DB_CONNECTION_STRING}
+      - key: DB_SSL_CA
+        value: ${DB_SSL_CA}
+
+      - key: S3_ENDPOINT
+        value: ${S3_ENDPOINT}
+      - key: S3_REGION
+        value: ${S3_REGION}
+      - key: S3_ACCESS_KEY_ID
+        type: SECRET
+        value: ${S3_ACCESS_KEY_ID}
+      - key: S3_SECRET_ACCESS_KEY
+        type: SECRET
+        value: ${S3_SECRET_ACCESS_KEY}
+      - key: S3_BUCKET
+        value: ${S3_BUCKET}
+
+      - key: EMAIL_TRANSPORT
+        value: provider
+      - key: EMAIL_FROM_ADDRESS
+        value: insights@greenerbydefault.org
+      - key: EMAIL_SUPPORT_ADDRESS
+        value: insights@greenerbydefault.org
+      - key: EMAIL_GBD_ADDRESS
+        value: insights@greenerbydefault.org
+      - key: SITE_URL
+        value: ${SITE_URL}

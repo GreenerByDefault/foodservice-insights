@@ -74,6 +74,8 @@ catalog:
 
   # --- Validation -------------------------------------------------------------
   valibot: ^1.5.0
+  # Tests only: they read the App Platform specs in `.do/`.
+  yaml: ^2.9.1
 
   # --- Logging ----------------------------------------------------------------
   pino: ^10.3.1

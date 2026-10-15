@@ -644,7 +644,10 @@ that can read and suggest).
    report is clean; then run it again with `--write`, read the counts, and type `COMMIT`. Check
    each table's count against the CSV's rows minus the reported skips, and spot-check a `No
    Matches Found` row and a multi-line product in Studio.
-3. Dispatch a worker deploy, so the fleet runs PRs 1–3 against the imported table; any rows an
+3. Merge a PR that sets `.do/worker.yaml`'s `WORKER_MODE` to `live` and adds `OPENAI_API_KEY` as a
+   secret, with the key stored in the `production` Environment first (`.do/README.md`). The
+   production worker runs `mock-llm` until then. Dispatch a worker deploy, so the fleet runs PRs
+   1–3 against the imported table; any rows an
    earlier deploy harvested were promoted by step 2's `DO UPDATE … WHERE NOT is_verified` if the
    CSV knows them. Merge PR 5. From here, every developer's `live` worker runs with
    `CACHE_DB_CONNECTION_STRING` set: hand each app developer the composed string the same way as

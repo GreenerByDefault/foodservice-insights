@@ -10,22 +10,22 @@ the existing deploy pipeline to it.
 The pipeline itself is already built. [`deploy.yml`](../../.github/workflows/deploy.yml) builds
 both images on every push to `main` and pushes them to GHCR as public packages. It migrates the
 database, and [`actions/deploy-service`](../../.github/actions/deploy-service/action.yml) resolves
-the commit to an image digest. That action's last step is a stub that only prints a warning. What
-is missing is everything on DigitalOcean's side, and that one step.
+the commit to an image digest. That action's last step is a stub that only prints a warning.
+
+Each service is its own App Platform app, described in full by its spec:
+[`.do/web.yaml`](../../.do/web.yaml) and [`.do/worker.yaml`](../../.do/worker.yaml). Two apps,
+because DigitalOcean documents no way to deploy one component of an app, so in one app every push to
+`main` would restart the worker. What is missing is the apps themselves and the deploy step that
+submits those specs.
 
 Other plans own these pieces:
 
 - **Our own domain and Cloudflare**: [`cloudflare-and-domain.md`](cloudflare-and-domain.md). Until
   it lands, the web app is served from its App Platform starter domain.
-- **The specs' `alerts:` and alert destinations**: [`alerts.md`](alerts.md). **`log_destinations:`**: [`logs.md`](logs.md). Both add to the spec
-  files PR 1 creates, and both pass their tokens the same way as every other secret (§ Secrets).
+- **The specs' `alerts:` and alert destinations**: [`alerts.md`](alerts.md). **`log_destinations:`**:
+  [`logs.md`](logs.md). Both add to the specs, and both pass their tokens the same way as every
+  other secret (§ Secrets).
 - **Postmark's credentials**: [`email-provider.md`](email-provider.md) adds them the same way.
-- **The site password** has landed (`SITE_PASSWORD`, checked by
-  [`site-password.ts`](../../apps/web/src/lib/server/auth/site-password.ts)). Production runs
-  `PUBLIC_AUTH_MODE=placeholder`, so it is the only thing in front of the placeholder admin. Set it
-  to a long, random value as a secret in the `production` Environment and in `.do/web.yaml`, like
-  any other (§ Secrets): the app refuses a short one, and refuses to start without it in
-  placeholder mode.
 
 DigitalOcean facts, read from its docs and the `doctl` source on 2026-10-14:
 
@@ -34,14 +34,7 @@ DigitalOcean facts, read from its docs and the `doctl` source on 2026-10-14:
   or a log destination. A setting changed in the dashboard lasts only until that deploy.
 - **`doctl apps update <id> --spec <file> --wait` exits nonzero when the deployment fails**, and
   gives up after 30 minutes. It does not substitute variables. `--spec -` reads the spec from stdin.
-- **`health_check` is a readiness check.** When it fails, traffic stops going to the instance, and
-  a deploy whose new instance never passes it fails and rolls back. **`liveness_health_check`
-  restarts the container.** Workers can only have the liveness check, and only if they listen on a
-  port. Ours does not.
-- **A worker's `termination.grace_period_seconds` defaults to 120 and can be at most 600.** One FAQ
-  gives the default as 30. Either is far short of our drain. The docs don't say whether the old
-  worker keeps running until the new one starts, and it doesn't matter here: attempts just wait in
-  the queue, or are shared between whichever workers are running.
+- **A deploy whose new web instance never passes `health_check` fails and rolls back.**
 - **Rollback** can restore any of the last 10 successful deployments, including that deployment's
   spec and env vars. A rollback through the API also *pins* the app: new deployments are refused
   until the rollback is committed or reverted. The docs don't say whether a dashboard rollback does
@@ -49,27 +42,21 @@ DigitalOcean facts, read from its docs and the `doctl` source on 2026-10-14:
 - **There is no outbound IPv6**, so the Supabase IPv4 add-on is required (`ARCHITECTURE.md`
   § Supabase).
 - **App Platform keeps no runtime logs** unless they are forwarded somewhere, which is `logs.md`.
-- **App Platform sets `PORT` to match `http_port`**, and adapter-node listens on `PORT`.
-- **The `apps-s-1vcpu-0.5gb` and `-1gb-fixed` sizes can't run more than one instance.**
 - **API tokens can have custom scopes.** CI needs only `app:update` and the read scopes it depends
   on, with no `app:create` or `app:delete`.
 
 ## Decisions
 
-### Two apps, one spec file each
+### No rehearsal: the first CI deploy is the test
 
-`.do/web.yaml` and `.do/worker.yaml`. DigitalOcean documents no way to deploy only one component of
-an app, and every update submits the whole spec. In a single app, every push to `main` could
-restart the worker and fail its in-flight attempts as `shut_down`, which defeats `ARCHITECTURE.md`
-§ Worker deploys only on demand. Billing is per component, so two apps cost the same as one.
+The apps are created bare, and the first deploy from CI is the first time either spec runs. What
+the docs leave open (App Platform pulling a nested GHCR repository by digest, a multi-line
+`DB_SSL_CA` arriving intact, how long a worker deploy takes, whether a dashboard rollback pins the
+app) is found out there and fixed forward, like any other bad deploy. Nobody is using production
+yet, so a failed first deploy costs nothing but a follow-up PR.
 
-### The spec in git is canonical
-
-Because an update replaces the whole spec, everything about an app lives in its file: size,
-instance count, region, grace, health check, env, and later its alerts and log destinations. Each
-file's header says that a change made in the dashboard is undone by the next deploy.
-[`budget.ts`](../../packages/db/src/budget.ts) currently says instance counts are "set in the
-host's dashboard". They move into these files, where a test can hold them to the connection budget.
+*Rejected: rehearsing by hand with `doctl apps create` before wiring up CI.* It would check the
+same things a second way, with the secrets copied onto someone's machine to do it.
 
 ### Secrets: the `production` Environment, filled in at deploy
 
@@ -85,15 +72,19 @@ yq '(.. | select(tag == "!!str")) |= envsubst(nu, ne, ff)' .do/web.yaml \
 
 `nu, ne` fail the deploy when a variable is unset or empty, instead of submitting an empty secret.
 yq edits the parsed document, so a value containing newlines (`DB_SSL_CA`) or a `$` still comes
-out as valid YAML. DigitalOcean encrypts each `SECRET` when it receives it.
+out as valid YAML. DigitalOcean encrypts each `SECRET` when it receives it. Because yq consumes
+every `${…}`, App Platform's own bindable variables such as `${APP_URL}` can't appear in a spec.
 
-- A non-secret value that the migrate step also reads (`DB_SSL_CA`, the `S3_*` variables) comes from
-  the Environment's variables the same way, so it has only one home.
-- A value only the app reads (`PUBLIC_AUTH_MODE`, `WORKER_MODE`, the grace) is written in the spec.
 - The image digest is filled in the same way, from `${IMAGE_DIGEST}`.
+- A non-secret value comes from the Environment's variables when the migrate step also reads it
+  (`DB_SSL_CA`, the `S3_*` variables), so it has one home, or when it isn't known until the apps
+  exist (`SITE_URL`, the starter domain) or names the Supabase project (`PUBLIC_SUPABASE_URL`,
+  `PUBLIC_SUPABASE_PUBLISHABLE_KEY`).
+- Any other value only the app reads (`PUBLIC_AUTH_MODE`, `WORKER_MODE`, the grace) is written in
+  the spec.
 
-To rotate a secret, change it in the Environment and redeploy. For the worker, that means
-dispatching a worker deploy.
+The specs' placeholders are the list of what the Environment must hold. To rotate a secret, change
+it in the Environment and redeploy. For the worker, that means dispatching a worker deploy.
 
 *Rejected: committing DigitalOcean's encrypted `EV[…]` values.* DigitalOcean says they are safe to
 store in a repo, but this repo is public, and runtime secrets would have a second home beside the
@@ -107,36 +98,7 @@ It also expands every `$` in the spec, replaces an unset variable with an empty 
 with no timeout. `doctl apps update` takes an app ID, so it can only ever update that app. The two
 IDs are Environment variables.
 
-### The worker drains for ten minutes
-
-The worker spec sets `grace_period_seconds: 600`, the maximum, with `PLATFORM_SHUTDOWN_GRACE_MS:
-"600000"` beside it. [`config.ts`](../../apps/worker/src/config.ts) derives the drain from that
-variable. A test reads `.do/worker.yaml` and fails if the two values disagree. This replaces
-`ARCHITECTURE.md`'s warning that nothing in the repo can check this relation. Attempts that a deploy
-still cuts off are recorded `shut_down`, and the user retries them. Dispatching worker deploys at a
-quiet hour avoids most of them.
-
-### The web app's two probes
-
-`health_check` points at `/health/ready`, which checks the database and the bucket, so a deploy
-whose instance cannot reach Supabase fails and rolls back instead of going live.
-`liveness_health_check` points at `/health/live`, which touches nothing, so a wedged process
-restarts but a Supabase blip restarts nothing.
-
-### Sizes, counts, and region
-
-- **Web:** one `apps-s-1vcpu-0.5gb`.
-- **Worker:** two `apps-s-1vcpu-2gb`, which matches `budget.ts`.
-- **Explicit sizes:** set `instance_size_slug` in both specs, because the spec's default is a legacy
-  size.
-- **Region:** the App Platform region nearest the Supabase project, because every claim, lease
-  renewal, and poll is a round trip to the database. `doctl apps list-regions` lists the choices.
-
-[`monthly_costs.py`](../../scripts/monthly_costs.py) has the reasoning for each size and what it
-costs. **Open:** drop the worker to `apps-s-1vcpu-1gb` once production shows that the parent plus
-three children stay well under 1 GB.
-
-## Before PR 1: the account
+## Before PR 1: the account and the apps
 
 Dashboard work, with no code:
 
@@ -147,73 +109,49 @@ Dashboard work, with no code:
 3. **A custom-scope token for CI:** `app:read`, `app:update`, `regions:read`, `sizes:read`,
    `actions:read`. Give it an expiry, and set a calendar reminder to rotate it. A token belongs to
    one user and stops working if that user leaves the team. Store it as
-   `DIGITALOCEAN_ACCESS_TOKEN` in the `production` Environment, along with the app secrets the
-   Environment does not hold yet, such as `OPENAI_API_KEY`.
+   `DIGITALOCEAN_ACCESS_TOKEN` in the `production` Environment.
 4. **Confirm that the Supabase project has the IPv4 add-on.**
+5. **Create both apps** in the dashboard, each from its GHCR image, with the name and region its
+   spec gives. The region is Richmond (`ric`), the nearest to the project's `us-east-1`. The
+   OpenAPI spec's region enum doesn't list `ric` yet, though the availability matrix does; if the
+   dashboard or the first deploy refuses it, fall back to `nyc`. Nothing else about the apps
+   matters, since the first deploy replaces the whole spec; until then the worker crash-loops
+   without its env. Record each app's ID in the Environment as `DO_WEB_APP_ID` and
+   `DO_WORKER_APP_ID`.
+6. **Fill in the Environment** with every `${NAME}` the specs use but `IMAGE_DIGEST`: secrets for
+   the `SECRET`s, variables for the rest. `SITE_URL` is the web app's starter domain, from step 5.
+   `SITE_PASSWORD` is a long, random value: production runs `PUBLIC_AUTH_MODE=placeholder`, so it
+   is the only thing in front of the placeholder admin.
 
-## PR 1 — the app specs
-
-- **`.do/web.yaml` and `.do/worker.yaml`**, as described in § Decisions.
-  - **Image:** `registry_type: GHCR`, `registry: greenerbydefault`, the
-    `foodservice-insights/<service>` repository, and `digest: ${IMAGE_DIGEST}`. No registry
-    credentials, since the packages are public.
-  - **Env:** every variable the process needs at startup. The lists are `assertConfigured` in
-    [`config.ts`](../../apps/web/src/lib/server/config.ts) for the web app and
-    [`modes.ts`](../../apps/worker/src/modes.ts) for the worker. `.env.example` says what each
-    variable is for.
-  - **Email:** `EMAIL_TRANSPORT=provider` until Postmark is wired up, so a send fails with an
-    `EmailError` instead of silently going nowhere.
-- **Tests.** The worker's grace against `PLATFORM_SHUTDOWN_GRACE_MS` goes in `config.test.ts`,
-  beside the relation it guards. Both apps' instance counts against `budget.ts` go in
-  `budget.test.ts`. Both tests need a YAML parser; the `yaml` package has no dependencies of its
-  own.
-- **`budget.ts`:** the comment about instance counts points at the specs.
-- **`ARCHITECTURE.md` § Worker deploys only on demand:** the trap paragraph names
-  `.do/worker.yaml` and the test, instead of saying nothing in the repo can check the relation.
-
-Nothing deploys yet; the stub still only warns.
-
-## Rehearsal, by hand
-
-Do this after PR 1 merges.
-
-Create both apps from the committed specs with `doctl apps create --spec -`, behind the same `yq`
-substitution, using `main`'s current image digests. Run the worker with `WORKER_MODE=mock-llm`
-until the first CI dispatch, so it spends nothing on OpenAI. Record each app's ID as an Environment
-variable (`DO_WEB_APP_ID`, `DO_WORKER_APP_ID`). Then check the things the docs leave open:
-
-- App Platform pulls the nested GHCR repository `foodservice-insights/web` by digest.
-- `DB_SSL_CA` arrives intact: the web app's `/health/ready` answers 200.
-- An update with a deliberately wrong secret fails, `doctl` exits nonzero, and the previous
-  deployment keeps serving.
-- An attempt that is running when the worker is redeployed either finishes or ends `shut_down`.
-  Ending `abandoned` would mean App Platform did not honor the grace.
-- How long a worker deploy takes to reach `ACTIVE`, to size `deploy-worker`'s `timeout-minutes`.
-- Whether a dashboard rollback pins the app, so that the next `doctl apps update` is refused until
-  the rollback is committed or reverted.
-
-## PR 2 — deploy from CI
+## PR 1 — deploy from CI
 
 - **`actions/deploy-service`:** replace the stub step with the `yq` and `doctl apps update --wait`
   pipeline above. Install `doctl` with `digitalocean/action-doctl`, pinned by commit SHA like every
-  other action on the deploy path. Map each service to its spec file and its app-ID variable.
-- **`deploy.yml`:** pass the Environment's secrets and variables to both deploy jobs. Raise
-  `deploy-worker`'s `timeout-minutes` above the time the rehearsal measured.
-- **`ARCHITECTURE.md` § Secrets management:** the `production` Environment is the one home of every
-  production secret, and each deploy writes them into the specs, so rotating a secret is a
-  redeploy.
-- **`ARCHITECTURE.md` § Bad deploys are fixed forward:** whether a rollback pins the app, from the
-  rehearsal. Also note that a rollback restores the old deployment's env, including any secret
-  rotated since.
+  other action on the deploy path. Map each service to its spec file and its app-ID variable. A
+  composite action can't read secrets itself, so the job passes them in as env.
+- **`deploy.yml`:** pass each spec's placeholders from the Environment's secrets and variables to
+  its deploy job. Raise both deploy jobs' `timeout-minutes` above `doctl`'s own 30-minute wait, so
+  a stuck deploy fails with `doctl`'s message rather than the runner's. A worker deploy can take
+  the old worker's full ten-minute grace before it even starts the new one.
+- **`.do/README.md`:** drop the status line. Add that rotating a secret is changing it in the
+  Environment and redeploying (for the worker, dispatching one), and how to roll back: a rollback
+  restores the old deployment's env, including any secret rotated since, and if the next deploy is
+  refused because the rollback pinned the app, commit or revert the rollback in the dashboard.
+- **`ARCHITECTURE.md` § Secrets management:** at most a clause, that the `production` Environment
+  is also where the running apps' secrets live. The mechanism stays in `.do/README.md`; the root
+  docs stay high level.
 - Delete this plan.
 
 ## Verification
 
-Run `pnpm lint && pnpm check && pnpm test` for both PRs. After PR 2 merges:
+Run `pnpm lint && pnpm check && pnpm test`. After PR 1 merges, the first deploys are where anything
+the docs left open turns up; fix forward:
 
-- The next push to `main` deploys the web app. The run is green, `deploy/web` moves, and the digest
-  DigitalOcean is running matches the one in the run's log.
+- The next push to `main` deploys the web app. The run is green, `deploy/web` moves, the digest
+  DigitalOcean is running matches the one in the run's log, and `/health/ready` on the starter
+  domain answers 200, which shows the database CA arrived intact.
 - Dispatching `deploy.yml` deploys the worker at `deploy/web`'s commit, and the web app does not
   redeploy.
 - A worker dispatch while an attempt is running ends that attempt `succeeded` or `shut_down`.
+  Ending `abandoned` would mean App Platform did not honor the grace.
 - With a secret deleted from the Environment, the deploy fails before anything is submitted.

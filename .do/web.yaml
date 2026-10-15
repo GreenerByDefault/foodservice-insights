@@ -1,0 +1,74 @@
+# The web app's App Platform spec. See README.md before changing it.
+
+name: foodservice-insights-web
+region: ric
+
+services:
+  - name: web
+    image:
+      registry_type: GHCR
+      registry: greenerbydefault
+      repository: foodservice-insights/web
+      digest: ${IMAGE_DIGEST}
+    # `budget.test.ts` holds the count to `WEB_INSTANCES`. This size can't run a second instance.
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    instance_count: 1
+    http_port: 3000
+    health_check:
+      http_path: /health/ready
+    liveness_health_check:
+      http_path: /health/live
+
+    envs:
+      - key: DB_CONNECTION_STRING
+        type: SECRET
+        value: ${DB_CONNECTION_STRING}
+      - key: DB_SSL_CA
+        value: ${DB_SSL_CA}
+
+      - key: S3_ENDPOINT
+        value: ${S3_ENDPOINT}
+      - key: S3_REGION
+        value: ${S3_REGION}
+      - key: S3_ACCESS_KEY_ID
+        type: SECRET
+        value: ${S3_ACCESS_KEY_ID}
+      - key: S3_SECRET_ACCESS_KEY
+        type: SECRET
+        value: ${S3_SECRET_ACCESS_KEY}
+      - key: S3_BUCKET
+        value: ${S3_BUCKET}
+
+      - key: PUBLIC_AUTH_MODE
+        value: placeholder
+      - key: SITE_PASSWORD
+        type: SECRET
+        value: ${SITE_PASSWORD}
+      - key: PUBLIC_SUPABASE_URL
+        value: ${PUBLIC_SUPABASE_URL}
+      - key: PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        value: ${PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+
+      - key: EMAIL_TRANSPORT
+        value: provider
+      - key: EMAIL_FROM_ADDRESS
+        value: insights@greenerbydefault.org
+      - key: EMAIL_SUPPORT_ADDRESS
+        value: insights@greenerbydefault.org
+      - key: EMAIL_GBD_ADDRESS
+        value: insights@greenerbydefault.org
+      - key: SITE_URL
+        value: ${SITE_URL}
+
+      # App Platform's proxy forwards plain HTTP. Without this, SvelteKit's CSRF check sees an
+      # `http://` origin and refuses every form post.
+      - key: PROTOCOL_HEADER
+        value: x-forwarded-proto
+
+ingress:
+  rules:
+    - component:
+        name: web
+      match:
+        path:
+          prefix: /

@@ -349,12 +349,9 @@ kills the old container outright. Two mitigations, both required:
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
-  are. An analysis attempt still running when the grace expires gets `failed('shut_down')`.
-
-**The trap: the hosting platform's own shutdown grace has to exceed the worker's drain grace, and
-that relation lives on the platform, not in this repo** — nothing here can check it. DigitalOcean's
-default grace is two minutes at most, far short of the drain; a grace that short SIGKILLs the
-worker mid-drain, which looks exactly like a worker bug.
+  are. An analysis attempt still running when the grace expires gets `failed('shut_down')`. The
+  drain is derived from the platform's own shutdown grace, which
+  [`.do/worker.yaml`](.do/worker.yaml) sets.
 
 ### Bad deploys are fixed forward
 
@@ -373,7 +370,8 @@ Web and worker run on **DigitalOcean App Platform**. It was the only candidate t
 everything this pipeline depends on: deploying a digest-pinned GHCR image from CI with a real exit
 code, a shutdown grace long enough to drain the worker, and CPU and memory alerts
 ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/hosting-provider.md)).
-We explicitly do not care about autoscaling.
+We explicitly do not care about autoscaling. Each service is its own app, configured entirely by
+its spec in [`.do/`](.do/README.md).
 
 *Rejected: Railway and Render.* Railway documents neither a digest deploy nor a long shutdown
 grace; Render caps its grace at five minutes and has no native CPU or memory alerts.
