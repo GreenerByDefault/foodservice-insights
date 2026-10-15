@@ -62,15 +62,11 @@ database.
 - **Input metadata:** uploader, name, upload time, file size — and, when the upload was an
   Excel workbook, the workbook itself alongside the CSV the browser converted it to.
 - **Result metadata:** file size and processing time.
-  - **Open:** a `result_metadata` JSON column existed for structured output from the AI library
-    (rows in, rows categorized, products uncategorized, ...) but was dropped for now — it wasn't
-    being used, and its shape depended on the not-yet-ported analysis library. See the git
-    history for `analysis_attempt`'s `result_metadata` column
-    (`packages/db/migrations/001_initial_schema.ts`) to bring it back once the shape is settled.
-  - **Open:** AI usage (model, tokens, cost) was tracked here too, but was dropped for now —
-    its shape depended on the not-yet-ported analysis library and unsettled alignment with GBD
-    on what to track. See the git history for `analysis_attempt`'s `ai_*` columns
-    (`packages/db/migrations/001_initial_schema.ts`) to bring it back once both are resolved.
+- **Analysis telemetry**, per attempt, in typed columns: AI usage (model, tokens, requests, cost
+  at list price), product and row counts through categorization, which quality checks fired,
+  the report's headline figures, and each stage's time. It is recorded on every ending the
+  analysis got far enough to report, failed, canceled and killed ones included, since the spend
+  happened either way. § Data deletion says how long it is kept.
 - Input and result files are accessible to anyone with the link. The app only shows links to
   people with access, and links are hard to guess.
   - *Rejected: presigned URLs that expire after n minutes.* They add complexity and worsen UX —

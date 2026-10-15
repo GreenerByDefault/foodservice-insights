@@ -65,7 +65,10 @@ suggested it.
 Each attempt's telemetry lands in **`analysis_attempt_telemetry`**: its input and categorization
 counts, its report's headline numbers, and its stage times. Two tables hang off it:
 **`analysis_attempt_llm_usage`**, per LLM operation and model, and
-**`analysis_attempt_quality_check`**, per check and status.
+**`analysis_attempt_quality_check`**, per check and status. The worker writes all three in one
+transaction after the verdict, from the child's `telemetry.json`
+([`apps/worker/src/attempt/telemetry.ts`](../../apps/worker/src/attempt/telemetry.ts)); nothing
+updates or deletes them.
 
 - **They carry the attempt, report and organization ids raw, with no foreign key to any of
   them.** Like `audit_event`, they outlive what they describe, so deleting an organization keeps

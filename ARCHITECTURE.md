@@ -169,7 +169,9 @@ Parent lifecycle:
 3. Spawn a child process to run `gbd_foodservice_insights`, setting up a folder with the required inputs.
 4. The child runs, writes its results into that folder, and exits.
   - Exit 0 plus a result file the parent can parse is success; exit 1 means the child wrote a failure instead; any other exit means it reached no verdict at all.
+  - Throughout, the child keeps `telemetry.json` current: its LLM usage and each finished stage's counts and time.
 5. Upload the result files to the blob store and save metadata to the database.
+  - Then, whatever the ending and whoever now owns the attempt, record the telemetry. It never changes the verdict.
 
 Whenever a child fails in any way — including being killed by its parent — the parent marks the
 analysis attempt failed. Either way, the parent does not send the email itself — a separate,
@@ -488,7 +490,7 @@ handling.
 | Web server has trouble with Supabase Storage | Timeouts and capped retries on every request; `withBlobStoreErrorHandling` logs the failure with context and returns a 503. Uploads use `async`/`await` so they do not block the server |
 | Web server has trouble with Supabase Auth | An unreachable Supabase Auth is a 503 rather than signing the user out; a session it refuses is signed out and its cookie cleared. `classifyAuthResult` (`apps/web/src/lib/server/auth/identify.ts`) |
 | Web server has trouble with Supabase | Timeouts on transactions; `withDbErrorHandling` returns 503 for a statement that never completed and 500 for one Postgres refused |
-| Worker has trouble with Supabase or Supabase Storage | An error is never treated as a verdict. Loops absorb the failure and retry by ticking; processing a claimed attempt fails it as `infrastructure`; terminal writes get a bounded retry and are then re-attempted each tick until the database recovers, with reaping as the backstop. A claim statement Postgres *refuses* makes the worker drain and exit nonzero. Reasoning in `apps/worker/src/failures.ts` |
+| Worker has trouble with Supabase or Supabase Storage | An error is never treated as a verdict. Loops absorb the failure and retry by ticking; processing a claimed attempt fails it as `infrastructure`; terminal writes get a bounded retry and are then re-attempted each tick until the database recovers, with reaping as the backstop. Records written after the verdict, such as the attempt's telemetry, get the bounded retry and are then logged and dropped. A claim statement Postgres *refuses* makes the worker drain and exit nonzero. Reasoning in `apps/worker/src/failures.ts` |
 | Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
 | Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [Progress, leases, and reaping](#progress-leases-and-reaping) |

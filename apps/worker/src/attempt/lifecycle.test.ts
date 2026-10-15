@@ -7,22 +7,29 @@
 
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import type { Logger } from '@gbd/core/log';
 import { collectingLogger } from '@gbd/core/testing';
+import type { AnalysisAttemptId } from '@gbd/db';
 import { type Breakable, breakableDatabase, readAnalysisAttemptRow } from '@gbd/db/testing';
 import { deletePrefix, getObject, putObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
+import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
-import { RESULT_FILE_NAMES, resultFilePath } from '../contract/layout.ts';
+import { RESULT_FILE_NAMES, resultFilePath, runPath } from '../contract/layout.ts';
+import type { Telemetry } from '../contract/messages.ts';
 import { WORKER_DATABASE } from '../db.ts';
 import type { AttemptFixture } from '../testing/attempt-fixture.ts';
 import { withAttemptFixture } from '../testing/attempt-fixture.ts';
 import { aWorkerId } from '../testing/attempt-helpers.ts';
 import {
+  FAKE_PARTIAL_TELEMETRY,
+  FAKE_TELEMETRY,
   type FakeChildStep,
   fakeChildCommand,
   fakeResultFileContents,
 } from '../testing/fake-child.ts';
+import { waitUntil } from '../testing/wait-until.ts';
 import { TEST_TRANSIENT_RETRY_WAITS_MS } from '../testing/worker-harness.ts';
 import {
   type AttemptDependencies,
@@ -34,6 +41,7 @@ import {
   type PreparedAttempt,
   type ReadEnding,
   readChildEnding,
+  recordTelemetry,
   recordVerdict,
   settleAttempt,
   startAttempt,
@@ -45,6 +53,7 @@ function dependencies(
   fixture: AttemptFixture,
   workerId: string,
   steps: readonly FakeChildStep[],
+  log: Logger = collectingLogger().log,
 ): AttemptDependencies {
   return {
     db: WORKER_DATABASE,
@@ -54,7 +63,7 @@ function dependencies(
     childCommand: fakeChildCommand(steps),
     killGraceMs: 2_000,
     transientRetryWaitsMs: TEST_TRANSIENT_RETRY_WAITS_MS,
-    log: collectingLogger().log,
+    log,
   };
 }
 
@@ -70,12 +79,170 @@ function fileNameFor(row: { kind: 'pdf' | 'xlsx' }): string {
   return RESULT_FILE_NAMES[row.kind];
 }
 
+/** All three telemetry tables' rows for an attempt, `telemetry` undefined when none was recorded. */
+async function readTelemetryRows(attemptId: AnalysisAttemptId) {
+  return {
+    telemetry: await WORKER_DATABASE.selectFrom('analysisAttemptTelemetry')
+      .selectAll()
+      .where('analysisAttemptId', '=', attemptId)
+      .executeTakeFirst(),
+    llmUsage: await WORKER_DATABASE.selectFrom('analysisAttemptLlmUsage')
+      .selectAll()
+      .where('analysisAttemptId', '=', attemptId)
+      .orderBy(sql`operation::text`)
+      .execute(),
+    qualityChecks: await WORKER_DATABASE.selectFrom('analysisAttemptQualityCheck')
+      .selectAll()
+      .where('analysisAttemptId', '=', attemptId)
+      .orderBy(sql`quality_check::text`)
+      .orderBy(sql`status::text`)
+      .execute(),
+  };
+}
+
+const NO_TELEMETRY_ROWS = { telemetry: undefined, llmUsage: [], qualityChecks: [] };
+
+/** What `FAKE_TELEMETRY` records under `fixture`'s attempt. */
+function fullTelemetryRows(fixture: AttemptFixture) {
+  const analysisAttemptId = fixture.attemptId;
+  return {
+    telemetry: {
+      analysisAttemptId,
+      reportId: fixture.reportId,
+      organizationId: fixture.organizationId,
+      countsBasis: 'people',
+      recordedAt: expect.any(Date),
+      inputRows: 5210,
+      inputKilograms: 48213.5,
+      inputUniqueProducts: 800,
+      categorizationCacheEntries: 12000,
+      cacheRawNameProducts: 380,
+      cacheCleanedNameProducts: 8,
+      llmMatchedProducts: 412,
+      cacheNoMatchProducts: 21,
+      llmNoMatchProducts: 37,
+      unrecognizedLlmAnswers: 2,
+      categorizedRows: 4870,
+      categorizedKilograms: 45120.25,
+      totalCo2eKg: 98123.5,
+      co2eKgPerDinerOrMeal: 2.5,
+      plantPctByWeight: 41.2,
+      plantProteinPctByWeight: null,
+      readDurationMs: 850,
+      categorizeDurationMs: 412000,
+      reportDurationMs: 3100,
+      pdfDurationMs: 5200,
+      xlsxDurationMs: 900,
+      peakMemoryKib: 412345,
+    },
+    llmUsage: [
+      {
+        analysisAttemptId,
+        operation: 'clean',
+        requestedModel: 'gpt-4.1-mini',
+        servedModel: 'gpt-4.1-mini-2025-04-14',
+        calls: 412,
+        requests: 415,
+        failedRequests: 3,
+        rateLimitedRequests: 2,
+        truncatedCalls: 0,
+        inputTokens: 432600,
+        cachedInputTokens: 380160,
+        outputTokens: 3296,
+        costMicroUsd: 64266,
+      },
+      {
+        analysisAttemptId,
+        operation: 'match',
+        requestedModel: 'gpt-4.1-mini',
+        servedModel: 'gpt-4.1-mini-2025-04-14',
+        calls: 396,
+        requests: 396,
+        failedRequests: 0,
+        rateLimitedRequests: 0,
+        truncatedCalls: 1,
+        inputTokens: 451440,
+        cachedInputTokens: 418176,
+        outputTokens: 2772,
+        costMicroUsd: 59558,
+      },
+    ],
+    qualityChecks: [
+      { analysisAttemptId, qualityCheck: 'date_distribution', status: 'success', findings: 1 },
+      {
+        analysisAttemptId,
+        qualityCheck: 'missing_internal_months',
+        status: 'success',
+        findings: 1,
+      },
+      { analysisAttemptId, qualityCheck: 'outlier_line_items', status: 'info', findings: 2 },
+      { analysisAttemptId, qualityCheck: 'outlier_line_items', status: 'warning', findings: 3 },
+      {
+        analysisAttemptId,
+        qualityCheck: 'per_product_weight_bounds',
+        status: 'error',
+        findings: 1,
+      },
+    ],
+  };
+}
+
+/** What `FAKE_PARTIAL_TELEMETRY` records: a run killed while categorizing. */
+function partialTelemetryRows(fixture: AttemptFixture) {
+  const full = fullTelemetryRows(fixture);
+  return {
+    telemetry: {
+      ...full.telemetry,
+      cacheRawNameProducts: null,
+      cacheCleanedNameProducts: null,
+      llmMatchedProducts: null,
+      cacheNoMatchProducts: null,
+      llmNoMatchProducts: null,
+      unrecognizedLlmAnswers: null,
+      categorizedRows: null,
+      categorizedKilograms: null,
+      totalCo2eKg: null,
+      co2eKgPerDinerOrMeal: null,
+      plantPctByWeight: null,
+      plantProteinPctByWeight: null,
+      categorizeDurationMs: null,
+      reportDurationMs: null,
+      pdfDurationMs: null,
+      xlsxDurationMs: null,
+      peakMemoryKib: 298112,
+    },
+    llmUsage: [
+      {
+        analysisAttemptId: fixture.attemptId,
+        operation: 'clean',
+        requestedModel: 'gpt-4.1-mini',
+        servedModel: 'gpt-4.1-mini-2025-04-14',
+        calls: 97,
+        requests: 98,
+        failedRequests: 1,
+        rateLimitedRequests: 1,
+        truncatedCalls: 0,
+        inputTokens: 101850,
+        cachedInputTokens: 89600,
+        outputTokens: 776,
+        costMicroUsd: 15102,
+      },
+    ],
+    qualityChecks: [],
+  };
+}
+
+function errorRecords(records: readonly { level: string; msg?: unknown }[]) {
+  return records.filter((record) => record.level === 'error');
+}
+
 describe('a successful attempt, end to end', () => {
-  test('uploads every declared file', async () => {
+  test('uploads every declared file and records the telemetry', async () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
       const steps: FakeChildStep[] = [
         { step: 'progress', sequence: 1 },
+        { step: 'telemetry' },
         { step: 'result' },
         { step: 'exit', code: 0 },
       ];
@@ -102,6 +269,8 @@ describe('a successful attempt, end to end', () => {
         const body = await getObject(BLOB_STORE, row.storageKey);
         expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileName));
       }
+
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
     });
   });
 });
@@ -230,6 +399,38 @@ describe('parks instead of losing the verdict', () => {
             ending,
             'record',
           );
+        });
+      } finally {
+        await breakable.close();
+      }
+    });
+
+    test('loses the telemetry, and logs it, rather than parking it beside the verdict', async () => {
+      const workerId = aWorkerId();
+      const breakable = await breakableDatabase();
+      try {
+        await withAttemptFixture(workerId, async (fixture) => {
+          const steps: FakeChildStep[] = [
+            { step: 'telemetry' },
+            { step: 'result' },
+            { step: 'exit', code: 0 },
+          ];
+          const { log, records } = collectingLogger();
+          const working = dependencies(fixture, workerId, steps, log);
+          const withBreakableDb = { ...working, db: breakable.service };
+
+          const prepared = await startAttempt(working, fixture.attemptId);
+          const ending = await readChildEnding(prepared, await prepared.child.exited);
+          breakable.break();
+          const parked = await settleAttempt(withBreakableDb, prepared, ending);
+          breakable.restore();
+
+          expect(parked).toMatchObject({ kind: 'parked', pending: { stage: 'record' } });
+          expect(await readTelemetryRows(fixture.attemptId)).toEqual(NO_TELEMETRY_ROWS);
+          expect(errorRecords(records).map((record) => record.msg)).toEqual([
+            'Could not record the verdict; parking it for the next direct tick to retry',
+            'Could not record the telemetry; dropping it',
+          ]);
         });
       } finally {
         await breakable.close();
@@ -544,10 +745,11 @@ describe('kills', () => {
     'contract-violation': { status: 'failed', failureReason: 'contract_violation' },
   };
 
-  test.each(KILLS)('$reason produces its verdict', async (kill) => {
+  test.each(KILLS)('$reason produces its verdict and records the telemetry', async (kill) => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
       const steps: FakeChildStep[] = [
+        { step: 'telemetry', document: FAKE_PARTIAL_TELEMETRY },
         { step: 'waitFor', sentinel: 'go' },
         { step: 'exit', code: 0 },
       ];
@@ -555,6 +757,10 @@ describe('kills', () => {
       const prepared = await startAttempt(
         dependencies(fixture, workerId, steps),
         fixture.attemptId,
+      );
+      await waitUntil(
+        () => existsSync(runPath(prepared.runDirectory, 'telemetry')),
+        'the child wrote telemetry.json',
       );
       // `analysis_attempt_canceled_requires_request` needs a request behind the verdict this
       // kill is about to produce. In the real flow, `cancelRequestedAt` non-null is exactly
@@ -581,6 +787,7 @@ describe('kills', () => {
         expected,
       );
       expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual(partialTelemetryRows(fixture));
     });
   });
 });
@@ -589,7 +796,11 @@ describe('losing the race to record a verdict', () => {
   test('a writer that finished the attempt first leaves settleAttempt lost, not recorded', async () => {
     const workerId = aWorkerId();
     await withAttemptFixture(workerId, async (fixture) => {
-      const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
+      const steps: FakeChildStep[] = [
+        { step: 'telemetry' },
+        { step: 'result' },
+        { step: 'exit', code: 0 },
+      ];
 
       const prepared = await startAttempt(
         dependencies(fixture, workerId, steps),
@@ -620,7 +831,196 @@ describe('losing the race to record a verdict', () => {
       // The guarded insert never ran, so no result_file rows exist even though the objects were
       // already uploaded.
       expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+      // The verdict is not ours, but what the child spent is.
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
     });
+  });
+});
+
+describe('telemetry on other endings', () => {
+  async function runAndSettle(
+    fixture: AttemptFixture,
+    workerId: string,
+    steps: readonly FakeChildStep[],
+  ) {
+    const { log, records } = collectingLogger();
+    const attemptDependencies = dependencies(fixture, workerId, steps, log);
+    const prepared = await startAttempt(attemptDependencies, fixture.attemptId);
+    const ending = await readChildEnding(prepared, await prepared.child.exited);
+    const settled = await settleAttempt(attemptDependencies, prepared, ending);
+    return { settled, records };
+  }
+
+  test('unusable data records the counts that failed it', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const failedInReport: Telemetry = {
+        ...FAKE_TELEMETRY,
+        report: null,
+        stageDurationMs: { read: 850, categorize: 412000 },
+      };
+      const steps: FakeChildStep[] = [
+        { step: 'telemetry', document: failedInReport },
+        { step: 'failure', reason: 'unusable_data', detail: 'Too few products were categorized' },
+        { step: 'exit', code: 1 },
+      ];
+
+      const { settled } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).toMatchObject({
+        status: 'failed',
+        failureReason: 'unusable_data',
+      });
+      const full = fullTelemetryRows(fixture);
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual({
+        telemetry: {
+          ...full.telemetry,
+          totalCo2eKg: null,
+          co2eKgPerDinerOrMeal: null,
+          plantPctByWeight: null,
+          plantProteinPctByWeight: null,
+          reportDurationMs: null,
+          pdfDurationMs: null,
+          xlsxDurationMs: null,
+        },
+        llmUsage: full.llmUsage,
+        qualityChecks: [],
+      });
+    });
+  });
+
+  test('an organization deleted while its attempt ran still gets its rows', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'telemetry' },
+        { step: 'result' },
+        { step: 'exit', code: 0 },
+      ];
+      const attemptDependencies = dependencies(fixture, workerId, steps);
+      const prepared = await startAttempt(attemptDependencies, fixture.attemptId);
+      const ending = await readChildEnding(prepared, await prepared.child.exited);
+
+      await WORKER_DATABASE.deleteFrom('organization')
+        .where('id', '=', fixture.organizationId)
+        .execute();
+      const settled = await settleAttempt(attemptDependencies, prepared, ending);
+
+      // The attempt went with its organization, so the verdict had nothing left to land on.
+      expect(settled).toEqual({ kind: 'lost' });
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
+    });
+  });
+
+  test('no telemetry.json records nothing and logs nothing', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
+
+      const { settled, records } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual(NO_TELEMETRY_ROWS);
+      expect(errorRecords(records)).toEqual([]);
+    });
+  });
+
+  test('a malformed telemetry.json leaves the verdict alone and logs one error', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const steps: FakeChildStep[] = [
+        { step: 'writeRaw', entry: 'telemetry', contents: 'not json' },
+        { step: 'result' },
+        { step: 'exit', code: 0 },
+      ];
+
+      const { settled, records } = await runAndSettle(fixture, workerId, steps);
+
+      expect(settled).toEqual({ kind: 'recorded' });
+      expect((await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).status).toBe(
+        'succeeded',
+      );
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual(NO_TELEMETRY_ROWS);
+      expect(errorRecords(records)).toEqual([
+        {
+          level: 'error',
+          msg: 'Could not read telemetry.json; recording no telemetry',
+          attemptId: fixture.attemptId,
+          reportId: fixture.reportId,
+          err: expect.objectContaining({ type: 'ContractError' }),
+        },
+      ]);
+    });
+  });
+});
+
+describe('recordTelemetry', () => {
+  test('recording twice leaves one set of rows', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const attemptDependencies = dependencies(fixture, workerId, []);
+      const attempt = { ...fixture, countsBasis: 'people' as const, log: attemptDependencies.log };
+
+      await recordTelemetry(attemptDependencies, attempt, FAKE_TELEMETRY);
+      await recordTelemetry(attemptDependencies, attempt, FAKE_PARTIAL_TELEMETRY);
+
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
+    });
+  });
+
+  test('a run with no LLM calls and no findings records the telemetry row alone', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const attemptDependencies = dependencies(fixture, workerId, []);
+      const report = FAKE_TELEMETRY.report;
+      if (report === null) throw new Error('FAKE_TELEMETRY should have a report');
+
+      await recordTelemetry(
+        attemptDependencies,
+        { ...fixture, countsBasis: 'people', log: attemptDependencies.log },
+        { ...FAKE_TELEMETRY, llmUsage: [], report: { ...report, findingCounts: [] } },
+      );
+
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual({
+        telemetry: fullTelemetryRows(fixture).telemetry,
+        llmUsage: [],
+        qualityChecks: [],
+      });
+    });
+  });
+
+  test('a database it cannot reach costs the rows, logged, and never throws', async () => {
+    const workerId = aWorkerId();
+    const breakable = await breakableDatabase();
+    try {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const { log, records } = collectingLogger();
+        const attemptDependencies = {
+          ...dependencies(fixture, workerId, [], log),
+          db: breakable.service,
+        };
+        breakable.break();
+
+        await recordTelemetry(
+          attemptDependencies,
+          { ...fixture, countsBasis: 'people', log },
+          FAKE_TELEMETRY,
+        );
+
+        breakable.restore();
+        expect(await readTelemetryRows(fixture.attemptId)).toEqual(NO_TELEMETRY_ROWS);
+        expect(errorRecords(records)).toEqual([
+          {
+            level: 'error',
+            msg: 'Could not record the telemetry; dropping it',
+            err: expect.anything(),
+          },
+        ]);
+      });
+    } finally {
+      await breakable.close();
+    }
   });
 });
 

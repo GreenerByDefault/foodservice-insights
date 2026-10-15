@@ -13,10 +13,11 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { rename, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { findRepoRoot } from '@gbd/core/env';
 import type { ChildCommand } from '../child/spawn.ts';
 import {
   RESULT_FILE_NAMES,
@@ -24,6 +25,7 @@ import {
   resultFilePath,
   runPath,
 } from '../contract/layout.ts';
+import { parseTelemetry, type Telemetry } from '../contract/messages.ts';
 
 export type FakeChildStep =
   | { step: 'progress'; sequence: number }
@@ -33,6 +35,8 @@ export type FakeChildStep =
       withoutFiles?: readonly string[];
     }
   | { step: 'failure'; reason: string; detail: string; traceback?: string | null }
+  /** Write `telemetry.json`, `FAKE_TELEMETRY` unless given another. */
+  | { step: 'telemetry'; document?: Telemetry }
   /** Write bytes of your choosing over one of the contract's documents. */
   | { step: 'writeRaw'; entry: RunDirectoryEntry; contents: string }
   | { step: 'dumpArgv' }
@@ -62,6 +66,17 @@ export const FAKE_CHILD_FILES = {
   environment: 'environment.json',
   grandchildPid: 'grandchild.pid',
 } as const;
+
+function goldenTelemetry(name: string): Telemetry {
+  const path = join(findRepoRoot(import.meta.dirname), 'contract', 'fixtures', 'valid', name);
+  return parseTelemetry(readFileSync(path, 'utf8'));
+}
+
+/** A whole run's telemetry: `contract/fixtures/valid/telemetry.json`. */
+export const FAKE_TELEMETRY: Telemetry = goldenTelemetry('telemetry.json');
+
+/** A run killed while categorizing: one usage row, the input, and the read stage's time. */
+export const FAKE_PARTIAL_TELEMETRY: Telemetry = goldenTelemetry('telemetry.partial.json');
 
 const SENTINEL_POLL_INTERVAL_MS = 5;
 
@@ -141,6 +156,12 @@ async function runStep(
           detail: step.detail,
           traceback: step.traceback ?? null,
         }),
+      );
+
+    case 'telemetry':
+      return await writeAtomically(
+        runPath(runDirectory, 'telemetry'),
+        JSON.stringify(step.document ?? FAKE_TELEMETRY),
       );
 
     case 'writeRaw':

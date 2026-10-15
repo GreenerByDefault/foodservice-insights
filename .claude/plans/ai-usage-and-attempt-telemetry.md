@@ -92,8 +92,9 @@ landed) that shape the design:
   below named and tested in `packages/db/tests/attempt-telemetry.test.ts`. One more than this
   plan named: kilograms and CO2e are non-negative, since `input_csv.py` refuses a negative
   weight, so the contract fixtures mirror that too. `public-schema.sql`
-  is the shape to write against, not this plan. The quality table's key column is `check`, a
-  reserved word, so hand-written SQL quotes it or qualifies it (`q.check`). Fixtures:
+  is the shape to write against, not this plan. The quality table's key column is
+  `quality_check`, and its enum columns sort by declaration order, so a test that wants
+  alphabetical order casts them (`quality_check::text`). Fixtures:
   `insertAttemptTelemetry` (every group set, fresh ids, nothing else needed),
   `insertAttemptLlmUsage` and `insertAttemptQualityCheck` in `@gbd/db/testing`.
   `REQUIREMENTS.md` § Data deletion already says what the telemetry holds and that it outlives
@@ -102,7 +103,7 @@ landed) that shape the design:
   The test stack prints floats with `extra_float_digits = 0`, so a `double precision` read back
   through Kysely is rounded to 15 digits. A `toEqual` on a written row needs values that survive
   that, such as the fixtures' `2500.5`.
-- **The child writes `output/telemetry.json`, and the parent ignores it.** Both halves of the
+- **The child writes `output/telemetry.json`, and the parent records it.** Both halves of the
   contract are in place:
   - `contract.json` names the path (`runDirectory.telemetry`) and the four vocabularies
     (`telemetryEnums`: `llmOperation`, `stage`, `qualityCheck`, `diagnosticStatus`), which
@@ -129,6 +130,20 @@ landed) that shape the design:
   - `mock-llm` writes every section and an empty `llmUsage`.
 
   The writer sorts keys, so `stageDurationMs` arrives in alphabetical order; its order means nothing.
+
+  The parent's half, in `apps/worker`:
+  - `readChildEnding` reads the document before its `exited` check, into `ReadEnding.telemetry`.
+    A missing one is `undefined` and silent; a malformed one is one `error` log and `undefined`.
+  - `settleAttempt` awaits `recordTelemetry(dependencies, attempt, telemetry)` after the verdict
+    or the `unowned` return, before removing the run directory. It takes any
+    `AttemptLog & TelemetryIdentity`, so it needs no child, and it never throws.
+  - `attempt/telemetry.ts`'s `insertTelemetry(db, identity, telemetry)` writes the three tables
+    in one transaction, `ON CONFLICT DO NOTHING` on the telemetry row. `PreparedAttempt` carries
+    `countsBasis` for it.
+  - The fake child has a `{ step: 'telemetry', document? }` step, and exports `FAKE_TELEMETRY`
+    and `FAKE_PARTIAL_TELEMETRY`, the two valid golden fixtures.
+  - `withCommittedFixture`'s teardown deletes its organizations' telemetry by `organization_id`,
+    since no FK cascades to it.
 
   The lab keeps its own `MergeCounts.between` and `match_type` `value_counts` for the runscript's
   summary, which also subtracts the non-entree rows.
@@ -354,8 +369,8 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   cost the same for `telemetry_reporter` and `progress_reporter`: about 0.17 ms p50, 1.5 ms p99
   and 0.5 ms mean each, so about 1 ms a call, against a call of hundreds of milliseconds. That was
   on macOS under a load average of 11, not in the worker image, and with no live before-and-after.
-  macOS `fsync` does not flush to the platter the way Linux's does, so the live check after PR 1
-  is the real number. If the two writes ever cost more than about 2% of a median call, drop
+  macOS `fsync` does not flush to the platter the way Linux's does, so the live check under
+  § Verification is the real number. If the two writes ever cost more than about 2% of a median call, drop
   fsync for both documents (the rename is what protects the reader), or limit telemetry to one
   write a second plus a final one.
 
@@ -367,8 +382,8 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   - if it still fails, it is logged at `error` and dropped;
   - it never changes the verdict.
 
-  That is `caches-to-supabase.md`'s harvest rule too, and `failures.ts`'s `one-retry-layer`
-  gains it.
+  That is `caches-to-supabase.md`'s harvest rule too, and `failures.ts`'s `one-retry-layer` and
+  `fencing` say so.
 - **`settleAttempt` records the telemetry after `deliverVerdict` or the `unowned` early return,
   and before its `finally` removes the run directory.**
   - The three tables are written in one transaction. A malformed document writes none of them,
@@ -390,53 +405,13 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   *Rejected: carrying it through a parked verdict.* That is state kept alive for a metric.
 - **No `WORKER_CONTRACT_VERSION` bump.** The parent and child ship in one image, and every
   change is additive.
+- **Go-live: `003_attempt_telemetry` must reach production before a worker deploy that records
+  telemetry**, by hand unless `deploy.yml` has already migrated it. If someone forgets, every
+  settle logs `42P01` and loses that telemetry, but verdicts are untouched.
 
-## PR 1 — the parent records telemetry on every ending
+## PR 1 — the build's SHA on every attempt
 
-`apps/worker`. This is the first PR that writes telemetry in production.
-
-- `child/run-directory.ts`: `readTelemetry`.
-- `attempt/lifecycle.ts`:
-  - `ReadEnding` gains `telemetry: Telemetry | undefined`, read before the `exited` check. A read
-    or parse error is one `error` log and `undefined`.
-  - An exported `recordTelemetry(dependencies, prepared, telemetry)` writes the three tables in
-    one transaction through `dependencies.db`, under the retry, with `ON CONFLICT DO NOTHING`.
-    The identity comes from `prepared`'s `attemptId`, `reportId`, `organizationId` and
-    `countsBasis`. `PreparedAttempt` gains `countsBasis`, which the claim already selects into
-    its report details. It never throws.
-  - `settleAttempt` awaits it after the verdict.
-- `testing/fake-child.ts`: a `{ step: 'telemetry', document? }` step and an exported
-  `FAKE_TELEMETRY`, which can be `valid/telemetry.json`'s contents. `writeRaw` already accepts
-  the `telemetry` entry, so it covers malformed documents.
-- `failures.ts`: `one-retry-layer` gains this write. Under `fencing`, add that a fenced parent
-  may still record what the child observed, because that touches no owned state.
-- `lifecycle.test.ts`:
-  - the end-to-end success asserts all three tables with `toEqual`;
-  - the kills `test.each` scripts a partial document, such as `valid/telemetry.partial.json`,
-    before `waitFor` and asserts the partial row for every kill reason, `fenced` and `lost` included;
-  - the lost race and an exit-1 `unusable_data` failure assert their rows;
-  - an organization deleted while its attempt runs still gets its rows;
-  - no document gives no rows and no log;
-  - a malformed one leaves the verdict unchanged, with exactly one `error` record and no rows;
-  - the database-down park loses the telemetry and logs it.
-
-  `recordTelemetry` is also tested directly: a broken database resolves and logs, and calling it
-  twice leaves one set of rows.
-- `tests/e2e/specs/report-lifecycle.e2e.ts`: on `mock-llm`, the attempt has a telemetry row with
-  every group set and no usage rows.
-- Docs:
-  - `ARCHITECTURE.md` § Worker, steps 4–5: the child keeps `telemetry.json` current, and the
-    parent records it after the verdict whatever the ending. § Failure modes, the Supabase row:
-    post-verdict records get the bounded retry, then are dropped.
-  - `REQUIREMENTS.md` § Persistence: both **Open**s become statements.
-  - `packages/db/README.md`: who writes the tables.
-- Go-live: hand-run `003_attempt_telemetry` against production before dispatching a worker deploy
-  that contains this PR, unless `deploy.yml` has already migrated it. If someone forgets, every settle logs `42P01` and loses that telemetry, but
-  verdicts are untouched.
-
-## PR 2 — the build's SHA on every attempt
-
-Independent of PR 1. This touches CI and the image, which is this task.
+This touches CI and the image, which is this task.
 
 - `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
   images get it; the web's Dockerfile ignores it.
@@ -454,7 +429,7 @@ Independent of PR 1. This touches CI and the image, which is this task.
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
   commit.
 
-## PR 3 — the views and panels
+## PR 2 — the views and panels
 
 This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 
@@ -501,10 +476,10 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - and, on an impact dashboard, CO2e analyzed and plant share per month.
 - `metrics-dashboards.md` loses AI cost from its Out of scope.
 - This PR deletes this plan. If the metrics plan has not reached its PR 1 by then, end this plan
-  at PR 2. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
+  at PR 1. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: PR 1 and PR 2 in either order, then PR 3.
+Order: PR 1, then PR 2.
 
 ## Failure paths
 
@@ -529,27 +504,29 @@ Order: PR 1 and PR 2 in either order, then PR 3.
 Each PR runs its stack's gate:
 
 - Python: `just lint && just check && just test`.
-- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PR 1.
+- TypeScript: `pnpm lint && pnpm check && pnpm test`.
 
 Then by hand, against the dev stack:
 
-- After PR 1, on `stubbed`:
+Still owed for the parent's recording, which is on `main`:
+
+- On `stubbed`:
   - An upload leaves `STUB_TELEMETRY`'s rows in all three tables.
   - A `!slow` upload canceled from the waiting page leaves the same rows on a `canceled`
     attempt.
-- After PR 1, on `mock-llm`:
+- On `mock-llm`:
   - An upload leaves a full telemetry row, quality rows, and no usage.
   - Deleting that organization from the app leaves the telemetry and quality rows, with ids
     that no longer join.
   - An upload that is mostly unknown products fails `unusable_data`, with a categorized share
     under 20%.
-- After PR 1, on `live`, with a small real file:
+- On `live`, with a small real file:
   - Usage rows land for both operations, at about 1k input tokens per call.
   - `cost_micro_usd` matches the tokens times the list price, worked by hand.
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
   - `map_concurrently`'s "Categorization: N calls in X s" on a mid-size file is within about 2%
     of a run from before the telemetry writes, per the fsync decision above.
-- After PR 2's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
-- After PR 3: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
+- After PR 1's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
+- After PR 2: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.

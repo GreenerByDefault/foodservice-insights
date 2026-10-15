@@ -33,7 +33,9 @@
  * - **one-retry-layer.** Every path retries in exactly one place, and this file is that place only
  *   where nothing else already is: loading a claimed attempt's inputs, and the `markAttempt*`
  *   writes. Those two are unrepeatable — they carry up to ~20 minutes of child work and real AI
- *   spend that a single dropped connection would otherwise throw away. Everywhere else the layer
+ *   spend that a single dropped connection would otherwise throw away. A record written *after*
+ *   the verdict, such as the attempt's telemetry, gets the same retry and is then logged and
+ *   dropped: it never parks, and never changes the verdict. Everywhere else the layer
  *   already exists: the loops retry by ticking, and every blob store request retries inside the
  *   SDK (`MAX_ATTEMPTS` in `packages/storage/src/client.ts`). *Rejected: a second layer on top of
  *   the blob calls — it multiplies the worst-case latency and covers nothing new.*
@@ -50,7 +52,8 @@
  *   from opposite sides — the write fails ⇒ still run the checks; the checks cannot be run ⇒ skip
  *   the write — and without it a
  *   parent burns AI quota for up to `killAfterTotalRuntimeMs` only to have its finished,
- *   fully-paid-for result discarded by a zero-row update.
+ *   fully-paid-for result discarded by a zero-row update. A fenced parent still records what its
+ *   child observed — the telemetry — because that insert touches no state another worker owns.
  */
 
 import type { Logger } from '@gbd/core/log';

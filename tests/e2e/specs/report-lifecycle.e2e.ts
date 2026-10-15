@@ -7,7 +7,8 @@
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
-import { test } from '@gbd/browser-testing/fixtures';
+import { type SharedWorkerFixtures, test } from '@gbd/browser-testing/fixtures';
+import type { ReportId } from '@gbd/db';
 import { readMailbox } from '@gbd/email/testing';
 import { expect, type Page } from '@playwright/test';
 
@@ -50,6 +51,7 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
   page,
   user,
   org,
+  db,
 }) => {
   const reportName = 'Q1 procurement';
   await uploadReport(page, org.slug, reportName, RECOGNIZED_CSV);
@@ -65,6 +67,19 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
   expect(pdf.ok()).toBe(true);
   expect((await pdf.body()).subarray(0, 4).toString()).toBe('%PDF');
 
+  // The child's `telemetry.json`, recorded by the parent just after the verdict. `mock-llm` passes
+  // its own LLM client, so every stage reports and no call does.
+  const reportId = new URL(page.url()).pathname.split('/').at(-1) as ReportId;
+  await expect
+    .poll(async () => await telemetrySummary(db, reportId), { timeout: LIFECYCLE_TIMEOUT_MS })
+    .toEqual({
+      inputRows: 1,
+      categorizedRows: 1,
+      hasReportFigures: true,
+      xlsxDurationRecorded: true,
+      llmUsageRows: 0,
+    });
+
   // The run's identity is pointed at a mailbox no other run sends to (`scripts/test-run.ts`), but
   // both tests here share it — so match on the subject rather than taking whatever arrives first.
   await expect
@@ -73,6 +88,28 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
     })
     .toContain(`Your report is ready: ${reportName}`);
 });
+
+async function telemetrySummary(db: SharedWorkerFixtures['db'], reportId: ReportId) {
+  const row = await db
+    .selectFrom('analysisAttemptTelemetry')
+    .selectAll()
+    .where('reportId', '=', reportId)
+    .executeTakeFirst();
+  if (row === undefined) return undefined;
+  const usage = await db
+    .selectFrom('analysisAttemptLlmUsage')
+    .select('operation')
+    .where('analysisAttemptId', '=', row.analysisAttemptId)
+    .execute();
+  return {
+    inputRows: row.inputRows,
+    categorizedRows: row.categorizedRows,
+    hasReportFigures: row.totalCo2eKg !== null,
+    // The last stage, which the database only accepts once every earlier one is set.
+    xlsxDurationRecorded: row.xlsxDurationMs !== null,
+    llmUsageRows: usage.length,
+  };
+}
 
 test('a failure the child declares reaches the report page with its own copy', async ({
   page,

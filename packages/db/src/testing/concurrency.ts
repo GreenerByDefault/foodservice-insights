@@ -247,7 +247,8 @@ function sleep(milliseconds: number): Promise<void> {
  *
  * Only the roots: deleting an organization cascades to its members, invites, reports, and
  * everything hanging off those. `audit_event` has no foreign keys by design, so a test that writes
- * audit rows has to delete them itself.
+ * audit rows has to delete them itself. The attempt telemetry has none either, and teardown deletes
+ * it by `organization_id`, since every worker test that settles an attempt writes some.
  */
 export interface Trash {
   organization(id: OrganizationId): void;
@@ -290,6 +291,10 @@ export async function withCommittedFixture<F, T>(
     await database.transaction().execute(async (transaction) => {
       if (organizationIds.length > 0) {
         await transaction.deleteFrom('organization').where('id', 'in', organizationIds).execute();
+        await transaction
+          .deleteFrom('analysisAttemptTelemetry')
+          .where('organizationId', 'in', organizationIds)
+          .execute();
       }
       if (userIds.length > 0) {
         await transaction.deleteFrom('auth.users').where('id', 'in', userIds).execute();
