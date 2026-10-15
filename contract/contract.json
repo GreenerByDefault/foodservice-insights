@@ -12,6 +12,7 @@
     "progress": "output/progress.json",
     "result": "output/result.json",
     "failure": "output/failure.json",
+    "telemetry": "output/telemetry.json",
     "resultFilesDirectory": "output/files",
     "workDirectory": "work",
     "directoriesCreatedByParent": ["input", "output", "output/files", "work"]
@@ -27,6 +28,19 @@
   "reportEnums": {
     "countsBasis": ["people", "meals"],
     "unitSystem": ["lb", "kg"]
+  },
+  "telemetryEnums": {
+    "llmOperation": ["clean", "match"],
+    "stage": ["read", "categorize", "report", "pdf", "xlsx"],
+    "qualityCheck": [
+      "outlier_line_items",
+      "per_product_weight_bounds",
+      "month_over_month_total_volatility",
+      "diner_meal_count_reasonableness",
+      "missing_internal_months",
+      "date_distribution"
+    ],
+    "diagnosticStatus": ["success", "info", "warning", "error"]
   },
   "exitCodes": {
     "wroteResult": 0,

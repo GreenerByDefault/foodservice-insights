@@ -57,8 +57,9 @@ from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataErr
 from gbd_foodservice_insights.errors import UpstreamApiError as UpstreamApiError
 from gbd_foodservice_insights.input_csv import read_input_csv
 from gbd_foodservice_insights.report.excel import write_client_workbook
+from gbd_foodservice_insights.report.food_report import FindingCount as FindingCount
+from gbd_foodservice_insights.report.food_report import ReportSummary as ReportSummary
 from gbd_foodservice_insights.report.food_report import (
-    ReportSummary,
     build_food_report,
     build_report_charts,
     summarize_report,

@@ -3,7 +3,7 @@
  * ```
  * <runRoot>/{analysis_attempt_id}
  *     /input          run.json, input.csv
- *     /output         progress.json, result.json, failure.json
+ *     /output         progress.json, result.json, failure.json, telemetry.json
  *         /files      report.pdf, report.xlsx
  *     /work           child scratch
  * ```
@@ -15,6 +15,11 @@
  *
  * `work/` is the child's working directory, so a stray relative write — from the library or
  * anything it spawns — lands in scratch rather than among the results.
+ *
+ * `telemetry.json` is the one document not tied to an exit code. The child rewrites it as each LLM
+ * call and stage finishes, so a run that fails, is killed, or is never ours to settle still says
+ * what it spent and how far it got. The parent reads it on every ending, and it never decides a
+ * verdict: a missing one means the child never got far enough to write it.
  */
 
 import { join } from 'node:path';
@@ -26,6 +31,7 @@ export const RUN_DIRECTORY = {
   progress: 'output/progress.json',
   result: 'output/result.json',
   failure: 'output/failure.json',
+  telemetry: 'output/telemetry.json',
   resultFilesDirectory: 'output/files',
   workDirectory: 'work',
 } as const;

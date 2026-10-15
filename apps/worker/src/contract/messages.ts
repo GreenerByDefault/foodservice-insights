@@ -1,11 +1,19 @@
 /** The parent's half of parsing and validating the documents `contract/` defines: the manifest it
- * writes for the child, and the progress/result/failure documents it reads back. A document that
+ * writes for the child, and the progress/result/failure/telemetry documents it reads back. A document that
  * fails to parse or fails its schema throws `ContractError`.
  */
 
 import type { AnalysisAttemptId, CountsBasis, UnitSystem } from '@gbd/db';
 import * as v from 'valibot';
-import { CHILD_FAILURE_REASONS, COUNTS_BASES, UNIT_SYSTEMS } from './names.ts';
+import {
+  CHILD_FAILURE_REASONS,
+  COUNTS_BASES,
+  DIAGNOSTIC_STATUSES,
+  LLM_OPERATIONS,
+  QUALITY_CHECKS,
+  STAGES,
+  UNIT_SYSTEMS,
+} from './names.ts';
 
 export class ContractError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -49,10 +57,147 @@ const ChildFailureSchema = v.strictObject({
   traceback: v.nullable(nonEmptyString),
 });
 
+// Every telemetry CHECK on `analysis_attempt_telemetry`, `analysis_attempt_llm_usage` and
+// `analysis_attempt_quality_check` has a rule here, so a document that parses always inserts.
+const MAX_POSTGRES_INTEGER = 2_147_483_647;
+// A model id as OpenAI spells one, such as `gpt-4.1-mini-2025-04-14`.
+const MODEL_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,99}$/;
+
+const count = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_POSTGRES_INTEGER));
+const quantity = v.pipe(v.number(), v.finite(), v.minValue(0));
+const percentage = v.pipe(v.number(), v.minValue(0), v.maxValue(100));
+const modelId = v.pipe(v.string(), v.regex(MODEL_PATTERN));
+
+const LlmUsageSchema = v.pipe(
+  v.strictObject({
+    operation: v.picklist(LLM_OPERATIONS),
+    requestedModel: modelId,
+    servedModel: v.nullable(modelId),
+    calls: v.pipe(count, v.minValue(1)),
+    requests: count,
+    failedRequests: count,
+    rateLimitedRequests: count,
+    truncatedCalls: count,
+    inputTokens: count,
+    cachedInputTokens: count,
+    outputTokens: count,
+    costMicroUsd: count,
+  }),
+  v.check(
+    (row) => row.requests >= row.failedRequests && row.failedRequests >= row.rateLimitedRequests,
+    'needs requests >= failedRequests >= rateLimitedRequests',
+  ),
+  // Only a call's last request can succeed.
+  v.check(
+    (row) => row.requests - row.failedRequests <= row.calls,
+    'needs at most one successful request per call',
+  ),
+  v.check((row) => row.truncatedCalls <= row.calls, 'needs truncatedCalls <= calls'),
+  v.check(
+    (row) => row.cachedInputTokens <= row.inputTokens,
+    'needs cachedInputTokens <= inputTokens',
+  ),
+);
+
+const InputSummarySchema = v.strictObject({
+  rows: count,
+  kilograms: quantity,
+  uniqueProducts: count,
+  categorizationCacheEntries: count,
+});
+
+const CategorizationSummarySchema = v.strictObject({
+  cacheRawNameProducts: count,
+  cacheCleanedNameProducts: count,
+  llmMatchedProducts: count,
+  cacheNoMatchProducts: count,
+  llmNoMatchProducts: count,
+  unrecognizedLlmAnswers: count,
+  categorizedRows: count,
+  categorizedKilograms: quantity,
+});
+
+const ReportSummarySchema = v.pipe(
+  v.strictObject({
+    totalCo2eKg: quantity,
+    co2eKgPerDinerOrMeal: quantity,
+    plantPctByWeight: percentage,
+    plantProteinPctByWeight: v.nullable(percentage),
+    findingCounts: v.array(
+      v.strictObject({
+        qualityCheck: v.picklist(QUALITY_CHECKS),
+        status: v.picklist(DIAGNOSTIC_STATUSES),
+        findings: v.pipe(count, v.minValue(1)),
+      }),
+    ),
+  }),
+  v.check(
+    (report) =>
+      isUnique(report.findingCounts.map(({ qualityCheck, status }) => `${qualityCheck}/${status}`)),
+    'needs each quality check and status at most once',
+  ),
+);
+
+const StageMsSchema = v.pipe(
+  v.strictObject({
+    read: v.optional(count),
+    categorize: v.optional(count),
+    report: v.optional(count),
+    pdf: v.optional(count),
+    xlsx: v.optional(count),
+  }),
+  v.check((stageDurationMs) => {
+    const finished = STAGES.filter((stage) => stageDurationMs[stage] !== undefined);
+    return finished.every((stage, index) => stage === STAGES[index]);
+  }, 'needs the stages finished so far, in the order they run'),
+);
+
+const TelemetrySchema = v.pipe(
+  v.strictObject({
+    llmUsage: v.pipe(
+      v.array(LlmUsageSchema),
+      v.check(
+        (rows) =>
+          isUnique(rows.map(({ operation, requestedModel }) => `${operation}/${requestedModel}`)),
+        'needs each operation and requested model at most once',
+      ),
+    ),
+    input: v.nullable(InputSummarySchema),
+    categorization: v.nullable(CategorizationSummarySchema),
+    report: v.nullable(ReportSummarySchema),
+    stageDurationMs: StageMsSchema,
+    peakMemoryKib: v.pipe(count, v.minValue(1)),
+  }),
+  v.check(
+    (telemetry) => telemetry.categorization === null || telemetry.input !== null,
+    'needs input before categorization',
+  ),
+  v.check(
+    (telemetry) => telemetry.report === null || telemetry.categorization !== null,
+    'needs categorization before report',
+  ),
+  v.check(
+    ({ input, categorization }) =>
+      input === null ||
+      categorization === null ||
+      (categorization.cacheRawNameProducts +
+        categorization.cacheCleanedNameProducts +
+        categorization.llmMatchedProducts ===
+        input.uniqueProducts &&
+        categorization.categorizedRows <= input.rows),
+    'needs the match types to sum to input.uniqueProducts, and categorizedRows <= input.rows',
+  ),
+);
+
+function isUnique(keys: readonly string[]): boolean {
+  return new Set(keys).size === keys.length;
+}
+
 export type RunManifest = v.InferOutput<typeof RunManifestSchema>;
 export type Progress = v.InferOutput<typeof ProgressSchema>;
 export type ChildResult = v.InferOutput<typeof ChildResultSchema>;
 export type ChildFailure = v.InferOutput<typeof ChildFailureSchema>;
+export type Telemetry = v.InferOutput<typeof TelemetrySchema>;
 
 // `monthlyCounts` is `unknown` because Kysely hands back a `jsonb` column untyped.
 export type RunManifestInput = {
@@ -87,6 +232,10 @@ export function parseResult(text: string): ChildResult {
 
 export function parseFailure(text: string): ChildFailure {
   return parseDocument(ChildFailureSchema, 'failure.json', text);
+}
+
+export function parseTelemetry(text: string): Telemetry {
+  return parseDocument(TelemetrySchema, 'telemetry.json', text);
 }
 
 function parseDocument<TSchema extends v.GenericSchema>(

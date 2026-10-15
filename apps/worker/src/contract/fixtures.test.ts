@@ -12,6 +12,7 @@ import {
   parseProgress,
   parseResult,
   parseRunManifest,
+  parseTelemetry,
   type RunManifestInput,
 } from './messages.ts';
 
@@ -22,6 +23,7 @@ const PARSERS = {
   progress: parseProgress,
   result: parseResult,
   failure: parseFailure,
+  telemetry: parseTelemetry,
 } as const;
 
 type DocumentName = keyof typeof PARSERS;
@@ -54,7 +56,14 @@ describe('the fixture set itself', () => {
   });
 
   test('covers every document, so a moved directory cannot pass vacuously', () => {
-    expect(VALID.sort()).toEqual(['failure.json', 'progress.json', 'result.json', 'run.json']);
+    expect(VALID.sort()).toEqual([
+      'failure.json',
+      'progress.json',
+      'result.json',
+      'run.json',
+      'telemetry.json',
+      'telemetry.partial.json',
+    ]);
 
     const documentsWithAnInvalidCase = new Set(INVALID.map(documentOf));
     expect([...documentsWithAnInvalidCase].sort()).toEqual(Object.keys(PARSERS).sort());
@@ -96,6 +105,25 @@ describe('valid fixtures', () => {
 
     expect(failure.reason).toBe('upstream_api');
     expect(failure.traceback).toContain('Traceback (most recent call last)');
+  });
+
+  test.each(['telemetry.json', 'telemetry.partial.json'])(
+    '%s parses into exactly what the parent inserts',
+    (name) => {
+      const text = read('valid', name);
+
+      expect(parseTelemetry(text)).toEqual(JSON.parse(text));
+    },
+  );
+
+  test('telemetry.json accepts the nulls and empties its fixture does not exercise', () => {
+    const telemetry = JSON.parse(read('valid', 'telemetry.json'));
+    // An operation whose every call failed has no served model.
+    telemetry.llmUsage[0].servedModel = null;
+    telemetry.report.plantProteinPctByWeight = 12.5;
+    telemetry.report.findingCounts = [];
+
+    expect(parseTelemetry(JSON.stringify(telemetry))).toEqual(telemetry);
   });
 
   test('progress.json parses into a sequence', () => {
