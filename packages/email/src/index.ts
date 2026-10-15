@@ -28,4 +28,5 @@ export {
   type TransportSettings,
 } from './transports/index.ts';
 export { mailpitTransport } from './transports/mailpit.ts';
+export { postmarkTransport } from './transports/postmark.ts';
 export { providerTransport } from './transports/provider.ts';

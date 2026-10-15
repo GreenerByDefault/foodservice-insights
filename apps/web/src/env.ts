@@ -25,6 +25,7 @@ export const variables = defineEnvVars({
   EMAIL_FROM_ADDRESS: optional,
   EMAIL_GBD_ADDRESS: optional,
   EMAIL_SUPPORT_ADDRESS: optional,
+  POSTMARK_SERVER_TOKEN: optional,
 
   WORKER_MODE: optional,
   REPORT_RATE_LIMIT: optional,

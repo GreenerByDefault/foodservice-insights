@@ -2,9 +2,9 @@
 
 > **Status:** a spec. GBD chose Postmark on 2026-10-14
 > ([the evaluation](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/email-provider.md)),
-> and [`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Email records the choice. This plan wires it
-> up in two PRs, with the account and DNS work in § Before PR 2 finished before the second. The
-> PR that lands the last one deletes this file, and
+> and [`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Email records the choice. The transport is
+> written; what remains is the account and DNS work in § Before PR 1, then one PR that points
+> production at it. That PR deletes this file, and
 > [`production-sign-in.md`](production-sign-in.md) takes over.
 >
 > Vendor facts were read from Postmark's and Supabase's docs on 2026-10-14, and
@@ -12,10 +12,13 @@
 
 ## Context
 
-Everything above the `EmailTransport` seam is written and tested.
-[`provider.ts`](../../packages/email/src/transports/provider.ts) is a stub that rejects every
-send, and [`mailpit.ts`](../../packages/email/src/transports/mailpit.ts) is the worked example of a
-transport: one `fetch` inside `emailRequest`, aborted at `SEND_TIMEOUT_MS`. Supabase Auth sends
+Our side of the sending is written and tested.
+[`postmark.ts`](../../packages/email/src/transports/postmark.ts) sends through Postmark's HTTP
+API when `EMAIL_TRANSPORT=postmark`, and `parseTransportSettings` refuses that without
+`POSTMARK_SERVER_TOKEN`, so a deploy missing the token fails at startup. Production does not use
+it yet: both app specs in [`.do/`](../../.do) still select
+[`provider.ts`](../../packages/email/src/transports/provider.ts), a stub that rejects every
+send, so a send fails loudly instead of going nowhere until the domain verifies. Supabase Auth sends
 sign-in and email-change codes itself, over SMTP, from the templates in
 [`supabase-dev/supabase/templates/`](../../supabase-dev/supabase/templates). Locally both go to
 Mailpit.
@@ -124,22 +127,13 @@ The Basic plan allows 15 streams.
 
 ### The transport
 
-- **`postmarkTransport` replaces `providerTransport`**, and `EMAIL_TRANSPORT=postmark` replaces
-  `provider`. The stub stays until PR 2: the hosting plan's specs select it until then, so a send
-  fails loudly instead of going nowhere.
-- **`Tag` is the email's `kind`**, so Postmark's activity can be filtered by kind.
-- **Open and link tracking are off, and set explicitly** in each request so a dashboard toggle
-  cannot turn them back on. A tracking pixel and rewritten links cost deliverability, and a report
-  link rewritten through Postmark's domain looks like phishing.
-- **An error carries Postmark's `ErrorCode` but not its `Message`, and the operation label names
-  the kind, not the recipient.** Postmark's 406 message lists the inactive address, and server code
-  logs "ids, never emails" (`.claude/rules/typescript.md`). `mailpit.ts` labels with the
-  recipient, which is fine for a local catcher.
-- **A suppressed recipient** gets HTTP 422 with `ErrorCode` 406, which arrives as an `EmailError`
-  like any other failure. The notification sweep then spends its remaining attempts on it. That is
-  bounded, and not worth a special case.
-- **No idempotency key.** Postmark has none, and § Result notifications already accepts the
-  occasional duplicate.
+`postmark.ts`'s header carries the per-request choices and their reasons: every send on
+`outbound`, `Tag` set to the email's `kind`, open and link tracking off explicitly, no
+idempotency key. The one that shapes how failures look in production: **an error carries
+Postmark's `ErrorCode` but never its `Message`, and is labelled with the kind rather than the
+recipient**, because the message for a suppressed recipient (422, `ErrorCode` 406) names the
+address. So a 406 in our logs says *that* an address is suppressed, and Postmark's activity says
+which.
 
 ### Supabase Auth sends over SMTP
 
@@ -173,10 +167,9 @@ Stack's ingest accepts Postmark's payload as is. *Rejected: Grafana polling Post
 API.* Postmark has no read-only token, so Grafana would hold one that can send as anyone at
 greenerbydefault.org.
 
-## Before PR 2: accounts and DNS
+## Before PR 1: accounts and DNS
 
-PR 1 does not depend on any of this and can land first. Do these steps in order: because of
-`p=reject`, the DNS must verify before the first send.
+Do these steps in order: because of `p=reject`, the DNS must verify before the first send.
 
 1. **Workspace (a GBD admin).** Create insights@ as a user. Turn on Mail delegation in the Admin
    console if it is off, then delegate the mailbox to whoever will answer it.
@@ -243,52 +236,22 @@ After step 7, in the production project's dashboard:
   with `POST /auth/v1/otp` and the publishable key. Repeat step 7's header checks, and confirm the
   message shows up in Postmark under `auth`.
 
-## PR 1 — the Postmark transport
+## PR 1 — production sends through Postmark
 
-This can land at any time, because nothing selects `postmark` until PR 2.
-
-- **A new `transports/postmark.ts`**, beside the `provider.ts` stub, exporting
-  `postmarkTransport({ serverToken, testOriginOverride?, testTimeoutOverrideMs? })`.
-  - It is shaped like `mailpit.ts`: one POST to `/email` inside `emailRequest`, aborted at
-    `SEND_TIMEOUT_MS`, throwing on any non-2xx response.
-  - The body: `From` with the display name quoted, `To`, `Subject`, `TextBody`, `HtmlBody`,
-    `MessageStream: 'outbound'`, `Tag`, `TrackOpens: false`, `TrackLinks: 'None'`.
-  - The file's header comment carries § The transport's reasons, since this is the file someone
-    would edit to reverse any of them.
-- **`transports/index.ts`:** `TransportName` gains `'postmark'`, with settings
-  `{ name: 'postmark'; serverToken }`. `parseTransportSettings` refuses `postmark` without
-  `POSTMARK_SERVER_TOKEN`, and says which variable is missing.
-- **Read `POSTMARK_SERVER_TOKEN`** beside `EMAIL_ENDPOINT` in `packages/email/src/env.ts` and
-  `apps/web/src/lib/server/email.ts`. Declare it in `apps/web/src/env.ts` and in `turbo.json`'s
-  `globalPassThroughEnv`. `assertConfigured` already builds the emailer at startup, so a deploy
-  missing the token fails at startup, not on its first send.
-- **Tests.** `postmark.test.ts` runs against a `node:http` server that the test starts on a free
-  port, and covers three cases:
-  - the exact request: `toEqual` on the parsed body, plus the token header;
-  - a 422 response with `ErrorCode` 406 and the address in `Message` arrives as an `EmailError`
-    that mentions 406 and does not contain the address;
-  - a server that never answers fails within the overridden timeout.
-
-  `index.test.ts` gains the `postmark` cases, including the missing-token refusal.
-- **`messages/layout.ts` gains one line:** an image in an email must come from the web app's
-  `static/`. A route through `handle` answers `Cross-Origin-Resource-Policy: same-origin`, which
-  blocks webmail clients that load images directly.
-- **By hand, once:** send one message through the transport using the token `POSTMARK_API_TEST`.
-  Postmark's real API validates it and does not deliver it.
-
-## PR 2 — production sends through Postmark
-
-This comes after § Before PR 2, and once the hosting plan's app specs exist.
+This comes after § Before PR 1. Store `POSTMARK_SERVER_TOKEN` as a secret in the `production`
+GitHub Environment before merging: an unset `${NAME}` fails the deploy
+([`.do/README.md`](../../.do/README.md)).
 
 - **Both app specs, `.do/web.yaml` and `.do/worker.yaml`:**
   - `EMAIL_TRANSPORT=postmark`, replacing `provider`;
-  - `EMAIL_FROM_ADDRESS` and `EMAIL_SUPPORT_ADDRESS` set to `insights@greenerbydefault.org`;
-  - `EMAIL_GBD_ADDRESS` set to the address GBD names;
-  - `POSTMARK_SERVER_TOKEN` as a `${POSTMARK_SERVER_TOKEN}` secret, stored in the `production`
-    Environment ([`hosting-provider.md`](hosting-provider.md) § Secrets).
+  - `POSTMARK_SERVER_TOKEN` as a `type: SECRET` entry with value `${POSTMARK_SERVER_TOKEN}`;
+  - `EMAIL_GBD_ADDRESS` set to the address GBD names, replacing the insights@ stand-in.
 
-  The worker needs every one of these, because `@gbd/email/env` requires them all.
-- **Delete the stub:** `provider.ts`, its test, its export, and its `TransportName` member.
+  `EMAIL_FROM_ADDRESS` and `EMAIL_SUPPORT_ADDRESS` are already insights@. The worker needs the
+  token too, because `@gbd/email/env` builds the same transport.
+- **Delete the stub:** `provider.ts`, its test, its export, its `TransportName` member and the
+  `provider` cases in `transports/index.ts` and `index.test.ts`, and the `.do/README.md` bullet
+  that explains it.
 - **Both local `config.toml`s gain `[auth.email.template.confirmation]` → `sign-in-code.html`.** It
   goes unused while local confirmation is off, but this way the repo names every template
   production uses. Beside the template stanzas, add one comment: production's copies are pasted

@@ -10,7 +10,7 @@ import {
   resolveTransport,
   sendEmail,
 } from '@gbd/email';
-import { EMAIL_ENDPOINT } from '$app/env/private';
+import { EMAIL_ENDPOINT, POSTMARK_SERVER_TOKEN } from '$app/env/private';
 import { requirePrivateVar } from './env.ts';
 import { logger } from './log.ts';
 
@@ -25,9 +25,10 @@ export function emailer(): Emailer {
     transport: resolveTransport(
       parseTransportSettings({
         name: requirePrivateVar('EMAIL_TRANSPORT'),
-        // Not `requirePrivateVar`: a `provider` transport needs no endpoint, and `parseTransportSettings`
-        // is what enforces that `mailpit` has one.
+        // Not `requirePrivateVar`: each is needed by only one transport, and `parseTransportSettings`
+        // is what enforces that the selected one has its own.
         endpoint: EMAIL_ENDPOINT,
+        postmarkServerToken: POSTMARK_SERVER_TOKEN,
       }),
     ),
     from: { address: requirePrivateVar('EMAIL_FROM_ADDRESS'), name: APP_NAME },
