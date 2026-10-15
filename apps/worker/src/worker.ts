@@ -124,7 +124,10 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
 
     // Deliberately unguarded: `pollQueue` is the one place a claim failure is resolved, and it
     // needs the error to decide between absorbing the poll and ending the worker.
-    const attemptId = await claimNextAttempt(db, config.workerId, { candidateReports });
+    const attemptId = await claimNextAttempt(db, config.workerId, {
+      candidateReports,
+      workerGitSha: config.workerGitSha,
+    });
     if (attemptId === undefined) return 'queue-empty';
 
     let prepared: PreparedAttempt;

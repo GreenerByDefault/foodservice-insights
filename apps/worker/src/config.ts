@@ -12,9 +12,17 @@ import { SEND_TIMEOUT_MS } from '@gbd/email';
 import type { ChildCommand } from './child/spawn.ts';
 import { TRANSIENT_RETRY_WAITS_MS } from './retry.ts';
 
+/** The same format `analysis_attempt_worker_git_sha_format` enforces, so a bad value stops startup
+ * instead of failing every claim. */
+const WORKER_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
+
 export type WorkerConfig = {
   /** Written to `analysis_attempt.worker_id`, so it has to be unique per running process. */
   workerId: string;
+
+  /** The commit this worker was built from, written to `analysis_attempt.worker_git_sha` at claim.
+   * Null for a build that does not know its own, such as a local one. */
+  workerGitSha: string | null;
 
   /** Each attempt gets one directory beneath this one. */
   runRoot: string;
@@ -116,6 +124,7 @@ export type WorkerConfig = {
 };
 
 export const WORKER_DEFAULTS = {
+  workerGitSha: null,
   maxConcurrentAttempts: 3,
   queuePollIntervalMs: 2 * SECOND_MS,
   directIntervalMs: 30 * SECOND_MS,
@@ -229,6 +238,10 @@ function workerConfigViolations(config: WorkerConfig, platformShutdownGraceMs?: 
     'workerId must not be blank: it identifies this process in analysis_attempt.worker_id',
   );
   check(config.runRoot.trim() !== '', 'runRoot must not be blank');
+  check(
+    config.workerGitSha === null || WORKER_GIT_SHA_PATTERN.test(config.workerGitSha),
+    `workerGitSha must be a 40-character lowercase hex commit SHA, not ${config.workerGitSha}`,
+  );
   check(config.childCommand.executable.trim() !== '', 'childCommand.executable must not be blank');
 
   // Keyed off the defaults, so a numeric field added above is covered without touching this.

@@ -63,6 +63,8 @@ runs:
         platforms: linux/amd64
         push: true
         tags: ${{ steps.image.outputs.name }}:${{ inputs.sha }}
+        # The web's Dockerfile declares no such ARG, so it ignores this.
+        build-args: GIT_SHA=${{ inputs.sha }}
         labels: |
           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           org.opencontainers.image.revision=${{ inputs.sha }}

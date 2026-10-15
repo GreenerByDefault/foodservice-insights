@@ -151,9 +151,16 @@ landed) that shape the design:
   also counts products whose cached category *is* "No Matches Found". A missing cache CSV only
   warns, and then sends every product to the LLM. That is `caches-to-supabase.md`'s launch blocker.
   `categorization_cache_entries` reports it, but nothing records it per attempt yet.
-- **Nothing says which build ran an attempt.** `worker_id` is `hostname-pid-uuid`. The SHA
-  exists only as the image's OCI label, and both Python packages are version `0.0.0`. Prompts,
-  categories and thresholds are packaged files, so the SHA identifies them too.
+- **Every claimed attempt carries the build that ran it.** `worker_id` is `hostname-pid-uuid`,
+  and both Python packages are version `0.0.0`, so the commit SHA is the build's identity. Prompts,
+  categories and thresholds are packaged files, so it identifies them too.
+  - `build-image` passes `GIT_SHA` to both images as a build arg. The worker's Dockerfile turns it
+    into `WORKER_GIT_SHA` in its last layer, and the web's ignores it.
+  - `WorkerConfig.workerGitSha` is `string | null`. `main.ts` reads the variable, and unset or
+    empty is null: a local run, or the e2e build. A value outside the column's 40-hex pattern is
+    a config violation, so it stops startup.
+  - `claimNextAttempt` takes it as `ClaimOptions.workerGitSha` and sets `worker_git_sha` beside
+    `worker_id`. `main.ts` logs it once at startup.
 - **`mock-llm` is what `pnpm test:system` runs** (`partial(analyze, llm=KeywordLlmClient())`).
   So no tier sends a real `OpenAiLlmClient`'s usage through the real parent; the contract
   fixtures on both sides close that gap.
@@ -409,27 +416,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   telemetry**, by hand unless `deploy.yml` has already migrated it. If someone forgets, every
   settle logs `42P01` and loses that telemetry, but verdicts are untouched.
 
-## PR 1 — the build's SHA on every attempt
-
-This touches CI and the image, which is this task.
-
-- `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
-  images get it; the web's Dockerfile ignores it.
-- `apps/worker/Dockerfile`: `ARG GIT_SHA` and `ENV WORKER_GIT_SHA=$GIT_SHA`, after the last
-  `COPY`, so only the final layer varies per commit.
-- `apps/worker/src/config.ts` reads `WORKER_GIT_SHA`. It is unset locally and in the e2e build,
-  which gives null. A value not matching the pattern stops startup.
-  - `main.ts` logs it once at startup.
-  - `claimNextAttempt` sets `workerGitSha` beside `workerId`.
-- Tests:
-  - `queue.test.ts`: a claim with and without a SHA;
-  - `config.test.ts`: the variable's three cases.
-- `ARCHITECTURE.md` § Images: the image carries its SHA as an env var as well as the OCI label.
-  Promotion keeps it true, since the SHA is the build's.
-- Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
-  commit.
-
-## PR 2 — the views and panels
+## PR 1 — the views and panels
 
 This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 
@@ -475,11 +462,10 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - which checks warn most;
   - and, on an impact dashboard, CO2e analyzed and plant share per month.
 - `metrics-dashboards.md` loses AI cost from its Out of scope.
-- This PR deletes this plan. If the metrics plan has not reached its PR 1 by then, end this plan
-  at PR 1. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
-  its "one small PR each" metrics, with the synthetic rows added to its PR 3.
-
-Order: PR 1, then PR 2.
+- This PR deletes this plan. If the metrics plan has not reached its PR 1 by then, delete the
+  plan without this PR. The rows are queryable in Studio, and this PR moves into
+  `metrics-dashboards.md` as one of its "one small PR each" metrics, with the synthetic rows added
+  to its PR 3.
 
 ## Failure paths
 
@@ -527,6 +513,7 @@ Still owed for the parent's recording, which is on `main`:
   - The stage times add up to roughly the child's `durationMs` in the worker log.
   - `map_concurrently`'s "Categorization: N calls in X s" on a mid-size file is within about 2%
     of a run from before the telemetry writes, per the fsync decision above.
-- After PR 1's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
-- After PR 2: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
+- After the first deploy that builds the SHA in: a production attempt's `worker_git_sha` is the
+  deployed commit.
+- After PR 1: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.

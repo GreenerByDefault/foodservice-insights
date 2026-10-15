@@ -63,6 +63,22 @@ describe('createWorkerConfig', () => {
     });
   });
 
+  describe('workerGitSha', () => {
+    const sha = 'f'.repeat(40);
+
+    test('is null when unset', () => {
+      expect(createWorkerConfig(REQUIRED_FIELDS).workerGitSha).toBeNull();
+    });
+
+    test('is kept when it is a full commit SHA', () => {
+      expect(createWorkerConfig(REQUIRED_FIELDS, { workerGitSha: sha }).workerGitSha).toBe(sha);
+    });
+
+    test.each(['abc123', 'F'.repeat(40), `${sha}0`, ''])('refuses %j', (workerGitSha) => {
+      expectOnlyViolation({ workerGitSha }, 'workerGitSha must be a 40-character lowercase hex');
+    });
+  });
+
   test('reports every broken relation at once, not just the first', () => {
     // At SEND_TIMEOUT_MS, this fails both to outlast the longest send (a strict `>`) and, at the
     // shipped maxNotificationAttempts, to span the outage the retries are meant to survive.
