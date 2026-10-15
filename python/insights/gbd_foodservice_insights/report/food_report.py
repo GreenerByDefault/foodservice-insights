@@ -77,7 +77,7 @@ class ReportCharts:
 
 @dataclass(frozen=True)
 class FindingCount:
-    check: QualityCheck
+    quality_check: QualityCheck
     status: DiagnosticStatus
     findings: int
 
@@ -91,9 +91,9 @@ class ReportSummary:
     finding_counts: tuple[FindingCount, ...]
     total_co2e_kg: float
     co2e_kg_per_diner_or_meal: float
-    plant_pct: float
+    plant_pct_by_weight: float
     # `None` when the rows have no protein.
-    plant_protein_pct: float | None
+    plant_protein_pct_by_weight: float | None
 
 
 def _log_stage(stage_key: str, report_progress: Callable[[], None]) -> None:
@@ -204,8 +204,8 @@ def summarize_report(report: FoodReport) -> ReportSummary:
         ),
         total_co2e_kg=total_co2e_kg(report),
         co2e_kg_per_diner_or_meal=co2e_kg_per_diner_or_meal(report),
-        plant_pct=report.plant_animal_split.plant_pct,
-        plant_protein_pct=(
+        plant_pct_by_weight=report.plant_animal_split.plant_pct,
+        plant_protein_pct_by_weight=(
             None
             if report.plant_protein_share is None
             else report.plant_protein_share.plant_protein_pct

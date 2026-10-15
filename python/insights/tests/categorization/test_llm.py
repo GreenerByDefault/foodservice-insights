@@ -100,7 +100,7 @@ def _call(**overrides: Any) -> LlmCall:
     """The `LlmCall` for one `clean` request answered with `DEFAULT_USAGE`, with `overrides`."""
     defaults: dict[str, Any] = {
         "operation": "clean",
-        "model": "gpt-4.1-mini",
+        "requested_model": "gpt-4.1-mini",
         "served_model": SERVED_MODEL,
         "requests": 1,
         "failed_requests": 0,

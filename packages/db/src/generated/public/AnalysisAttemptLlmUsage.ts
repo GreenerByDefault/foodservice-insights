@@ -8,7 +8,7 @@ export type AnalysisAttemptLlmUsageOperation = LlmOperation & {
 };
 
 /** Identifier type for public.analysis_attempt_llm_usage */
-export type AnalysisAttemptLlmUsageModel = string & {
+export type AnalysisAttemptLlmUsageRequestedModel = string & {
   __brand: 'public.analysis_attempt_llm_usage';
 };
 
@@ -29,17 +29,19 @@ export default interface AnalysisAttemptLlmUsageTable {
     AnalysisAttemptLlmUsageOperation
   >;
 
-  model: ColumnType<
-    AnalysisAttemptLlmUsageModel,
-    AnalysisAttemptLlmUsageModel,
-    AnalysisAttemptLlmUsageModel
+  requestedModel: ColumnType<
+    AnalysisAttemptLlmUsageRequestedModel,
+    AnalysisAttemptLlmUsageRequestedModel,
+    AnalysisAttemptLlmUsageRequestedModel
   >;
 
   /** The model that answered, as OpenAI resolved the requested one. Null when no call got a response; the latest if it changed mid-run. */
   servedModel: ColumnType<string | null, string | null, string | null>;
 
+  /** Calls the analysis made to its LLM client. A call retries, so it can span several requests, and stops at its first successful one. */
   calls: ColumnType<number, number, number>;
 
+  /** HTTP requests to OpenAI, retries included. */
   requests: ColumnType<number, number, number>;
 
   failedRequests: ColumnType<number, number, number>;

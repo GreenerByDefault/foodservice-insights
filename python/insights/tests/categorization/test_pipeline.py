@@ -263,11 +263,11 @@ def test_summarize_categorization_counts_each_source_and_what_merge_keeps() -> N
     summary = summarize_categorization(categorized)
 
     assert summary == CategorizationSummary(
-        raw_product_history_products=2,
-        cleaned_name_history_products=1,
-        llm_products=3,
-        history_uncategorized_products=1,
-        llm_uncategorized_products=2,
+        cache_raw_name_products=2,
+        cache_cleaned_name_products=1,
+        llm_matched_products=3,
+        cache_no_match_products=1,
+        llm_no_match_products=2,
         unrecognized_llm_answers=1,
         categorized_rows=6,
         categorized_kilograms=1.0 + 2.0 + 8.0 + 16.0 + 32.0 + 64.0,
@@ -289,11 +289,11 @@ def test_summarize_categorization_counts_a_match_type_no_product_has_as_zero() -
     )
 
     assert summary == CategorizationSummary(
-        raw_product_history_products=0,
-        cleaned_name_history_products=0,
-        llm_products=1,
-        history_uncategorized_products=0,
-        llm_uncategorized_products=0,
+        cache_raw_name_products=0,
+        cache_cleaned_name_products=0,
+        llm_matched_products=1,
+        cache_no_match_products=0,
+        llm_no_match_products=0,
         unrecognized_llm_answers=0,
         categorized_rows=1,
         categorized_kilograms=1.0,

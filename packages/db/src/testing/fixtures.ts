@@ -17,13 +17,13 @@ import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt } from '../generated/public/AnalysisAttempt.ts';
 import type {
   AnalysisAttemptLlmUsage,
-  AnalysisAttemptLlmUsageModel,
   AnalysisAttemptLlmUsageOperation,
+  AnalysisAttemptLlmUsageRequestedModel,
   NewAnalysisAttemptLlmUsage,
 } from '../generated/public/AnalysisAttemptLlmUsage.ts';
 import type {
   AnalysisAttemptQualityCheck,
-  AnalysisAttemptQualityCheckCheck,
+  AnalysisAttemptQualityCheckQualityCheck,
   AnalysisAttemptQualityCheckStatus,
   NewAnalysisAttemptQualityCheck,
 } from '../generated/public/AnalysisAttemptQualityCheck.ts';
@@ -559,24 +559,24 @@ export async function insertAttemptTelemetry(
       inputRows: 1000,
       inputKilograms: 2500.5,
       inputUniqueProducts: 120,
-      cacheEntries: 5000,
-      rawProductHistoryProducts: 100,
-      cleanedNameHistoryProducts: 5,
-      llmProducts: 15,
-      historyUncategorizedProducts: 2,
-      llmUncategorizedProducts: 3,
+      categorizationCacheEntries: 5000,
+      cacheRawNameProducts: 100,
+      cacheCleanedNameProducts: 5,
+      llmMatchedProducts: 15,
+      cacheNoMatchProducts: 2,
+      llmNoMatchProducts: 3,
       unrecognizedLlmAnswers: 1,
       categorizedRows: 980,
       categorizedKilograms: 2400.25,
       totalCo2eKg: 9000.5,
       co2eKgPerDinerOrMeal: 1.75,
-      plantPct: 42.5,
-      plantProteinPct: 30,
-      readMs: 800,
-      categorizeMs: 45_000,
-      reportMs: 300,
-      pdfMs: 2000,
-      xlsxMs: 400,
+      plantPctByWeight: 42.5,
+      plantProteinPctByWeight: 30,
+      readDurationMs: 800,
+      categorizeDurationMs: 45_000,
+      reportDurationMs: 300,
+      pdfDurationMs: 2000,
+      xlsxDurationMs: 400,
       peakMemoryKib: 250_000,
       ...overrides,
       analysisAttemptId: (overrides.analysisAttemptId ??
@@ -589,9 +589,9 @@ export async function insertAttemptTelemetry(
 /** Under a fresh telemetry row unless given one's `analysisAttemptId`. */
 export async function insertAttemptLlmUsage(
   database: DatabaseExecutor,
-  overrides: Partial<Omit<NewAnalysisAttemptLlmUsage, 'operation' | 'model'>> & {
+  overrides: Partial<Omit<NewAnalysisAttemptLlmUsage, 'operation' | 'requestedModel'>> & {
     operation?: LlmOperation;
-    model?: string;
+    requestedModel?: string;
   } = {},
 ): Promise<AnalysisAttemptLlmUsage> {
   const analysisAttemptId =
@@ -613,7 +613,8 @@ export async function insertAttemptLlmUsage(
       ...overrides,
       analysisAttemptId,
       operation: (overrides.operation ?? 'clean') as AnalysisAttemptLlmUsageOperation,
-      model: (overrides.model ?? 'gpt-4.1-mini') as AnalysisAttemptLlmUsageModel,
+      requestedModel: (overrides.requestedModel ??
+        'gpt-4.1-mini') as AnalysisAttemptLlmUsageRequestedModel,
     })
     .returningAll()
     .executeTakeFirstOrThrow();
@@ -622,8 +623,8 @@ export async function insertAttemptLlmUsage(
 /** Under a fresh telemetry row unless given one's `analysisAttemptId`. */
 export async function insertAttemptQualityCheck(
   database: DatabaseExecutor,
-  overrides: Partial<Omit<NewAnalysisAttemptQualityCheck, 'check' | 'status'>> & {
-    check?: QualityCheck;
+  overrides: Partial<Omit<NewAnalysisAttemptQualityCheck, 'qualityCheck' | 'status'>> & {
+    qualityCheck?: QualityCheck;
     status?: DiagnosticStatus;
   } = {},
 ): Promise<AnalysisAttemptQualityCheck> {
@@ -636,7 +637,8 @@ export async function insertAttemptQualityCheck(
       findings: 1,
       ...overrides,
       analysisAttemptId,
-      check: (overrides.check ?? 'outlier_line_items') as AnalysisAttemptQualityCheckCheck,
+      qualityCheck: (overrides.qualityCheck ??
+        'outlier_line_items') as AnalysisAttemptQualityCheckQualityCheck,
       status: (overrides.status ?? 'warning') as AnalysisAttemptQualityCheckStatus,
     })
     .returningAll()

@@ -49,21 +49,21 @@ landed) that shape the design:
   `LlmCall`, `LlmOperation`, `cost_micro_usd` and `CategorizationSummary`, so `worker_child`
   imports only from the seam. `type Telemetry = LlmCall | InputSummary | CategorizationSummary |
   ReportSummary | StageFinished`. `analyze` reports, in order:
-  - `StageFinished("read", ms)`, then `InputSummary(rows, kilograms, unique_products,
-    cache_entries)`. The read stage includes loading the cache. The first three describe the
+  - `StageFinished("read", duration_ms)`, then `InputSummary(rows, kilograms, unique_products,
+    categorization_cache_entries)`. The read stage includes loading the cache. The first three describe the
     upload: kilograms are after lb→kg, and unique products are counted after stripping, as
-    `categorize_unique_products` strips. `cache_entries` is the whole cache's size, not this
+    `categorize_unique_products` strips. `categorization_cache_entries` is the whole cache's size, not this
     upload's hits, and 0 means every product goes to the LLM.
-  - `StageFinished("categorize", ms)`, then `CategorizationSummary`, from the pure
+  - `StageFinished("categorize", duration_ms)`, then `CategorizationSummary`, from the pure
     `summarize_categorization` in `categorization/pipeline.py`. It holds the unique products per
     match type, the "No Matches Found" products split by history or LLM, the unrecognized LLM
     answers, and the rows and kilograms categorized. `CategorizedProducts` carries
     `unrecognized_llm_answers`, which `categorize_with_llm` now returns beside its frame; it
     counts unique cleaned names sent to the LLM, not products.
   - `ReportSummary`, from the pure `summarize_report` in `report/food_report.py`, right after
-    `build_food_report`, then `StageFinished("report", ms)`. It holds `quality_status`, the
+    `build_food_report`, then `StageFinished("report", duration_ms)`. It holds `quality_status`, the
     findings counted per check and status (`FindingCount`s, only the pairs that occurred, sorted),
-    `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct`, and `plant_protein_pct` or `None`.
+    `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct_by_weight`, and `plant_protein_pct_by_weight` or `None`.
     `total_co2e_kg` and `co2e_kg_per_diner_or_meal` are functions in `food_report.py`, which
     `pdf.py`'s `_executive_narrative` calls too, so the PDF and the record cannot disagree.
   - `StageFinished` for `pdf` and `xlsx`. The report stage begins with `merge_categorizations`,
@@ -109,7 +109,7 @@ landed) that shape the design:
 - **The cache is the cost lever, and its "hit" is not "categorized".** `raw_product_history`
   also counts products whose cached category *is* "No Matches Found". A missing cache CSV only
   warns, and then sends every product to the LLM. That is `caches-to-supabase.md`'s launch blocker.
-  `cache_entries` reports it, but nothing records it per attempt yet.
+  `categorization_cache_entries` reports it, but nothing records it per attempt yet.
 - **Nothing says which build ran an attempt.** `worker_id` is `hostname-pid-uuid`. The SHA
   exists only as the image's OCI label, and both Python packages are version `0.0.0`. Prompts,
   categories and thresholds are packaged files, so the SHA identifies them too.
@@ -155,7 +155,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 | **`finish_reason == "length"`** | The 30-token cap cut the answer, which then quietly becomes "No Matches Found". Stored as a count |
 | Our retry loop: **requests per call**, **failed requests**, **429s among them**; backoff slept | 429s are the measurement `LLM_CONCURRENCY`'s comment asks for |
 | `id`, `_request_id`, `system_fingerprint`, `service_tier`; `openai-processing-ms` and rate-limit headers via `with_raw_response` | Per call, high-cardinality, or redundant with request counts |
-| Time waiting on OpenAI | Covered by `categorize_ms` below. Per-call timing needs an injected clock for no extra answer |
+| Time waiting on OpenAI | Covered by `categorize_duration_ms` below. Per-call timing needs an injected clock for no extra answer |
 | Our choices: **operation**, **requested model**, **list-price cost** | The price is ours to know, not the API's |
 
 **From the run.** Unique products are counted after stripping.
@@ -200,21 +200,21 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
     `counts_basis`, `recorded_at`. The ids are raw, per § Telemetry outlives what it describes.
     `counts_basis` is what makes `co2e_kg_per_diner_or_meal` readable, and `report`'s copy goes
     with the organization; the metrics plan's report tombstone does not keep it.
-  - Input: `input_rows`, `input_kilograms`, `input_unique_products`, `cache_entries`.
+  - Input: `input_rows`, `input_kilograms`, `input_unique_products`, `categorization_cache_entries`.
   - Categorization:
-    - `raw_product_history_products`, `cleaned_name_history_products`, `llm_products`;
-    - `history_uncategorized_products`, `llm_uncategorized_products`,
+    - `cache_raw_name_products`, `cache_cleaned_name_products`, `llm_matched_products`;
+    - `cache_no_match_products`, `llm_no_match_products`,
       `unrecognized_llm_answers`;
     - `categorized_rows`, `categorized_kilograms`.
-  - Report: `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct`, `plant_protein_pct`
+  - Report: `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct_by_weight`, `plant_protein_pct_by_weight`
     (null when the report has no protein share).
-  - Timing: `read_ms`, `categorize_ms`, `report_ms`, `pdf_ms`, `xlsx_ms`. Each is set once its
+  - Timing: `read_duration_ms`, `categorize_duration_ms`, `report_duration_ms`, `pdf_duration_ms`, `xlsx_duration_ms`. Each is set once its
     stage finishes, so a killed run has a prefix of them.
   - `peak_memory_kib`, `NOT NULL`: the child reads it at every write of the document.
 
   The input, categorization and report groups are each all null or all set, by named CHECK, and
   each requires the one before it. The stage times are a chain instead: each requires the one
-  before it, so a run killed mid-report keeps `read_ms` and `categorize_ms`. An all-or-none CHECK
+  before it, so a run killed mid-report keeps `read_duration_ms` and `categorize_duration_ms`. An all-or-none CHECK
   on them would reject exactly the endings this plan exists to record, and the transaction would
   drop the attempt's usage and quality rows with it.
   The integer sums the child guarantees are CHECKs too: the three match types add up to
@@ -234,7 +234,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **`analysis_attempt.worker_git_sha`**, written at claim, is the one new attempt column. The
   claim is before the row is frozen.
 - **Typed columns, never jsonb**, per #230 and the metrics plan's no-free-text rule. The two
-  text columns are `served_model` (alongside `model` in the key) and `worker_git_sha`. Each has a
+  text columns are `served_model` (alongside `requested_model` in the key) and `worker_git_sha`. Each has a
   pattern CHECK, so the metrics conventions test can allowlist them with a reason.
   `integer` for counts and milliseconds, since the worst plausible upload is under 1e9 tokens.
   `double precision` for kilograms, CO2e and percentages.
@@ -498,7 +498,7 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - `metrics.attempt_quality_check`.
   - A panel that aggregates `co2e_kg_per_diner_or_meal` across reports groups by
     `counts_basis`, since a per-diner and a per-meal figure do not average.
-  - Each view gets its tests. The conventions test allowlists `model`, `served_model` and
+  - Each view gets its tests. The conventions test allowlists `requested_model`, `served_model` and
     `worker_git_sha` with their reasons.
 - `insertSyntheticHistory`:
   - writes telemetry and usage for every settled attempt that was claimed;

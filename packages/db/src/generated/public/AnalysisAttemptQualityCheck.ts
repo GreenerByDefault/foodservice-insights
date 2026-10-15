@@ -4,7 +4,7 @@ import type { default as DiagnosticStatus } from './DiagnosticStatus.js';
 import type { default as QualityCheck } from './QualityCheck.js';
 
 /** Identifier type for public.analysis_attempt_quality_check */
-export type AnalysisAttemptQualityCheckCheck = QualityCheck & {
+export type AnalysisAttemptQualityCheckQualityCheck = QualityCheck & {
   __brand: 'public.analysis_attempt_quality_check';
 };
 
@@ -24,10 +24,10 @@ export default interface AnalysisAttemptQualityCheckTable {
     AnalysisAttemptTelemetryAnalysisAttemptId
   >;
 
-  check: ColumnType<
-    AnalysisAttemptQualityCheckCheck,
-    AnalysisAttemptQualityCheckCheck,
-    AnalysisAttemptQualityCheckCheck
+  qualityCheck: ColumnType<
+    AnalysisAttemptQualityCheckQualityCheck,
+    AnalysisAttemptQualityCheckQualityCheck,
+    AnalysisAttemptQualityCheckQualityCheck
   >;
 
   status: ColumnType<

@@ -81,13 +81,13 @@ class InputSummary:
     # Every entry in the cache, not only those this upload matches. Size alone says nothing of
     # coverage — `CategorizationSummary` counts the hits — but 0 means every product goes to the
     # LLM.
-    cache_entries: int
+    categorization_cache_entries: int
 
 
 @dataclass(frozen=True)
 class StageFinished:
     stage: Stage
-    ms: int
+    duration_ms: int
 
 
 type ReportProgress = Callable[[], None]
@@ -198,7 +198,7 @@ def _stage(stage: Stage, report_telemetry: ReportTelemetry) -> Generator[None]:
     """Reports the stage's time only when it finishes, so a failed stage reports none."""
     start = time.monotonic()
     yield
-    report_telemetry(StageFinished(stage, ms=round((time.monotonic() - start) * 1000)))
+    report_telemetry(StageFinished(stage, duration_ms=round((time.monotonic() - start) * 1000)))
 
 
 def _summarize_input(df: pd.DataFrame, cache: CategorizationCache) -> InputSummary:
@@ -207,7 +207,7 @@ def _summarize_input(df: pd.DataFrame, cache: CategorizationCache) -> InputSumma
         kilograms=float(df["weight"].sum()),
         # Stripped as `categorize_unique_products` strips, so the match types sum to this.
         unique_products=df["product"].str.strip().nunique(),
-        cache_entries=len(cache.products),
+        categorization_cache_entries=len(cache.products),
     )
 
 

@@ -47,12 +47,12 @@ class CategorizationSummary:
     """The upload's unique products by how each was categorized, and the upload's rows that
     categorization left usable. The three match types partition the unique products."""
 
-    raw_product_history_products: int  # the cache had the product itself
-    cleaned_name_history_products: int  # the cache had its LLM-cleaned name
-    llm_products: int
+    cache_raw_name_products: int  # the cache had the product itself
+    cache_cleaned_name_products: int  # the cache had its LLM-cleaned name
+    llm_matched_products: int
     # "No Matches Found" from the cache, which counts as a hit, or from the LLM.
-    history_uncategorized_products: int
-    llm_uncategorized_products: int
+    cache_no_match_products: int
+    llm_no_match_products: int
     unrecognized_llm_answers: int
     categorized_rows: int
     categorized_kilograms: float  # in the weight column's unit, which `analyze` makes kilograms
@@ -139,11 +139,11 @@ def summarize_categorization(categorized: CategorizedProducts) -> Categorization
     kept = row_category != NO_MATCHES_FOUND
 
     return CategorizationSummary(
-        raw_product_history_products=int(products_by_type.get(MATCH_TYPE_RAW, 0)),
-        cleaned_name_history_products=int(products_by_type.get(MATCH_TYPE_CLEANED, 0)),
-        llm_products=int(products_by_type.get(MATCH_TYPE_LLM, 0)),
-        history_uncategorized_products=int((uncategorized & ~from_llm).sum()),
-        llm_uncategorized_products=int((uncategorized & from_llm).sum()),
+        cache_raw_name_products=int(products_by_type.get(MATCH_TYPE_RAW, 0)),
+        cache_cleaned_name_products=int(products_by_type.get(MATCH_TYPE_CLEANED, 0)),
+        llm_matched_products=int(products_by_type.get(MATCH_TYPE_LLM, 0)),
+        cache_no_match_products=int((uncategorized & ~from_llm).sum()),
+        llm_no_match_products=int((uncategorized & from_llm).sum()),
         unrecognized_llm_answers=categorized.unrecognized_llm_answers,
         categorized_rows=int(kept.sum()),
         categorized_kilograms=float(categorized.cleaned_df.loc[kept, "weight"].sum()),

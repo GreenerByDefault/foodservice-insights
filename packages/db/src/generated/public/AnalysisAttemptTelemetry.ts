@@ -31,18 +31,22 @@ export default interface AnalysisAttemptTelemetryTable {
 
   inputUniqueProducts: ColumnType<number | null, number | null, number | null>;
 
-  cacheEntries: ColumnType<number | null, number | null, number | null>;
+  categorizationCacheEntries: ColumnType<number | null, number | null, number | null>;
 
-  rawProductHistoryProducts: ColumnType<number | null, number | null, number | null>;
+  /** Unique products the categorization cache had as uploaded. With cache_cleaned_name_products and llm_matched_products, partitions input_unique_products. */
+  cacheRawNameProducts: ColumnType<number | null, number | null, number | null>;
 
-  cleanedNameHistoryProducts: ColumnType<number | null, number | null, number | null>;
+  /** Unique products the categorization cache had once the LLM cleaned their names. */
+  cacheCleanedNameProducts: ColumnType<number | null, number | null, number | null>;
 
-  llmProducts: ColumnType<number | null, number | null, number | null>;
+  llmMatchedProducts: ColumnType<number | null, number | null, number | null>;
 
-  historyUncategorizedProducts: ColumnType<number | null, number | null, number | null>;
+  /** Unique products whose cached category is "No Matches Found". Counted among the cache hits, and their rows are left out of the report. */
+  cacheNoMatchProducts: ColumnType<number | null, number | null, number | null>;
 
-  llmUncategorizedProducts: ColumnType<number | null, number | null, number | null>;
+  llmNoMatchProducts: ColumnType<number | null, number | null, number | null>;
 
+  /** Cleaned names the LLM answered with something other than a known category. Per unique cleaned name, not per product. */
   unrecognizedLlmAnswers: ColumnType<number | null, number | null, number | null>;
 
   categorizedRows: ColumnType<number | null, number | null, number | null>;
@@ -53,19 +57,19 @@ export default interface AnalysisAttemptTelemetryTable {
 
   co2eKgPerDinerOrMeal: ColumnType<number | null, number | null, number | null>;
 
-  plantPct: ColumnType<number | null, number | null, number | null>;
+  plantPctByWeight: ColumnType<number | null, number | null, number | null>;
 
-  plantProteinPct: ColumnType<number | null, number | null, number | null>;
+  plantProteinPctByWeight: ColumnType<number | null, number | null, number | null>;
 
-  readMs: ColumnType<number | null, number | null, number | null>;
+  readDurationMs: ColumnType<number | null, number | null, number | null>;
 
-  categorizeMs: ColumnType<number | null, number | null, number | null>;
+  categorizeDurationMs: ColumnType<number | null, number | null, number | null>;
 
-  reportMs: ColumnType<number | null, number | null, number | null>;
+  reportDurationMs: ColumnType<number | null, number | null, number | null>;
 
-  pdfMs: ColumnType<number | null, number | null, number | null>;
+  pdfDurationMs: ColumnType<number | null, number | null, number | null>;
 
-  xlsxMs: ColumnType<number | null, number | null, number | null>;
+  xlsxDurationMs: ColumnType<number | null, number | null, number | null>;
 
   peakMemoryKib: ColumnType<number, number, number>;
 }

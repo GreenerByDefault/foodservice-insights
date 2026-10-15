@@ -705,7 +705,7 @@ COMMENT ON COLUMN "public"."analysis_attempt"."worker_git_sha" IS 'The commit th
 CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_llm_usage" (
     "analysis_attempt_id" "uuid" NOT NULL,
     "operation" "public"."llm_operation" NOT NULL,
-    "model" "text" NOT NULL,
+    "requested_model" "text" NOT NULL,
     "served_model" "text",
     "calls" integer NOT NULL,
     "requests" integer NOT NULL,
@@ -719,7 +719,7 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_llm_usage" (
     CONSTRAINT "analysis_attempt_llm_usage_cached_input_tokens_within_input" CHECK ((("cached_input_tokens" >= 0) AND ("cached_input_tokens" <= "input_tokens"))),
     CONSTRAINT "analysis_attempt_llm_usage_calls_positive" CHECK (("calls" >= 1)),
     CONSTRAINT "analysis_attempt_llm_usage_counts_non_negative" CHECK ((("truncated_calls" >= 0) AND ("output_tokens" >= 0) AND ("cost_micro_usd" >= 0))),
-    CONSTRAINT "analysis_attempt_llm_usage_model_format" CHECK (("model" ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'::"text")),
+    CONSTRAINT "analysis_attempt_llm_usage_requested_model_format" CHECK (("requested_model" ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'::"text")),
     CONSTRAINT "analysis_attempt_llm_usage_requests_ordered" CHECK ((("requests" >= "failed_requests") AND ("failed_requests" >= "rate_limited_requests") AND ("rate_limited_requests" >= 0))),
     CONSTRAINT "analysis_attempt_llm_usage_served_model_format" CHECK (("served_model" ~ '^[a-z0-9][a-z0-9._:-]{0,99}$'::"text")),
     CONSTRAINT "analysis_attempt_llm_usage_successful_requests_at_most_calls" CHECK ((("requests" - "failed_requests") <= "calls")),
@@ -744,6 +744,20 @@ COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."served_model" IS 'The m
 
 
 --
+-- Name: COLUMN "analysis_attempt_llm_usage"."calls"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."calls" IS 'Calls the analysis made to its LLM client. A call retries, so it can span several requests, and stops at its first successful one.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_llm_usage"."requests"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."requests" IS 'HTTP requests to OpenAI, retries included.';
+
+
+--
 -- Name: COLUMN "analysis_attempt_llm_usage"."input_tokens"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
@@ -763,7 +777,7 @@ COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."cost_micro_usd" IS 'At 
 
 CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_quality_check" (
     "analysis_attempt_id" "uuid" NOT NULL,
-    "check" "public"."quality_check" NOT NULL,
+    "quality_check" "public"."quality_check" NOT NULL,
     "status" "public"."diagnostic_status" NOT NULL,
     "findings" integer NOT NULL,
     CONSTRAINT "analysis_attempt_quality_check_findings_positive" CHECK (("findings" >= 1))
@@ -792,41 +806,41 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_telemetry" (
     "input_rows" integer,
     "input_kilograms" double precision,
     "input_unique_products" integer,
-    "cache_entries" integer,
-    "raw_product_history_products" integer,
-    "cleaned_name_history_products" integer,
-    "llm_products" integer,
-    "history_uncategorized_products" integer,
-    "llm_uncategorized_products" integer,
+    "categorization_cache_entries" integer,
+    "cache_raw_name_products" integer,
+    "cache_cleaned_name_products" integer,
+    "llm_matched_products" integer,
+    "cache_no_match_products" integer,
+    "llm_no_match_products" integer,
     "unrecognized_llm_answers" integer,
     "categorized_rows" integer,
     "categorized_kilograms" double precision,
     "total_co2e_kg" double precision,
     "co2e_kg_per_diner_or_meal" double precision,
-    "plant_pct" double precision,
-    "plant_protein_pct" double precision,
-    "read_ms" integer,
-    "categorize_ms" integer,
-    "report_ms" integer,
-    "pdf_ms" integer,
-    "xlsx_ms" integer,
+    "plant_pct_by_weight" double precision,
+    "plant_protein_pct_by_weight" double precision,
+    "read_duration_ms" integer,
+    "categorize_duration_ms" integer,
+    "report_duration_ms" integer,
+    "pdf_duration_ms" integer,
+    "xlsx_duration_ms" integer,
     "peak_memory_kib" integer NOT NULL,
-    CONSTRAINT "analysis_attempt_telemetry_categorization_all_or_none" CHECK (("num_nulls"("raw_product_history_products", "cleaned_name_history_products", "llm_products", "history_uncategorized_products", "llm_uncategorized_products", "unrecognized_llm_answers", "categorized_rows", "categorized_kilograms") = ANY (ARRAY[0, 8]))),
+    CONSTRAINT "analysis_attempt_telemetry_categorization_all_or_none" CHECK (("num_nulls"("cache_raw_name_products", "cache_cleaned_name_products", "llm_matched_products", "cache_no_match_products", "llm_no_match_products", "unrecognized_llm_answers", "categorized_rows", "categorized_kilograms") = ANY (ARRAY[0, 8]))),
     CONSTRAINT "analysis_attempt_telemetry_categorization_requires_input" CHECK ((("categorized_rows" IS NULL) OR ("input_rows" IS NOT NULL))),
-    CONSTRAINT "analysis_attempt_telemetry_categorize_ms_requires_read_ms" CHECK ((("categorize_ms" IS NULL) OR ("read_ms" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_categorize_duration_requires_read" CHECK ((("categorize_duration_ms" IS NULL) OR ("read_duration_ms" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_categorized_rows_at_most_input_rows" CHECK (("categorized_rows" <= "input_rows")),
-    CONSTRAINT "analysis_attempt_telemetry_counts_non_negative" CHECK ((("input_rows" >= 0) AND ("input_unique_products" >= 0) AND ("cache_entries" >= 0) AND ("raw_product_history_products" >= 0) AND ("cleaned_name_history_products" >= 0) AND ("llm_products" >= 0) AND ("history_uncategorized_products" >= 0) AND ("llm_uncategorized_products" >= 0) AND ("unrecognized_llm_answers" >= 0) AND ("categorized_rows" >= 0) AND ("read_ms" >= 0) AND ("categorize_ms" >= 0) AND ("report_ms" >= 0) AND ("pdf_ms" >= 0) AND ("xlsx_ms" >= 0))),
-    CONSTRAINT "analysis_attempt_telemetry_input_all_or_none" CHECK (("num_nulls"("input_rows", "input_kilograms", "input_unique_products", "cache_entries") = ANY (ARRAY[0, 4]))),
-    CONSTRAINT "analysis_attempt_telemetry_match_types_sum_to_unique_products" CHECK (((("raw_product_history_products" + "cleaned_name_history_products") + "llm_products") = "input_unique_products")),
-    CONSTRAINT "analysis_attempt_telemetry_pdf_ms_requires_report_ms" CHECK ((("pdf_ms" IS NULL) OR ("report_ms" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_counts_non_negative" CHECK ((("input_rows" >= 0) AND ("input_unique_products" >= 0) AND ("categorization_cache_entries" >= 0) AND ("cache_raw_name_products" >= 0) AND ("cache_cleaned_name_products" >= 0) AND ("llm_matched_products" >= 0) AND ("cache_no_match_products" >= 0) AND ("llm_no_match_products" >= 0) AND ("unrecognized_llm_answers" >= 0) AND ("categorized_rows" >= 0) AND ("read_duration_ms" >= 0) AND ("categorize_duration_ms" >= 0) AND ("report_duration_ms" >= 0) AND ("pdf_duration_ms" >= 0) AND ("xlsx_duration_ms" >= 0))),
+    CONSTRAINT "analysis_attempt_telemetry_input_all_or_none" CHECK (("num_nulls"("input_rows", "input_kilograms", "input_unique_products", "categorization_cache_entries") = ANY (ARRAY[0, 4]))),
+    CONSTRAINT "analysis_attempt_telemetry_match_types_sum_to_unique_products" CHECK (((("cache_raw_name_products" + "cache_cleaned_name_products") + "llm_matched_products") = "input_unique_products")),
+    CONSTRAINT "analysis_attempt_telemetry_pdf_duration_requires_report" CHECK ((("pdf_duration_ms" IS NULL) OR ("report_duration_ms" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_peak_memory_kib_positive" CHECK (("peak_memory_kib" > 0)),
-    CONSTRAINT "analysis_attempt_telemetry_percentages_in_range" CHECK (((("plant_pct" >= (0)::double precision) AND ("plant_pct" <= (100)::double precision)) AND (("plant_protein_pct" >= (0)::double precision) AND ("plant_protein_pct" <= (100)::double precision)))),
-    CONSTRAINT "analysis_attempt_telemetry_plant_protein_pct_requires_report" CHECK ((("plant_protein_pct" IS NULL) OR ("total_co2e_kg" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_percentages_in_range" CHECK (((("plant_pct_by_weight" >= (0)::double precision) AND ("plant_pct_by_weight" <= (100)::double precision)) AND (("plant_protein_pct_by_weight" >= (0)::double precision) AND ("plant_protein_pct_by_weight" <= (100)::double precision)))),
+    CONSTRAINT "analysis_attempt_telemetry_plant_protein_requires_report" CHECK ((("plant_protein_pct_by_weight" IS NULL) OR ("total_co2e_kg" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_quantities_non_negative" CHECK ((("input_kilograms" >= (0)::double precision) AND ("categorized_kilograms" >= (0)::double precision) AND ("total_co2e_kg" >= (0)::double precision) AND ("co2e_kg_per_diner_or_meal" >= (0)::double precision))),
-    CONSTRAINT "analysis_attempt_telemetry_report_all_or_none" CHECK (("num_nulls"("total_co2e_kg", "co2e_kg_per_diner_or_meal", "plant_pct") = ANY (ARRAY[0, 3]))),
-    CONSTRAINT "analysis_attempt_telemetry_report_ms_requires_categorize_ms" CHECK ((("report_ms" IS NULL) OR ("categorize_ms" IS NOT NULL))),
+    CONSTRAINT "analysis_attempt_telemetry_report_all_or_none" CHECK (("num_nulls"("total_co2e_kg", "co2e_kg_per_diner_or_meal", "plant_pct_by_weight") = ANY (ARRAY[0, 3]))),
+    CONSTRAINT "analysis_attempt_telemetry_report_duration_requires_categorize" CHECK ((("report_duration_ms" IS NULL) OR ("categorize_duration_ms" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_report_requires_categorization" CHECK ((("total_co2e_kg" IS NULL) OR ("categorized_rows" IS NOT NULL))),
-    CONSTRAINT "analysis_attempt_telemetry_xlsx_ms_requires_pdf_ms" CHECK ((("xlsx_ms" IS NULL) OR ("pdf_ms" IS NOT NULL)))
+    CONSTRAINT "analysis_attempt_telemetry_xlsx_duration_requires_pdf" CHECK ((("xlsx_duration_ms" IS NULL) OR ("pdf_duration_ms" IS NOT NULL)))
 );
 
 
@@ -837,6 +851,34 @@ ALTER TABLE "public"."analysis_attempt_telemetry" OWNER TO "postgres";
 --
 
 COMMENT ON TABLE "public"."analysis_attempt_telemetry" IS 'One row per analysis attempt, written by the worker after the verdict on every ending the child left a telemetry document for. Each column group (input, categorization, report, and each stage time) fills in as its stage finishes, so a killed run keeps a prefix. Outlives the attempt, report and organization it names, and holds no personal data; a requested hard delete removes it by organization_id.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_telemetry"."cache_raw_name_products"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_telemetry"."cache_raw_name_products" IS 'Unique products the categorization cache had as uploaded. With cache_cleaned_name_products and llm_matched_products, partitions input_unique_products.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_telemetry"."cache_cleaned_name_products"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_telemetry"."cache_cleaned_name_products" IS 'Unique products the categorization cache had once the LLM cleaned their names.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_telemetry"."cache_no_match_products"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_telemetry"."cache_no_match_products" IS 'Unique products whose cached category is "No Matches Found". Counted among the cache hits, and their rows are left out of the report.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_telemetry"."unrecognized_llm_answers"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_telemetry"."unrecognized_llm_answers" IS 'Cleaned names the LLM answered with something other than a known category. Per unique cleaned name, not per product.';
 
 
 --
@@ -1251,7 +1293,7 @@ COMMENT ON COLUMN "public"."unit_weight"."suggested_by" IS 'Where the row came f
 --
 
 ALTER TABLE ONLY "public"."analysis_attempt_llm_usage"
-    ADD CONSTRAINT "analysis_attempt_llm_usage_pkey" PRIMARY KEY ("analysis_attempt_id", "operation", "model");
+    ADD CONSTRAINT "analysis_attempt_llm_usage_pkey" PRIMARY KEY ("analysis_attempt_id", "operation", "requested_model");
 
 
 --
@@ -1267,7 +1309,7 @@ ALTER TABLE ONLY "public"."analysis_attempt"
 --
 
 ALTER TABLE ONLY "public"."analysis_attempt_quality_check"
-    ADD CONSTRAINT "analysis_attempt_quality_check_pkey" PRIMARY KEY ("analysis_attempt_id", "check", "status");
+    ADD CONSTRAINT "analysis_attempt_quality_check_pkey" PRIMARY KEY ("analysis_attempt_id", "quality_check", "status");
 
 
 --

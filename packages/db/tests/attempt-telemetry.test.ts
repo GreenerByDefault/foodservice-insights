@@ -31,24 +31,24 @@ const FINISHED_RUN = {
   inputRows: 1000,
   inputKilograms: 2500.5,
   inputUniqueProducts: 120,
-  cacheEntries: 5000,
-  rawProductHistoryProducts: 100,
-  cleanedNameHistoryProducts: 5,
-  llmProducts: 15,
-  historyUncategorizedProducts: 2,
-  llmUncategorizedProducts: 3,
+  categorizationCacheEntries: 5000,
+  cacheRawNameProducts: 100,
+  cacheCleanedNameProducts: 5,
+  llmMatchedProducts: 15,
+  cacheNoMatchProducts: 2,
+  llmNoMatchProducts: 3,
   unrecognizedLlmAnswers: 1,
   categorizedRows: 980,
   categorizedKilograms: 2400.25,
   totalCo2eKg: 9000.5,
   co2eKgPerDinerOrMeal: 1.75,
-  plantPct: 42.5,
-  plantProteinPct: 30,
-  readMs: 800,
-  categorizeMs: 45_000,
-  reportMs: 300,
-  pdfMs: 2000,
-  xlsxMs: 400,
+  plantPctByWeight: 42.5,
+  plantProteinPctByWeight: 30,
+  readDurationMs: 800,
+  categorizeDurationMs: 45_000,
+  reportDurationMs: 300,
+  pdfDurationMs: 2000,
+  xlsxDurationMs: 400,
   peakMemoryKib: 250_000,
 } satisfies TelemetryOverrides;
 
@@ -56,15 +56,15 @@ const NO_INPUT = {
   inputRows: null,
   inputKilograms: null,
   inputUniqueProducts: null,
-  cacheEntries: null,
+  categorizationCacheEntries: null,
 } satisfies TelemetryOverrides;
 
 const NO_CATEGORIZATION = {
-  rawProductHistoryProducts: null,
-  cleanedNameHistoryProducts: null,
-  llmProducts: null,
-  historyUncategorizedProducts: null,
-  llmUncategorizedProducts: null,
+  cacheRawNameProducts: null,
+  cacheCleanedNameProducts: null,
+  llmMatchedProducts: null,
+  cacheNoMatchProducts: null,
+  llmNoMatchProducts: null,
   unrecognizedLlmAnswers: null,
   categorizedRows: null,
   categorizedKilograms: null,
@@ -73,16 +73,16 @@ const NO_CATEGORIZATION = {
 const NO_REPORT = {
   totalCo2eKg: null,
   co2eKgPerDinerOrMeal: null,
-  plantPct: null,
-  plantProteinPct: null,
+  plantPctByWeight: null,
+  plantProteinPctByWeight: null,
 } satisfies TelemetryOverrides;
 
-const NO_STAGE_MS = {
-  readMs: null,
-  categorizeMs: null,
-  reportMs: null,
-  pdfMs: null,
-  xlsxMs: null,
+const NO_STAGE_DURATIONS = {
+  readDurationMs: null,
+  categorizeDurationMs: null,
+  reportDurationMs: null,
+  pdfDurationMs: null,
+  xlsxDurationMs: null,
 } satisfies TelemetryOverrides;
 
 function insertTelemetry(overrides: TelemetryOverrides) {
@@ -117,7 +117,7 @@ describe('analysis_attempt_telemetry', () => {
   });
 
   test('accepts percentages at both ends of the range', async () => {
-    const overrides = { plantPct: 100, plantProteinPct: 0 };
+    const overrides = { plantPctByWeight: 100, plantProteinPctByWeight: 0 };
     const row = await insertTelemetry(overrides);
 
     expect(row).toEqual(storedTelemetry(row, overrides));
@@ -125,12 +125,15 @@ describe('analysis_attempt_telemetry', () => {
 
   describe('a run that stopped early', () => {
     test.each<[string, TelemetryOverrides]>([
-      ['a run killed mid-report', { ...NO_REPORT, reportMs: null, pdfMs: null, xlsxMs: null }],
+      [
+        'a run killed mid-report',
+        { ...NO_REPORT, reportDurationMs: null, pdfDurationMs: null, xlsxDurationMs: null },
+      ],
       [
         'a run that died before reading its input',
-        { ...NO_INPUT, ...NO_CATEGORIZATION, ...NO_REPORT, ...NO_STAGE_MS },
+        { ...NO_INPUT, ...NO_CATEGORIZATION, ...NO_REPORT, ...NO_STAGE_DURATIONS },
       ],
-      ['a report with no protein share', { plantProteinPct: null }],
+      ['a report with no protein share', { plantProteinPctByWeight: null }],
     ])('keeps %s', async (_case, overrides) => {
       const row = await insertTelemetry(overrides);
 
@@ -161,7 +164,7 @@ describe('analysis_attempt_telemetry', () => {
     test.each([
       ['input', { inputKilograms: null }],
       ['categorization', { categorizedKilograms: null }],
-      ['report', { plantPct: null }],
+      ['report', { plantPctByWeight: null }],
     ])('rejects a partly set %s group', async (group, overrides) => {
       await expectConstraintViolation(
         insertTelemetry(overrides),
@@ -171,8 +174,8 @@ describe('analysis_attempt_telemetry', () => {
 
     test('rejects a plant protein share without the rest of the report', async () => {
       await expectConstraintViolation(
-        insertTelemetry({ ...NO_REPORT, plantProteinPct: 30 }),
-        'analysis_attempt_telemetry_plant_protein_pct_requires_report',
+        insertTelemetry({ ...NO_REPORT, plantProteinPctByWeight: 30 }),
+        'analysis_attempt_telemetry_plant_protein_requires_report',
       );
     });
 
@@ -191,14 +194,14 @@ describe('analysis_attempt_telemetry', () => {
     });
 
     test.each([
-      ['categorize_ms', 'read_ms', { readMs: null }],
-      ['report_ms', 'categorize_ms', { categorizeMs: null }],
-      ['pdf_ms', 'report_ms', { reportMs: null }],
-      ['xlsx_ms', 'pdf_ms', { pdfMs: null }],
-    ])('rejects %s without %s', async (stage, previous, overrides) => {
+      ['categorize', 'read', { readDurationMs: null }],
+      ['report', 'categorize', { categorizeDurationMs: null }],
+      ['pdf', 'report', { reportDurationMs: null }],
+      ['xlsx', 'pdf', { pdfDurationMs: null }],
+    ])('rejects a %s duration without a %s one', async (stage, previous, overrides) => {
       await expectConstraintViolation(
         insertTelemetry(overrides),
-        `analysis_attempt_telemetry_${stage}_requires_${previous}`,
+        `analysis_attempt_telemetry_${stage}_duration_requires_${previous}`,
       );
     });
   });
@@ -206,7 +209,7 @@ describe('analysis_attempt_telemetry', () => {
   describe('counts', () => {
     test('rejects match types that do not sum to the unique products', async () => {
       await expectConstraintViolation(
-        insertTelemetry({ llmProducts: 16 }),
+        insertTelemetry({ llmMatchedProducts: 16 }),
         'analysis_attempt_telemetry_match_types_sum_to_unique_products',
       );
     });
@@ -219,10 +222,10 @@ describe('analysis_attempt_telemetry', () => {
     });
 
     test.each([
-      { cacheEntries: -1 },
-      { historyUncategorizedProducts: -1 },
+      { categorizationCacheEntries: -1 },
+      { cacheNoMatchProducts: -1 },
       { unrecognizedLlmAnswers: -1 },
-      { xlsxMs: -1 },
+      { xlsxDurationMs: -1 },
     ])('rejects a negative count %o', async (overrides) => {
       await expectConstraintViolation(
         insertTelemetry(overrides),
@@ -250,10 +253,10 @@ describe('analysis_attempt_telemetry', () => {
     });
 
     test.each([
-      { plantPct: -1 },
-      { plantPct: 100.5 },
-      { plantPct: Number.NaN },
-      { plantProteinPct: 101 },
+      { plantPctByWeight: -1 },
+      { plantPctByWeight: 100.5 },
+      { plantPctByWeight: Number.NaN },
+      { plantProteinPctByWeight: 101 },
     ])('rejects a percentage out of range %o', async (overrides) => {
       await expectConstraintViolation(
         insertTelemetry(overrides),
@@ -364,7 +367,7 @@ describe('analysis_attempt_llm_usage', () => {
     expect(row).toEqual({
       analysisAttemptId: row.analysisAttemptId,
       operation: 'clean',
-      model: 'gpt-4.1-mini',
+      requestedModel: 'gpt-4.1-mini',
       servedModel: 'gpt-4.1-mini-2025-04-14',
       calls: 100,
       requests: 103,
@@ -396,7 +399,7 @@ describe('analysis_attempt_llm_usage', () => {
     expect(row).toEqual({
       analysisAttemptId: row.analysisAttemptId,
       operation: 'clean',
-      model: 'gpt-4.1-mini',
+      requestedModel: 'gpt-4.1-mini',
       ...overrides,
     });
   });
@@ -405,10 +408,10 @@ describe('analysis_attempt_llm_usage', () => {
     ['the longest', 'a'.repeat(100)],
     ['a fine-tuned', 'ft:gpt-4.1-mini-2025-04-14:acme::abc123'],
   ])('accepts %s model id', async (_case, model) => {
-    const row = await insertLlmUsage({ model, servedModel: model });
+    const row = await insertLlmUsage({ requestedModel: model, servedModel: model });
 
     // The rest of the row is the fixture's defaults, which 'stores a usage row' already pins.
-    expect(row).toMatchObject({ model, servedModel: model });
+    expect(row).toMatchObject({ requestedModel: model, servedModel: model });
   });
 
   test('rejects a row with no telemetry row', async () => {
@@ -421,11 +424,11 @@ describe('analysis_attempt_llm_usage', () => {
     );
   });
 
-  test('keeps one row per operation and model', async () => {
+  test('keeps one row per operation and requested model', async () => {
     const work = withRollback(DATABASE, async (transaction) => {
       const { analysisAttemptId } = await insertAttemptLlmUsage(transaction);
       await insertAttemptLlmUsage(transaction, { analysisAttemptId, operation: 'match' });
-      await insertAttemptLlmUsage(transaction, { analysisAttemptId, model: 'gpt-4.1' });
+      await insertAttemptLlmUsage(transaction, { analysisAttemptId, requestedModel: 'gpt-4.1' });
       await insertAttemptLlmUsage(transaction, { analysisAttemptId });
     });
 
@@ -451,9 +454,9 @@ describe('analysis_attempt_llm_usage', () => {
     ['counts_non_negative', { truncatedCalls: -1 }],
     ['counts_non_negative', { outputTokens: -1 }],
     ['counts_non_negative', { costMicroUsd: -1 }],
-    ['model_format', { model: 'GPT-4.1' }],
-    ['model_format', { model: '' }],
-    ['model_format', { model: 'a'.repeat(101) }],
+    ['requested_model_format', { requestedModel: 'GPT-4.1' }],
+    ['requested_model_format', { requestedModel: '' }],
+    ['requested_model_format', { requestedModel: 'a'.repeat(101) }],
     ['served_model_format', { servedModel: 'gpt 4.1' }],
   ])('rejects a row breaking %s: %o', async (constraint, overrides) => {
     await expectConstraintViolation(
@@ -466,12 +469,15 @@ describe('analysis_attempt_llm_usage', () => {
 describe('analysis_attempt_quality_check', () => {
   test('stores a count of findings', async () => {
     const row = await withRollback(DATABASE, (transaction) =>
-      insertAttemptQualityCheck(transaction, { check: 'date_distribution', status: 'success' }),
+      insertAttemptQualityCheck(transaction, {
+        qualityCheck: 'date_distribution',
+        status: 'success',
+      }),
     );
 
     expect(row).toEqual({
       analysisAttemptId: row.analysisAttemptId,
-      check: 'date_distribution',
+      qualityCheck: 'date_distribution',
       status: 'success',
       findings: 1,
     });
