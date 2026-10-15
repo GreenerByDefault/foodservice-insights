@@ -10,7 +10,9 @@ import pytest
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisRequest,
+    InputSummary,
     InvalidInputError,
+    StageFinished,
     UnusableDataError,
     UpstreamApiError,
 )
@@ -43,11 +45,68 @@ def test_places_result_files_under_contract_names(run_directory: Path) -> None:
 
 
 def test_reports_progress_once_per_report_progress_call(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress):
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
         return stub_analysis(request, report_progress=report_progress, progress_calls=3)
 
     run(run_directory, analyze=analyze)
     assert read_json(run_directory / layout.PROGRESS) == {"sequence": 3}
+
+
+TELEMETRY = (
+    StageFinished("read", duration_ms=120),
+    InputSummary(rows=36, kilograms=163.5, unique_products=14, categorization_cache_entries=0),
+)
+
+
+def expected_telemetry(written: dict) -> dict:
+    return {
+        "llmUsage": [],
+        "input": {
+            "rows": 36,
+            "kilograms": 163.5,
+            "uniqueProducts": 14,
+            "categorizationCacheEntries": 0,
+        },
+        "categorization": None,
+        "report": None,
+        "stageDurationMs": {"read": 120},
+        # Read from the process at each write, so not a value the test controls.
+        "peakMemoryKib": written["peakMemoryKib"],
+    }
+
+
+def test_writes_telemetry_beside_the_result(run_directory: Path) -> None:
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        return stub_analysis(request, report_telemetry=report_telemetry, telemetry=TELEMETRY)
+
+    exit_code = run(run_directory, analyze=analyze)
+
+    assert exit_code == names.EXIT_WROTE_RESULT
+    telemetry = read_json(run_directory / layout.TELEMETRY)
+    assert telemetry == expected_telemetry(telemetry)
+
+
+def test_a_failed_analysis_keeps_the_telemetry_it_reported_first(run_directory: Path) -> None:
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        return stub_analysis(
+            request,
+            report_telemetry=report_telemetry,
+            telemetry=TELEMETRY,
+            raises=UnusableDataError,
+        )
+
+    exit_code = run(run_directory, analyze=analyze)
+
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "unusable_data"
+    telemetry = read_json(run_directory / layout.TELEMETRY)
+    assert telemetry == expected_telemetry(telemetry)
+
+
+def test_an_analysis_that_reports_nothing_writes_no_telemetry(run_directory: Path) -> None:
+    run(run_directory, analyze=stub_analysis)
+
+    assert not (run_directory / layout.TELEMETRY).exists()
 
 
 def test_the_default_analyze_without_an_api_key_fails_as_unknown(
@@ -105,7 +164,7 @@ def test_writes_a_contract_violation_when_a_parent_created_directory_is_missing(
 def test_maps_each_analysis_error_to_its_reason(
     run_directory: Path, raises: type[AnalysisError], reason: str
 ) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress):
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
         return stub_analysis(request, report_progress=report_progress, raises=raises)
 
     exit_code = run(run_directory, analyze=analyze)
@@ -119,7 +178,7 @@ def test_maps_each_analysis_error_to_its_reason(
 
 
 def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory: Path) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress):
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
         raise RuntimeError("boom")
 
     exit_code = run(run_directory, analyze=analyze)
@@ -134,7 +193,7 @@ def test_maps_an_unexpected_exception_to_unknown_with_a_traceback(run_directory:
 def test_declaring_a_file_the_library_never_wrote_is_a_contract_violation(
     run_directory: Path,
 ) -> None:
-    def analyze(request: AnalysisRequest, *, report_progress):
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
         return stub_analysis(request, report_progress=report_progress, write_pdf=False)
 
     exit_code = run(run_directory, analyze=analyze)

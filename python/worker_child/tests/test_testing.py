@@ -16,6 +16,7 @@ from worker_child.testing import (
     KNOWN_SCENARIOS,
     SLOW_DEFAULT_SECONDS,
     SLOW_TICK_SECONDS,
+    STUB_TELEMETRY,
     Scenario,
     build_analyze,
     main,
@@ -157,6 +158,19 @@ def test_hang_reports_progress_once_and_then_never_returns(tmp_path: Path) -> No
 def test_crash_raises_a_bare_runtime_error(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="!crash"):
         build_analyze()(_request(tmp_path, "!crash"), report_progress=lambda: None)
+
+
+def test_every_scenario_reports_the_stub_telemetry_first(tmp_path: Path) -> None:
+    reported = []
+
+    with pytest.raises(RuntimeError):
+        build_analyze()(
+            _request(tmp_path, "!crash"),
+            report_progress=lambda: None,
+            report_telemetry=reported.append,
+        )
+
+    assert tuple(reported) == STUB_TELEMETRY
 
 
 # ----------------------------------------------------------------------------------------------

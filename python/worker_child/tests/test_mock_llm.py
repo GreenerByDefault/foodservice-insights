@@ -37,3 +37,18 @@ def test_main_runs_a_real_analysis_with_no_api_key(
     assert (files / layout.XLSX_FILE_NAME).read_bytes()[:2] == b"PK"
     result = json.loads((run_directory / layout.RESULT).read_text(encoding="utf-8"))
     assert result == {"analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID}
+
+
+def test_main_records_every_summary_and_no_llm_usage(
+    run_directory: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    (run_directory / layout.INPUT_CSV).write_text(sample_input_csv(), encoding="utf-8")
+
+    main(["worker_child.mock_llm", str(run_directory)])
+
+    telemetry = json.loads((run_directory / layout.TELEMETRY).read_text(encoding="utf-8"))
+    # `KeywordLlmClient` is passed as `llm=`, which `analyze` does not report calls from.
+    assert telemetry["llmUsage"] == []
+    assert None not in (telemetry["input"], telemetry["categorization"], telemetry["report"])
+    assert telemetry["stageDurationMs"].keys() == {"read", "categorize", "report", "pdf", "xlsx"}

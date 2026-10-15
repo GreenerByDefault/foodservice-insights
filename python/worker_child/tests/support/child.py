@@ -27,12 +27,14 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     InvalidInputError,
     ReportProgress,
+    ReportTelemetry,
     UnusableDataError,
     UpstreamApiError,
 )
 from gbd_foodservice_insights.testing import stub_analysis
 from worker_child.contract import layout
 from worker_child.run import Analyze, run
+from worker_child.testing import STUB_TELEMETRY
 from worker_child.writer import write_atomically
 
 # Where a scenario records facts a test needs to observe — always beneath `work/`, the
@@ -64,6 +66,7 @@ class Scenario:
     raises: type[Exception] | None = None
     hang: bool = False
     spawn_grandchild: bool = False
+    telemetry: bool = False  # report `STUB_TELEMETRY`
 
 
 def parse_scenario(data: Mapping[str, Any]) -> Scenario:
@@ -73,15 +76,23 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
         raises=RAISES_BY_NAME[raises_name] if raises_name is not None else None,
         hang=data.get("hang", False),
         spawn_grandchild=data.get("spawnGrandchild", False),
+        telemetry=data.get("telemetry", False),
     )
 
 
 def build_analyze(scenario: Scenario) -> Analyze:
     def analyze(
-        request: AnalysisRequest, *, report_progress: ReportProgress = lambda: None
+        request: AnalysisRequest,
+        *,
+        report_progress: ReportProgress = lambda: None,
+        report_telemetry: ReportTelemetry = lambda _: None,
     ) -> AnalysisOutcome:
         if scenario.spawn_grandchild:
             _spawn_grandchild()
+        # Before the progress, so a test that waits for `progress.json` finds the whole document.
+        if scenario.telemetry:
+            for record in STUB_TELEMETRY:
+                report_telemetry(record)
         _report_progress_under_load(report_progress, PROGRESS_CALLS)
 
         if scenario.hang:

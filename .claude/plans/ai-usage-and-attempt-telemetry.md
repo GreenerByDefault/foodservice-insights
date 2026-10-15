@@ -102,7 +102,33 @@ landed) that shape the design:
   The test stack prints floats with `extra_float_digits = 0`, so a `double precision` read back
   through Kysely is rounded to 15 digits. A `toEqual` on a written row needs values that survive
   that, such as the fixtures' `2500.5`.
-- **Nothing measures memory.** The report's numbers are reported now; peak memory is not.
+- **The child writes `output/telemetry.json`, and the parent ignores it.** Both halves of the
+  contract are in place:
+  - `contract.json` names the path (`runDirectory.telemetry`) and the four vocabularies
+    (`telemetryEnums`: `llmOperation`, `stage`, `qualityCheck`, `diagnosticStatus`), which
+    `names.ts` copies, each `satisfies` the `@gbd/db` enum type (`LlmOperation`, `QualityCheck`,
+    `DiagnosticStatus`, now exported from `@gbd/db`).
+  - `contract/messages.ts` exports `parseTelemetry` and `type Telemetry`. The parser mirrors every
+    CHECK on the three tables, including that each count fits a Postgres `integer`, so a document
+    that parses always inserts. The findings sit in `report.findingCounts`, so quality rows
+    without a report cannot be written.
+  - Fixtures: `valid/telemetry.json` (every section, two usage rows, a null `plantProteinPctByWeight`),
+    `valid/telemetry.partial.json` (killed while categorizing: one usage row, `input`, and
+    `stageDurationMs: {read}`), and one `invalid/telemetry.*` per violated CHECK.
+  - Python: `telemetry_reporter(run_directory)` in `writer.py` folds each record through the pure
+    `fold_telemetry` into a `TelemetryState` under a lock, and rewrites the document through
+    `contract/messages.py`'s `telemetry_payload(state, peak_memory_kib=…)`. That function
+    `_require`s the same invariants and computes each row's `costMicroUsd` from the row's totals.
+    A record it refuses raises, and leaves the previous document and state as they were.
+    `run.py` passes the reporter as `report_telemetry`. Peak memory is `ru_maxrss`, normalized to
+    KiB on macOS.
+  - `stubbed` mode's `build_analyze` reports `worker_child/testing.py`'s `STUB_TELEMETRY`, a whole
+    run's worth with two usage rows, before every scenario. So a canceled `!slow` or killed
+    `!hang` leaves a full document, not a partial one. `tests/support/child.py` takes
+    `"telemetry": true` to do the same.
+  - `mock-llm` writes every section and an empty `llmUsage`.
+
+  The writer sorts keys, so `stageDurationMs` arrives in alphabetical order; its order means nothing.
 
   The lab keeps its own `MergeCounts.between` and `match_type` `value_counts` for the runscript's
   summary, which also subtracts the non-entree rows.
@@ -188,7 +214,8 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   - Tokens: `input_tokens` (cached included, as OpenAI counts them), `cached_input_tokens`,
     `output_tokens`.
   - Model and cost: `served_model` (null when no call got a response; the latest if it changed
-    mid-run), `cost_micro_usd`.
+    mid-run; one OpenAI spells outside the format CHECK is dropped with a warning, since it must
+    not fail the report), `cost_micro_usd`.
 
   About two rows per attempt. A report's cost is the sum over its attempts, since a retry spends
   again.
@@ -219,8 +246,9 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   drop the attempt's usage and quality rows with it.
   The integer sums the child guarantees are CHECKs too: the three match types add up to
   `input_unique_products`, and categorized rows are at most rows read. So a dashboard can tell
-  "never reached the report" from "zero". The contract fixtures in PR 1 mirror these CHECKs, so
-  the child cannot write a document the parent's insert would refuse.
+  "never reached the report" from "zero". The contract fixtures mirror these CHECKs, and both
+  `telemetry_payload` and `parseTelemetry` enforce them, so the child cannot write a document the
+  parent's insert would refuse.
   *Rejected: `categorized_kilograms <= input_kilograms`.* The two are float sums over different
   rows, so they can differ in the last bit. In a simulation of 2,000 uploads of 5,000 rows each,
   where only zero-weight rows went uncategorized, 316 had more kilograms categorized than read.
@@ -293,8 +321,8 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 
 ### One telemetry document, kept current through the run
 
-- **`output/telemetry.json`:** `{llmUsage: [...], input, categorization, report, stageMs,
-  peakMemoryKib}`. A stage's object is null until that stage finishes, and `stageMs` holds the
+- **`output/telemetry.json`:** `{llmUsage: [...], input, categorization, report, stageDurationMs,
+  peakMemoryKib}`. A stage's object is null until that stage finishes, and `stageDurationMs` holds the
   stages done so far. There is no attempt id: the parent inserts under its own.
 - **The library reports facts; the child folds and writes them.** `analyze` takes
   `report_telemetry: ReportTelemetry`, and `Telemetry` is a union of typed records: `LlmCall`,
@@ -322,8 +350,14 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **A write that fails** (a full disk) raises from whichever report triggered it. Inside
   `_complete`'s `finally`, that replaces the call's own error, so the run reads `unknown`.
   `progress.json` has the same exposure. Accepted.
-- **Two fsync'd writes per call, instead of one, are probably free**, since a call takes hundreds
-  of milliseconds and three are in flight. PR 1 measures it and has a fallback.
+- **Two fsync'd writes per call, instead of one, measured as free.** 5,000 reports from 3 threads
+  cost the same for `telemetry_reporter` and `progress_reporter`: about 0.17 ms p50, 1.5 ms p99
+  and 0.5 ms mean each, so about 1 ms a call, against a call of hundreds of milliseconds. That was
+  on macOS under a load average of 11, not in the worker image, and with no live before-and-after.
+  macOS `fsync` does not flush to the platter the way Linux's does, so the live check after PR 1
+  is the real number. If the two writes ever cost more than about 2% of a median call, drop
+  fsync for both documents (the rename is what protects the reader), or limit telemetry to one
+  write a second plus a final one.
 
 ### The parent records after the verdict, whatever the ending
 
@@ -357,64 +391,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **No `WORKER_CONTRACT_VERSION` bump.** The parent and child ship in one image, and every
   change is additive.
 
-## PR 1 — the contract, and the child writes `telemetry.json`
-
-Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet.
-
-- `contract/contract.json`: `runDirectory.telemetry: "output/telemetry.json"`, plus the
-  operation, diagnostic-status and check vocabularies. The document's `report` section leaves
-  out `ReportSummary.quality_status`, since the database stores no copy of it.
-  - One valid fixture: every section set, two usage rows, a null `plantProteinPct`.
-  - A second valid fixture: killed during categorization, so `input` is set and the later
-    sections are null.
-  - One invalid fixture per violation, mirroring the DB CHECKs, plus `unknown-field`,
-    `row-unknown-field`, `input-tokens-are-a-bool`, `categorization-without-input` and
-    `duplicate-check-and-status`.
-- TypeScript:
-  - `contract/layout.ts`: the diagram, and a paragraph explaining that the document is written
-    throughout the run, read on every ending, and never decides a verdict.
-  - `contract/names.ts`: the vocabularies, each `satisfies` its generated enum type.
-  - `contract/messages.ts`: `TelemetrySchema`, `parseTelemetry`.
-  - `contract.test.ts` and `fixtures.test.ts`.
-- Python:
-  - `contract/layout.py`, `contract/names.py`.
-  - `contract/messages.py`: `telemetry_payload(state)`, which sorts rows and `_require`s the
-    invariants.
-  - `writer.py`: `telemetry_reporter(run_directory)`, folding through a pure `fold_telemetry`,
-    with each usage row's cost recomputed from its totals by the seam's `cost_micro_usd`.
-  - `run.py` passes it as `report_telemetry`.
-  - Every fake `analyze` takes the keyword: `worker_child/testing.py`'s, the one in
-    `tests/support/child.py`, and the local ones in `test_run.py`. A missing one surfaces as a
-    `TypeError` turned into `failure.json`, so look for a wrong reason, not a crash.
-  - `stubbed` reports a fixed `STUB_TELEMETRY` before every scenario, `!slow` and `!hang`
-    included, through `stub_analysis`'s `telemetry=`. `tests/support/child.py` gains a `"telemetry"` key, reported before `hang` or
-    `raises`.
-- Tests:
-  - `test_writer.py`:
-    - the first record creates the document;
-    - same-key calls fold;
-    - the sections fill in order;
-    - 50 calls from 8 threads give exact totals and leave no temp file;
-    - cost comes from the totals.
-  - `test_run.py`:
-    - success writes it;
-    - telemetry then `raises` writes `failure.json` and the document;
-    - nothing reported writes no document.
-  - `test_child_process.py`'s hang-and-kill test asserts the document holds the scripted
-    records.
-  - `test_mock_llm.py`: summaries but empty `llmUsage`.
-  - `test_fixtures.py`, `test_contract.py`, `test_library_agreement.py`.
-- **Measure the extra write**, with `uptime` checked first.
-  - In the worker image, time 5,000 `telemetry_reporter` calls from 3 threads against the same
-    number of `progress_reporter` calls, at p50 and p99.
-  - Compare `map_concurrently`'s "Categorization: N calls in X s" on a live mid-size file before
-    and after.
-  - If the two writes cost more than about 2% of a median call, a follow-up drops fsync for both
-    documents (the rename is what protects the reader), or limits telemetry to one write a
-    second plus a final one.
-  - Put the numbers in the PR.
-
-## PR 2 — the parent records telemetry on every ending
+## PR 1 — the parent records telemetry on every ending
 
 `apps/worker`. This is the first PR that writes telemetry in production.
 
@@ -429,13 +406,14 @@ Both halves plus `contract/`, per `contract/README.md`. The parent does not read
     its report details. It never throws.
   - `settleAttempt` awaits it after the verdict.
 - `testing/fake-child.ts`: a `{ step: 'telemetry', document? }` step and an exported
-  `FAKE_TELEMETRY`. `writeRaw` covers malformed documents.
+  `FAKE_TELEMETRY`, which can be `valid/telemetry.json`'s contents. `writeRaw` already accepts
+  the `telemetry` entry, so it covers malformed documents.
 - `failures.ts`: `one-retry-layer` gains this write. Under `fencing`, add that a fenced parent
   may still record what the child observed, because that touches no owned state.
 - `lifecycle.test.ts`:
   - the end-to-end success asserts all three tables with `toEqual`;
-  - the kills `test.each` scripts a partial document before `waitFor` and asserts the partial
-    row for every kill reason, `fenced` and `lost` included;
+  - the kills `test.each` scripts a partial document, such as `valid/telemetry.partial.json`,
+    before `waitFor` and asserts the partial row for every kill reason, `fenced` and `lost` included;
   - the lost race and an exit-1 `unusable_data` failure assert their rows;
   - an organization deleted while its attempt runs still gets its rows;
   - no document gives no rows and no log;
@@ -456,9 +434,9 @@ Both halves plus `contract/`, per `contract/README.md`. The parent does not read
   that contains this PR, unless `deploy.yml` has already migrated it. If someone forgets, every settle logs `42P01` and loses that telemetry, but
   verdicts are untouched.
 
-## PR 3 — the build's SHA on every attempt
+## PR 2 — the build's SHA on every attempt
 
-Independent of PRs 1–2. This touches CI and the image, which is this task.
+Independent of PR 1. This touches CI and the image, which is this task.
 
 - `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
   images get it; the web's Dockerfile ignores it.
@@ -476,7 +454,7 @@ Independent of PRs 1–2. This touches CI and the image, which is this task.
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
   commit.
 
-## PR 5 — the views and panels
+## PR 3 — the views and panels
 
 This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
 
@@ -522,11 +500,11 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - which checks warn most;
   - and, on an impact dashboard, CO2e analyzed and plant share per month.
 - `metrics-dashboards.md` loses AI cost from its Out of scope.
-- This PR deletes this plan. If the metrics plan has not reached PR 1 by then, end this plan at
-  PR 4. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
+- This PR deletes this plan. If the metrics plan has not reached its PR 1 by then, end this plan
+  at PR 2. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: 1, then 2. PR 3 can go any time. PR 5 is last.
+Order: PR 1 and PR 2 in either order, then PR 3.
 
 ## Failure paths
 
@@ -551,25 +529,27 @@ Order: 1, then 2. PR 3 can go any time. PR 5 is last.
 Each PR runs its stack's gate:
 
 - Python: `just lint && just check && just test`.
-- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 1 and 2.
+- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PR 1.
 
 Then by hand, against the dev stack:
 
-- After PR 2, on `stubbed`:
+- After PR 1, on `stubbed`:
   - An upload leaves `STUB_TELEMETRY`'s rows in all three tables.
-  - A `!slow` upload canceled from the waiting page leaves its usage and input group on a
-    `canceled` attempt.
-- After PR 2, on `mock-llm`:
+  - A `!slow` upload canceled from the waiting page leaves the same rows on a `canceled`
+    attempt.
+- After PR 1, on `mock-llm`:
   - An upload leaves a full telemetry row, quality rows, and no usage.
   - Deleting that organization from the app leaves the telemetry and quality rows, with ids
     that no longer join.
   - An upload that is mostly unknown products fails `unusable_data`, with a categorized share
     under 20%.
-- After PR 2, on `live`, with a small real file:
+- After PR 1, on `live`, with a small real file:
   - Usage rows land for both operations, at about 1k input tokens per call.
   - `cost_micro_usd` matches the tokens times the list price, worked by hand.
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
-- After PR 3's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
-- After PR 5: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
+  - `map_concurrently`'s "Categorization: N calls in X s" on a mid-size file is within about 2%
+    of a run from before the telemetry writes, per the fsync decision above.
+- After PR 2's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
+- After PR 3: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.

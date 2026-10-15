@@ -7,10 +7,11 @@
 - This file also spawns the real entrypoint, past a stubbed `analyze()` — see
   `tests/support/child.py` for why. It covers only what a real OS process proves that an
   in-process call cannot: a successful and a failing run surviving the process boundary at
-  all, that nothing installs a SIGTERM handler, and that killing the child's process group
-  reaches a grandchild it spawned. `cwd`, the environment allowlist, and progress under
-  concurrent load are Python/OS guarantees or already covered in-process (`test_writer.py`),
-  and don't belong here just because they can be dressed up as a subprocess test.
+  all, that nothing installs a SIGTERM handler, that a killed child leaves the telemetry it
+  reported, and that killing the child's process group reaches a grandchild it spawned.
+  `cwd`, the environment allowlist, and progress under concurrent load are Python/OS
+  guarantees or already covered in-process (`test_writer.py`), and don't belong here just
+  because they can be dressed up as a subprocess test.
 
 No test waits on wall-clock time to synchronize with the child. `wait_until` polls for a file
 the child itself writes at a known point (`progress.json`, `grandchild.pid`) — the same
@@ -25,6 +26,7 @@ that takes several seconds. A tighter deadline only turns a slow machine into a 
 """
 
 import contextlib
+import functools
 import json
 import os
 import signal
@@ -38,6 +40,9 @@ from typing import Any
 from support.child import GRANDCHILD_PID_FILE
 from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID
 from worker_child.contract import layout, names
+from worker_child.contract.messages import TelemetryState, telemetry_payload
+from worker_child.testing import STUB_TELEMETRY
+from worker_child.writer import fold_telemetry
 
 CHILD_SCRIPT = Path(__file__).resolve().parent / "support" / "child.py"
 CHILD_TIMEOUT_SECONDS = 30
@@ -116,8 +121,10 @@ def test_an_analysis_error_reaches_failure_json_through_a_real_process(
     assert read_json(run_directory / layout.FAILURE)["reason"] == "unusable_data"
 
 
-def test_a_child_with_no_handler_dies_of_sigterm(run_directory: Path) -> None:
-    process = spawn_child({"hang": True}, run_directory)
+def test_a_child_with_no_handler_dies_of_sigterm_leaving_its_telemetry(
+    run_directory: Path,
+) -> None:
+    process = spawn_child({"telemetry": True, "hang": True}, run_directory)
     try:
         wait_until(
             lambda: (run_directory / layout.PROGRESS).exists(),
@@ -128,6 +135,10 @@ def test_a_child_with_no_handler_dies_of_sigterm(run_directory: Path) -> None:
 
         process.wait(timeout=CHILD_TIMEOUT_SECONDS)
         assert process.returncode == -signal.SIGTERM
+
+        telemetry = read_json(run_directory / layout.TELEMETRY)
+        state = functools.reduce(fold_telemetry, STUB_TELEMETRY, TelemetryState())
+        assert telemetry == telemetry_payload(state, peak_memory_kib=telemetry["peakMemoryKib"])
     finally:
         kill_group_if_alive(process)
 
