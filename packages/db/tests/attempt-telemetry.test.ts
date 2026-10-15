@@ -6,7 +6,10 @@ import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttemptId } from '../src/generated/public/AnalysisAttempt.ts';
 import type { AnalysisAttemptTelemetryAnalysisAttemptId } from '../src/generated/public/AnalysisAttemptTelemetry.ts';
-import { POSTGRES_CODE_UNIQUE_VIOLATION } from '../src/postgres-codes.ts';
+import {
+  POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
+  POSTGRES_CODE_UNIQUE_VIOLATION,
+} from '../src/postgres-codes.ts';
 import type { Database } from '../src/schema.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
@@ -21,6 +24,33 @@ import { withRollback } from '../src/testing/transactions.ts';
 
 type TelemetryOverrides = Parameters<typeof insertAttemptTelemetry>[1];
 type LlmUsageOverrides = Parameters<typeof insertAttemptLlmUsage>[1];
+
+// The fixture's defaults: a finished run, every group set.
+const FINISHED_RUN = {
+  countsBasis: 'people',
+  inputRows: 1000,
+  inputKilograms: 2500.5,
+  inputUniqueProducts: 120,
+  cacheEntries: 5000,
+  rawProductHistoryProducts: 100,
+  cleanedNameHistoryProducts: 5,
+  llmProducts: 15,
+  historyUncategorizedProducts: 2,
+  llmUncategorizedProducts: 3,
+  unrecognizedLlmAnswers: 1,
+  categorizedRows: 980,
+  categorizedKilograms: 2400.25,
+  totalCo2eKg: 9000.5,
+  co2eKgPerDinerOrMeal: 1.75,
+  plantPct: 42.5,
+  plantProteinPct: 30,
+  readMs: 800,
+  categorizeMs: 45_000,
+  reportMs: 300,
+  pdfMs: 2000,
+  xlsxMs: 400,
+  peakMemoryKib: 250_000,
+} satisfies TelemetryOverrides;
 
 const NO_INPUT = {
   inputRows: null,
@@ -59,6 +89,22 @@ function insertTelemetry(overrides: TelemetryOverrides) {
   return withRollback(DATABASE, (transaction) => insertAttemptTelemetry(transaction, overrides));
 }
 
+/** The row `insertTelemetry(overrides)` should store, with the fixture's fresh ids and the
+ * database's timestamp taken as given. */
+function storedTelemetry(
+  row: { analysisAttemptId: string; reportId: string; organizationId: string },
+  overrides: TelemetryOverrides,
+) {
+  return {
+    analysisAttemptId: row.analysisAttemptId,
+    reportId: row.reportId,
+    organizationId: row.organizationId,
+    recordedAt: expect.any(Date),
+    ...FINISHED_RUN,
+    ...overrides,
+  };
+}
+
 function insertLlmUsage(overrides: LlmUsageOverrides) {
   return withRollback(DATABASE, (transaction) => insertAttemptLlmUsage(transaction, overrides));
 }
@@ -67,71 +113,28 @@ describe('analysis_attempt_telemetry', () => {
   test('stores a finished run', async () => {
     const row = await insertTelemetry({});
 
-    expect(row).toEqual({
-      analysisAttemptId: row.analysisAttemptId,
-      reportId: row.reportId,
-      organizationId: row.organizationId,
-      countsBasis: 'people',
-      recordedAt: expect.any(Date),
-      inputRows: 1000,
-      inputKilograms: 2500.5,
-      inputUniqueProducts: 120,
-      cacheEntries: 5000,
-      rawProductHistoryProducts: 100,
-      cleanedNameHistoryProducts: 5,
-      llmProducts: 15,
-      historyUncategorizedProducts: 2,
-      llmUncategorizedProducts: 3,
-      unrecognizedLlmAnswers: 1,
-      categorizedRows: 980,
-      categorizedKilograms: 2400.25,
-      totalCo2eKg: 9000.5,
-      co2eKgPerDinerOrMeal: 1.75,
-      plantPct: 42.5,
-      plantProteinPct: 30,
-      readMs: 800,
-      categorizeMs: 45_000,
-      reportMs: 300,
-      pdfMs: 2000,
-      xlsxMs: 400,
-      peakMemoryKib: 250_000,
-    });
+    expect(row).toEqual(storedTelemetry(row, {}));
+  });
+
+  test('accepts percentages at both ends of the range', async () => {
+    const overrides = { plantPct: 100, plantProteinPct: 0 };
+    const row = await insertTelemetry(overrides);
+
+    expect(row).toEqual(storedTelemetry(row, overrides));
   });
 
   describe('a run that stopped early', () => {
-    test('keeps what a run killed mid-report finished', async () => {
-      const row = await insertTelemetry({
-        ...NO_REPORT,
-        reportMs: null,
-        pdfMs: null,
-        xlsxMs: null,
-      });
+    test.each<[string, TelemetryOverrides]>([
+      ['a run killed mid-report', { ...NO_REPORT, reportMs: null, pdfMs: null, xlsxMs: null }],
+      [
+        'a run that died before reading its input',
+        { ...NO_INPUT, ...NO_CATEGORIZATION, ...NO_REPORT, ...NO_STAGE_MS },
+      ],
+      ['a report with no protein share', { plantProteinPct: null }],
+    ])('keeps %s', async (_case, overrides) => {
+      const row = await insertTelemetry(overrides);
 
-      expect(row).toMatchObject({
-        inputRows: 1000,
-        categorizedRows: 980,
-        totalCo2eKg: null,
-        readMs: 800,
-        categorizeMs: 45_000,
-        reportMs: null,
-      });
-    });
-
-    test('keeps a run that died before reading its input', async () => {
-      const row = await insertTelemetry({
-        ...NO_INPUT,
-        ...NO_CATEGORIZATION,
-        ...NO_REPORT,
-        ...NO_STAGE_MS,
-      });
-
-      expect(row).toMatchObject({ inputRows: null, readMs: null, peakMemoryKib: 250_000 });
-    });
-
-    test('keeps a report with no protein share', async () => {
-      const row = await insertTelemetry({ plantProteinPct: null });
-
-      expect(row.plantProteinPct).toBeNull();
+      expect(row).toEqual(storedTelemetry(row, overrides));
     });
 
     test('keeps more kilograms categorized than read, by an ulp', async () => {
@@ -376,7 +379,7 @@ describe('analysis_attempt_llm_usage', () => {
   });
 
   test('accepts no served model, when no call got a response', async () => {
-    const row = await insertLlmUsage({
+    const overrides = {
       servedModel: null,
       requests: 5,
       failedRequests: 5,
@@ -387,9 +390,35 @@ describe('analysis_attempt_llm_usage', () => {
       cachedInputTokens: 0,
       outputTokens: 0,
       costMicroUsd: 0,
-    });
+    };
+    const row = await insertLlmUsage(overrides);
 
-    expect(row.servedModel).toBeNull();
+    expect(row).toEqual({
+      analysisAttemptId: row.analysisAttemptId,
+      operation: 'clean',
+      model: 'gpt-4.1-mini',
+      ...overrides,
+    });
+  });
+
+  test.each([
+    ['the longest', 'a'.repeat(100)],
+    ['a fine-tuned', 'ft:gpt-4.1-mini-2025-04-14:acme::abc123'],
+  ])('accepts %s model id', async (_case, model) => {
+    const row = await insertLlmUsage({ model, servedModel: model });
+
+    // The rest of the row is the fixture's defaults, which 'stores a usage row' already pins.
+    expect(row).toMatchObject({ model, servedModel: model });
+  });
+
+  test('rejects a row with no telemetry row', async () => {
+    await expectConstraintViolation(
+      insertLlmUsage({
+        analysisAttemptId: crypto.randomUUID() as AnalysisAttemptTelemetryAnalysisAttemptId,
+      }),
+      'analysis_attempt_llm_usage_analysis_attempt_id_fkey',
+      POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
+    );
   });
 
   test('keeps one row per operation and model', async () => {
@@ -454,6 +483,18 @@ describe('analysis_attempt_quality_check', () => {
         insertAttemptQualityCheck(transaction, { findings: 0 }),
       ),
       'analysis_attempt_quality_check_findings_positive',
+    );
+  });
+
+  test('rejects a row with no telemetry row', async () => {
+    await expectConstraintViolation(
+      withRollback(DATABASE, (transaction) =>
+        insertAttemptQualityCheck(transaction, {
+          analysisAttemptId: crypto.randomUUID() as AnalysisAttemptTelemetryAnalysisAttemptId,
+        }),
+      ),
+      'analysis_attempt_quality_check_analysis_attempt_id_fkey',
+      POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
     );
   });
 
