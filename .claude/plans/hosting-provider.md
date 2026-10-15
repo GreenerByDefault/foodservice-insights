@@ -110,14 +110,14 @@ Dashboard work, with no code:
    `actions:read`. Give it an expiry, and set a calendar reminder to rotate it. A token belongs to
    one user and stops working if that user leaves the team. Store it as
    `DIGITALOCEAN_ACCESS_TOKEN` in the `production` Environment.
-4. **Confirm that the Supabase project has the IPv4 add-on, and that it is in `us-east-1`.** Both
-   specs say `region: nyc`, the nearest App Platform region to it. If the project is elsewhere,
-   change `region` in both specs before creating the apps: every claim, lease renewal, and poll is
-   a round trip to the database.
+4. **Confirm that the Supabase project has the IPv4 add-on.**
 5. **Create both apps** in the dashboard, each from its GHCR image, with the name and region its
-   spec gives. Nothing else about them matters, since the first deploy replaces the whole spec;
-   until then the worker crash-loops without its env. Record each app's ID in the Environment as
-   `DO_WEB_APP_ID` and `DO_WORKER_APP_ID`.
+   spec gives. The region is Richmond (`ric`), the nearest to the project's `us-east-1`. The
+   OpenAPI spec's region enum doesn't list `ric` yet, though the availability matrix does; if the
+   dashboard or the first deploy refuses it, fall back to `nyc`. Nothing else about the apps
+   matters, since the first deploy replaces the whole spec; until then the worker crash-loops
+   without its env. Record each app's ID in the Environment as `DO_WEB_APP_ID` and
+   `DO_WORKER_APP_ID`.
 6. **Fill in the Environment** with every `${NAME}` the specs use but `IMAGE_DIGEST`: secrets for
    the `SECRET`s, variables for the rest. `SITE_URL` is the web app's starter domain, from step 5.
    `SITE_PASSWORD` is a long, random value: production runs `PUBLIC_AUTH_MODE=placeholder`, so it
@@ -133,6 +133,7 @@ Dashboard work, with no code:
   its deploy job. Raise both deploy jobs' `timeout-minutes` above `doctl`'s own 30-minute wait, so
   a stuck deploy fails with `doctl`'s message rather than the runner's. A worker deploy can take
   the old worker's full ten-minute grace before it even starts the new one.
+- **`.do/README.md`:** drop the status line.
 - **`ARCHITECTURE.md` § Secrets management:** the `production` Environment is the one home of every
   production secret, and each deploy writes them into the specs, so rotating a secret is a
   redeploy.

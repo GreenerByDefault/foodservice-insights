@@ -374,7 +374,8 @@ Web and worker run on **DigitalOcean App Platform**. It was the only candidate t
 everything this pipeline depends on: deploying a digest-pinned GHCR image from CI with a real exit
 code, a shutdown grace long enough to drain the worker, and CPU and memory alerts
 ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/hosting-provider.md)).
-We explicitly do not care about autoscaling.
+We explicitly do not care about autoscaling. Each service is its own app, configured entirely by
+its spec in [`.do/`](.do/README.md).
 
 *Rejected: Railway and Render.* Railway documents neither a digest deploy nor a long shutdown
 grace; Render caps its grace at five minutes and has no native CPU or memory alerts.

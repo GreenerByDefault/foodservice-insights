@@ -1,14 +1,7 @@
-# The web app's DigitalOcean App Platform spec. A deploy submits this whole file, and App Platform
-# replaces the app's spec with it, so a setting changed in the dashboard lasts only until the next
-# deploy. Change it here.
-#
-# Each `${NAME}` is filled in at deploy from the `production` GitHub Environment's secrets and
-# variables, and an unset or empty one fails the deploy before anything is submitted. That rules out
-# App Platform's own bindable variables, such as `${APP_URL}`, in this file.
+# The web app's App Platform spec. See README.md before changing it.
 
 name: foodservice-insights-web
-# The region nearest the Supabase project: every request is a round trip to the database.
-region: nyc
+region: ric
 
 services:
   - name: web
@@ -17,18 +10,12 @@ services:
       registry: greenerbydefault
       repository: foodservice-insights/web
       digest: ${IMAGE_DIGEST}
-    # One `apps-s-1vcpu-0.5gb` can't run a second instance. Change both counts together with
-    # `WEB_INSTANCES` in `packages/db/src/budget.ts`, which `budget.test.ts` checks this against.
+    # `budget.test.ts` holds the count to `WEB_INSTANCES`. This size can't run a second instance.
     instance_size_slug: apps-s-1vcpu-0.5gb
     instance_count: 1
-    # App Platform sets `PORT` to this, and adapter-node listens on `PORT`.
     http_port: 3000
-
-    # Readiness: an instance that can't reach the database or the bucket gets no traffic, and a
-    # deploy whose instance never passes rolls back.
     health_check:
       http_path: /health/ready
-    # Touches nothing, so a Supabase blip restarts nothing.
     liveness_health_check:
       http_path: /health/live
 
@@ -62,23 +49,19 @@ services:
       - key: PUBLIC_SUPABASE_PUBLISHABLE_KEY
         value: ${PUBLIC_SUPABASE_PUBLISHABLE_KEY}
 
-      # `provider` is a stub whose every send fails with an `EmailError`, rather than going nowhere,
-      # until `.claude/plans/email-provider.md` wires up Postmark.
       - key: EMAIL_TRANSPORT
         value: provider
       - key: EMAIL_FROM_ADDRESS
         value: insights@greenerbydefault.org
       - key: EMAIL_SUPPORT_ADDRESS
         value: insights@greenerbydefault.org
-      # A stand-in until GBD names the address for its notices.
       - key: EMAIL_GBD_ADDRESS
         value: insights@greenerbydefault.org
-      # The starter domain until `.claude/plans/cloudflare-and-domain.md` moves us to our own.
       - key: SITE_URL
         value: ${SITE_URL}
 
-      # App Platform's proxy terminates TLS and forwards plain HTTP. Without this, adapter-node
-      # takes every request for `http://`, and SvelteKit's CSRF check refuses every form post.
+      # App Platform's proxy forwards plain HTTP. Without this, SvelteKit's CSRF check sees an
+      # `http://` origin and refuses every form post.
       - key: PROTOCOL_HEADER
         value: x-forwarded-proto
 
