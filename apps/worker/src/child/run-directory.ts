@@ -18,7 +18,9 @@ import {
   parseFailure,
   parseProgress,
   parseResult,
+  parseTelemetry,
   type RunManifest,
+  type Telemetry,
 } from '../contract/messages.ts';
 
 export async function createRunDirectory(
@@ -50,6 +52,10 @@ export async function readResult(runDirectory: string): Promise<ChildResult | un
 
 export async function readFailure(runDirectory: string): Promise<ChildFailure | undefined> {
   return await readDocument(runDirectory, 'failure', parseFailure);
+}
+
+export async function readTelemetry(runDirectory: string): Promise<Telemetry | undefined> {
+  return await readDocument(runDirectory, 'telemetry', parseTelemetry);
 }
 
 /** Does not mind the tree being gone already, so it is safe in the `finally` that always calls it. */

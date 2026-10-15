@@ -9,6 +9,7 @@ import type { Logger } from '@gbd/core/log';
 import type { DatabaseExecutor } from '@gbd/db';
 import {
   type AnalysisAttemptId,
+  type CountsBasis,
   newResultFileId,
   type OrganizationId,
   type ReportId,
@@ -20,6 +21,7 @@ import {
   readFailure,
   readResult,
   readResultFiles,
+  readTelemetry,
   removeRunDirectory,
   writeInputCsv,
   writeManifest,
@@ -27,7 +29,7 @@ import {
 import { type ChildOutcome, type RunningChild, spawnChild } from '../child/spawn.ts';
 import type { WorkerConfig } from '../config.ts';
 import { RESULT_FILE_NAMES } from '../contract/layout.ts';
-import { buildRunManifest } from '../contract/messages.ts';
+import { buildRunManifest, type Telemetry } from '../contract/messages.ts';
 import { classifyAttemptFailure } from '../failures.ts';
 import { retryOnTransientDbError } from '../retry.ts';
 import {
@@ -37,6 +39,7 @@ import {
   markAttemptSucceeded,
   type ResultFileRecord,
 } from './queue.ts';
+import { insertTelemetry, type TelemetryIdentity } from './telemetry.ts';
 import { type ChildEnding, classifyVerdict, type Kill, type Verdict } from './verdict.ts';
 
 export type AttemptDependencies = Pick<
@@ -58,6 +61,8 @@ export type AttemptLog = {
 export type PreparedAttempt = AttemptLog & {
   organizationId: OrganizationId;
   reportId: ReportId;
+  /** For the telemetry, which needs it to read `co2e_kg_per_diner_or_meal` and outlives the report. */
+  countsBasis: CountsBasis;
   runDirectory: string;
   child: RunningChild;
 };
@@ -132,6 +137,7 @@ export async function startAttempt(
       log,
       organizationId: inputs.organizationId,
       reportId: inputs.reportId,
+      countsBasis: inputs.report.countsBasis,
       runDirectory,
       child,
     };
@@ -175,14 +181,19 @@ function declaredResultFiles(): DeclaredResultFile[] {
 
 /** `readChildEnding`'s result, carrying the bytes a `succeeded` verdict will upload alongside the
  * `ChildEnding` `classifyVerdict` decides from — read once here rather than a second time in
- * `settleAttempt`.
+ * `settleAttempt` — and the telemetry, which never decides the verdict.
  */
-export type ReadEnding = ChildEnding & { resultFileContents: ReadonlyMap<string, Uint8Array> };
+export type ReadEnding = ChildEnding & {
+  resultFileContents: ReadonlyMap<string, Uint8Array>;
+  telemetry: Telemetry | undefined;
+};
 
 /** Read whatever documents the child's exit code says it should have written. Any read failure —
  * a malformed document, a permissions error — becomes `readError` rather than propagating, so
  * `classifyVerdict` can turn it into a verdict instead of an unhandled rejection reaching the
  * caller.
+ *
+ * `telemetry.json` is read whatever the ending, since a killed child still spent what it spent.
  */
 export async function readChildEnding(
   prepared: PreparedAttempt,
@@ -194,6 +205,7 @@ export async function readChildEnding(
     kill,
     read: { kind: 'not-read' },
     resultFileContents: new Map(),
+    telemetry: await readTelemetryOrLog(prepared),
   };
   if (outcome.kind !== 'exited') return notRead;
 
@@ -206,8 +218,7 @@ export async function readChildEnding(
         declaredResultFiles().map((file) => file.fileName),
       );
       return {
-        outcome,
-        kill,
+        ...notRead,
         read: { kind: 'result', result, missingResultFiles: missing },
         resultFileContents: contents,
       };
@@ -220,6 +231,16 @@ export async function readChildEnding(
     return notRead;
   } catch (error) {
     return { ...notRead, read: { kind: 'read-error', error } };
+  }
+}
+
+/** A telemetry document we cannot read costs its rows and nothing else. */
+async function readTelemetryOrLog(prepared: PreparedAttempt): Promise<Telemetry | undefined> {
+  try {
+    return await readTelemetry(prepared.runDirectory);
+  } catch (error) {
+    prepared.log.error({ err: error }, 'Could not read telemetry.json; recording no telemetry');
+    return undefined;
   }
 }
 
@@ -322,7 +343,10 @@ export type SettleOutcome =
    */
   | { kind: 'parked'; pending: PendingVerdict };
 
-/** Classify how the child ended, then deliver that verdict as far as it gets.
+/** Classify how the child ended, deliver that verdict as far as it gets, then record the telemetry.
+ *
+ * The telemetry comes after the verdict, in sequence, and is recorded whoever owns the attempt now:
+ * the spend happened either way, and its insert touches nothing another worker could own.
  *
  * The run directory is removed in a `finally`, so it is gone whether the verdict
  * landed, lost the race, or parked.
@@ -334,17 +358,42 @@ export async function settleAttempt(
 ): Promise<SettleOutcome> {
   try {
     const verdict = classifyVerdict(ending);
-    if (verdict.kind === 'unowned') return { kind: 'lost' };
-
-    return await deliverVerdict(
-      dependencies,
-      prepared,
-      verdict.kind === 'succeeded'
-        ? { stage: 'upload', verdict, contents: ending.resultFileContents }
-        : { stage: 'record', verdict },
-    );
+    const outcome: SettleOutcome =
+      verdict.kind === 'unowned'
+        ? { kind: 'lost' }
+        : await deliverVerdict(
+            dependencies,
+            prepared,
+            verdict.kind === 'succeeded'
+              ? { stage: 'upload', verdict, contents: ending.resultFileContents }
+              : { stage: 'record', verdict },
+          );
+    if (ending.telemetry !== undefined) {
+      await recordTelemetry(dependencies, prepared, ending.telemetry);
+    }
+    return outcome;
   } finally {
     await removeRunDirectory(prepared.runDirectory);
+  }
+}
+
+/** Write the child's telemetry under the attempt's identity. Never throws: a write that fails even
+ * after the retry is logged and dropped, since it must never change a verdict — `one-retry-layer`
+ * in [`failures.ts`](../failures.ts).
+ */
+export async function recordTelemetry(
+  dependencies: AttemptDependencies,
+  attempt: AttemptLog & TelemetryIdentity,
+  telemetry: Telemetry,
+): Promise<void> {
+  try {
+    await retryOnTransientDbError(() => insertTelemetry(dependencies.db, attempt, telemetry), {
+      action: "record an attempt's telemetry",
+      log: attempt.log,
+      waitsMs: dependencies.transientRetryWaitsMs,
+    });
+  } catch (error) {
+    attempt.log.error({ err: error }, 'Could not record the telemetry; dropping it');
   }
 }
 
