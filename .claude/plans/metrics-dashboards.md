@@ -64,8 +64,8 @@ Facts from the tree (2026-09-27) that shape the design:
   the migrate step, so a dashboard never reaches Cloud before the view it reads.
 
 Out of scope: metrics beyond the first few; the data alerts and database health, which ride this
-plan's pipe and are [`alerts.md`](alerts.md); AI cost, which needs the child to report token
-usage; and user country, which Cloudflare's dashboard already shows.
+plan's pipe and are [`alerts.md`](alerts.md); AI cost, whose tables `ai-usage-and-attempt-telemetry.md` adds and whose views
+and panels that plan builds on this one's PR 1; and user country, which Cloudflare's dashboard already shows.
 
 ## Decisions
 
@@ -341,7 +341,8 @@ where agents operate. Explore production data in Grafana Cloud instead.
 
 All in `packages/db`.
 
-- `migrations/002_metrics.ts`: the schema; the role block above; `USAGE`, the default
+- `migrations/0NN_metrics.ts`, taking the next free number (`003_attempt_telemetry` is the
+  latest as of this writing): the schema; the role block above; `USAGE`, the default
   privilege, and a `COMMENT ON VIEW` for each view. The views are the three the first dashboard
   draws:
   - `metrics.attempt`: one row per attempt, with `report_id`, `organization_id`,
@@ -371,7 +372,7 @@ All in `packages/db`.
 - `packages/db/README.md`: `metrics-schema.sql` joins the "Where the schema lives" table. The
   conventions gain two rules: every `metrics` view has a test, and exposes no free text.
 - `ARCHITECTURE.md` gains a short § Metrics. Product metrics are views in `metrics`, read only by
-  `metrics_reader`, and the reasoning is in `002_metrics.ts`.
+  `metrics_reader`, and the reasoning is in `0NN_metrics.ts`.
 
 ## PR 2 — Grafana locally
 
@@ -475,7 +476,7 @@ This PR needs PR 3's generator and PR 2's data source builder.
   - § Secrets management's line about production credentials in GitHub Actions gains the two new
     secrets.
 - Whichever of this PR and PR 6 lands last deletes this plan. It also turns `alerts.md`'s
-  pointers to this plan into pointers to `apps/grafana/` and `002_metrics.ts`.
+  pointers to this plan into pointers to `apps/grafana/` and `0NN_metrics.ts`.
 
 ## PR 6 — hard-deleted rows stay counted
 

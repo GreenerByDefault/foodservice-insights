@@ -338,6 +338,38 @@ describe('analysis_attempt column invariants', () => {
       );
     });
   });
+
+  describe('worker git sha', () => {
+    function setWorkerGitSha(workerGitSha: string): Promise<AnalysisAttempt> {
+      return withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
+        return await transaction
+          .updateTable('analysisAttempt')
+          .set({ workerGitSha })
+          .where('id', '=', attempt.id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+      });
+    }
+
+    test('accepts a full lowercase sha', async () => {
+      const sha = 'a'.repeat(40);
+
+      await expect(setWorkerGitSha(sha)).resolves.toMatchObject({ workerGitSha: sha });
+    });
+
+    test.each([
+      ['abbreviated', 'a'.repeat(7)],
+      ['uppercase', 'A'.repeat(40)],
+      ['too long', 'a'.repeat(41)],
+      ['not hex', 'g'.repeat(40)],
+    ])('rejects a sha that is %s', async (_case, sha) => {
+      await expectConstraintViolation(
+        setWorkerGitSha(sha),
+        'analysis_attempt_worker_git_sha_format',
+      );
+    });
+  });
 });
 
 describe('starting a new attempt', () => {

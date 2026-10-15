@@ -86,8 +86,8 @@ FAKE_REPORT_SUMMARY = ReportSummary(
     finding_counts=(FindingCount("date_distribution", "warning", 2),),
     total_co2e_kg=12.5,
     co2e_kg_per_diner_or_meal=0.25,
-    plant_pct=40.0,
-    plant_protein_pct=None,
+    plant_pct_by_weight=40.0,
+    plant_protein_pct_by_weight=None,
 )
 
 
@@ -566,30 +566,30 @@ def test_reports_each_stages_summary_and_time_in_order(
     analyze(request, report_telemetry=reported.append, llm=MysteryMeatLlmClient())
 
     assert _without_times(reported) == [
-        StageFinished("read", ms=0),
-        InputSummary(rows=21, kilograms=210.0, unique_products=6, cache_entries=3),
-        StageFinished("categorize", ms=0),
+        StageFinished("read", duration_ms=0),
+        InputSummary(rows=21, kilograms=210.0, unique_products=6, categorization_cache_entries=3),
+        StageFinished("categorize", duration_ms=0),
         CategorizationSummary(
-            raw_product_history_products=2,
-            cleaned_name_history_products=1,
-            llm_products=3,
-            history_uncategorized_products=1,
-            llm_uncategorized_products=2,
+            cache_raw_name_products=2,
+            cache_cleaned_name_products=1,
+            llm_matched_products=3,
+            cache_no_match_products=1,
+            llm_no_match_products=2,
             unrecognized_llm_answers=1,
             categorized_rows=12,
             categorized_kilograms=120.0,
         ),
         FAKE_REPORT_SUMMARY,
-        StageFinished("report", ms=0),
-        StageFinished("pdf", ms=0),
-        StageFinished("xlsx", ms=0),
+        StageFinished("report", duration_ms=0),
+        StageFinished("pdf", duration_ms=0),
+        StageFinished("xlsx", duration_ms=0),
     ]
 
 
 def _without_times(reported: Sequence[Telemetry]) -> list[Telemetry]:
     """Zeroes each stage's time, which varies from run to run."""
     return [
-        dataclasses.replace(record, ms=0) if isinstance(record, StageFinished) else record
+        dataclasses.replace(record, duration_ms=0) if isinstance(record, StageFinished) else record
         for record in reported
     ]
 
@@ -659,15 +659,15 @@ def test_data_with_almost_no_recognizable_products_is_unusable_and_reports_why(
         analyze(request, report_telemetry=reported.append, llm=KeywordLlmClient())
     # No time for the failed "report" stage, and no cache file, so an empty cache.
     assert _without_times(reported) == [
-        StageFinished("read", ms=0),
-        InputSummary(rows=6, kilograms=60.0, unique_products=2, cache_entries=0),
-        StageFinished("categorize", ms=0),
+        StageFinished("read", duration_ms=0),
+        InputSummary(rows=6, kilograms=60.0, unique_products=2, categorization_cache_entries=0),
+        StageFinished("categorize", duration_ms=0),
         CategorizationSummary(
-            raw_product_history_products=0,
-            cleaned_name_history_products=0,
-            llm_products=2,
-            history_uncategorized_products=0,
-            llm_uncategorized_products=2,
+            cache_raw_name_products=0,
+            cache_cleaned_name_products=0,
+            llm_matched_products=2,
+            cache_no_match_products=0,
+            llm_no_match_products=2,
             unrecognized_llm_answers=0,
             categorized_rows=0,
             categorized_kilograms=0.0,

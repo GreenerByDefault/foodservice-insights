@@ -107,7 +107,7 @@ class LlmCall:
     succeeded, so the usage is that response's, and is zero when none arrived."""
 
     operation: LlmOperation
-    model: str  # as requested
+    requested_model: str
     served_model: str | None  # the snapshot the alias resolved to; None when nothing answered
     requests: int
     failed_requests: int
@@ -153,7 +153,7 @@ def _llm_call(
     details = usage.prompt_tokens_details if usage is not None else None
     return LlmCall(
         operation=operation,
-        model=model,
+        requested_model=model,
         served_model=response.model if response is not None else None,
         requests=requests,
         # A response ends the call, so at most the last request succeeded.

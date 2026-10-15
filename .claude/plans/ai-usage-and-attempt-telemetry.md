@@ -49,21 +49,21 @@ landed) that shape the design:
   `LlmCall`, `LlmOperation`, `cost_micro_usd` and `CategorizationSummary`, so `worker_child`
   imports only from the seam. `type Telemetry = LlmCall | InputSummary | CategorizationSummary |
   ReportSummary | StageFinished`. `analyze` reports, in order:
-  - `StageFinished("read", ms)`, then `InputSummary(rows, kilograms, unique_products,
-    cache_entries)`. The read stage includes loading the cache. The first three describe the
+  - `StageFinished("read", duration_ms)`, then `InputSummary(rows, kilograms, unique_products,
+    categorization_cache_entries)`. The read stage includes loading the cache. The first three describe the
     upload: kilograms are after lb→kg, and unique products are counted after stripping, as
-    `categorize_unique_products` strips. `cache_entries` is the whole cache's size, not this
+    `categorize_unique_products` strips. `categorization_cache_entries` is the whole cache's size, not this
     upload's hits, and 0 means every product goes to the LLM.
-  - `StageFinished("categorize", ms)`, then `CategorizationSummary`, from the pure
+  - `StageFinished("categorize", duration_ms)`, then `CategorizationSummary`, from the pure
     `summarize_categorization` in `categorization/pipeline.py`. It holds the unique products per
     match type, the "No Matches Found" products split by history or LLM, the unrecognized LLM
     answers, and the rows and kilograms categorized. `CategorizedProducts` carries
     `unrecognized_llm_answers`, which `categorize_with_llm` now returns beside its frame; it
     counts unique cleaned names sent to the LLM, not products.
   - `ReportSummary`, from the pure `summarize_report` in `report/food_report.py`, right after
-    `build_food_report`, then `StageFinished("report", ms)`. It holds `quality_status`, the
+    `build_food_report`, then `StageFinished("report", duration_ms)`. It holds `quality_status`, the
     findings counted per check and status (`FindingCount`s, only the pairs that occurred, sorted),
-    `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct`, and `plant_protein_pct` or `None`.
+    `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct_by_weight`, and `plant_protein_pct_by_weight` or `None`.
     `total_co2e_kg` and `co2e_kg_per_diner_or_meal` are functions in `food_report.py`, which
     `pdf.py`'s `_executive_narrative` calls too, so the PDF and the record cannot disagree.
   - `StageFinished` for `pdf` and `xlsx`. The report stage begins with `merge_categorizations`,
@@ -86,6 +86,22 @@ landed) that shape the design:
   change to a terminal row except the notification columns. So anything recorded after the
   verdict needs its own table, and a new column on the attempt must be written at claim or in the
   terminal `UPDATE`.
+- **The tables exist.** `003_attempt_telemetry` created `analysis_attempt_telemetry`,
+  `analysis_attempt_llm_usage` and `analysis_attempt_quality_check`, the enums `llm_operation`,
+  `diagnostic_status` and `quality_check`, and `analysis_attempt.worker_git_sha`, with every CHECK
+  below named and tested in `packages/db/tests/attempt-telemetry.test.ts`. One more than this
+  plan named: kilograms and CO2e are non-negative, since `input_csv.py` refuses a negative
+  weight, so the contract fixtures mirror that too. `public-schema.sql`
+  is the shape to write against, not this plan. The quality table's key column is `check`, a
+  reserved word, so hand-written SQL quotes it or qualifies it (`q.check`). Fixtures:
+  `insertAttemptTelemetry` (every group set, fresh ids, nothing else needed),
+  `insertAttemptLlmUsage` and `insertAttemptQualityCheck` in `@gbd/db/testing`.
+  `REQUIREMENTS.md` § Data deletion already says what the telemetry holds and that it outlives
+  the organization.
+
+  The test stack prints floats with `extra_float_digits = 0`, so a `double precision` read back
+  through Kysely is rounded to 15 digits. A `toEqual` on a written row needs values that survive
+  that, such as the fixtures' `2500.5`.
 - **Nothing measures memory.** The report's numbers are reported now; peak memory is not.
 
   The lab keeps its own `MergeCounts.between` and `match_type` `value_counts` for the runscript's
@@ -93,7 +109,7 @@ landed) that shape the design:
 - **The cache is the cost lever, and its "hit" is not "categorized".** `raw_product_history`
   also counts products whose cached category *is* "No Matches Found". A missing cache CSV only
   warns, and then sends every product to the LLM. That is `caches-to-supabase.md`'s launch blocker.
-  `cache_entries` reports it, but nothing records it per attempt yet.
+  `categorization_cache_entries` reports it, but nothing records it per attempt yet.
 - **Nothing says which build ran an attempt.** `worker_id` is `hostname-pid-uuid`. The SHA
   exists only as the image's OCI label, and both Python packages are version `0.0.0`. Prompts,
   categories and thresholds are packaged files, so the SHA identifies them too.
@@ -106,10 +122,10 @@ landed) that shape the design:
     free-text columns from `metrics`. Its PR 6 makes a hard delete leave a tombstone in
     `metrics`, so its views keep deleted reports, attempts and users.
 
-  Neither has landed. Only `001_initial_schema.ts` exists, and two plans already claim `002`, so
-  each migration here takes the next free number at merge time. The shared test stack refuses to
-  migrate a branch that lacks a migration another worktree applied, so expect that error while
-  plans overlap.
+  Neither has landed. `002_caches` and this plan's `003_attempt_telemetry` exist, so a migration
+  here takes the next free number at merge time. The shared test stack refuses to migrate a
+  branch that lacks a migration another worktree applied, so test an unmerged migration against
+  a private database in the test cluster.
 - **Only deleting an organization removes data.**
   - Deleting a report is soft and "does not delete any data" (`REQUIREMENTS.md` § Data
     deletion). Deleting an organization hard-deletes its reports, which cascades to their
@@ -139,7 +155,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 | **`finish_reason == "length"`** | The 30-token cap cut the answer, which then quietly becomes "No Matches Found". Stored as a count |
 | Our retry loop: **requests per call**, **failed requests**, **429s among them**; backoff slept | 429s are the measurement `LLM_CONCURRENCY`'s comment asks for |
 | `id`, `_request_id`, `system_fingerprint`, `service_tier`; `openai-processing-ms` and rate-limit headers via `with_raw_response` | Per call, high-cardinality, or redundant with request counts |
-| Time waiting on OpenAI | Covered by `categorize_ms` below. Per-call timing needs an injected clock for no extra answer |
+| Time waiting on OpenAI | Covered by `categorize_duration_ms` below. Per-call timing needs an injected clock for no extra answer |
 | Our choices: **operation**, **requested model**, **list-price cost** | The price is ours to know, not the API's |
 
 **From the run.** Unique products are counted after stripping.
@@ -148,7 +164,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 | --- | --- | --- |
 | Read | **Rows**, **kilograms** (after lb→kg), **unique products**, **entries in the cache** | Rows and products are the size of the work. An empty cache is the alarm, whether a missing CSV today or an empty verified table after `caches-to-supabase.md` |
 | Categorize | **Unique products by match type**; **uncategorized, split by whether the history or the LLM said "No Matches Found"**; **unrecognized LLM answers**; **rows** and **kilograms categorized** | The share of weight left uncategorized is the coverage figure the customer never sees. The products share is what the 20% cutoff tests, so successful runs show how close they came. `MergeCounts`' other fields are redundant with these |
-| Report | **`quality_status`**; **per check and status, the number of findings**; **total kg CO2e**, **kg CO2e per diner or meal**, **plant %**, **plant-protein %** | Findings' messages, samples and thresholds are text or constants. `quality_status` can only be `pass` or `warning` today, because no check emits `error`. The impact numbers are for a cross-customer dashboard |
+| Report | `quality_status`; **per check and status, the number of findings**; **total kg CO2e**, **kg CO2e per diner or meal**, **plant %**, **plant-protein %** | Findings' messages, samples and thresholds are text or constants. `quality_status` is `quality_status_from_findings` over the findings, so a view derives it from the per-check rows rather than storing a copy that could disagree. The impact numbers are for a cross-customer dashboard |
 | Every stage | **Milliseconds per stage** (read, categorize, report, pdf, xlsx); **peak memory** | Tests REQUIREMENTS § Performance's "almost entirely the AI tool", and sizes `maxConcurrentAttempts`. A killed run's stage timings say how far it got |
 | Failure | Why data was unusable | Derivable: the products categorized fall under 20%, or kilograms categorized are 0 |
 | Output | PDF pages, XLSX sheets | Fixed functions of what is already stored; `result_file` has the sizes |
@@ -180,22 +196,34 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   latency percentiles and request ids that are log material.
 - **`analysis_attempt_telemetry`: one row per attempt, in column groups that fill in as stages
   finish.**
-  - Identity: `analysis_attempt_id`, `report_id`, `organization_id`, `recorded_at`. They are raw
-    ids, per § Telemetry outlives what it describes.
-  - Input: `input_rows`, `input_kilograms`, `input_unique_products`, `cache_entries`.
+  - Identity, written by the parent: `analysis_attempt_id`, `report_id`, `organization_id`,
+    `counts_basis`, `recorded_at`. The ids are raw, per § Telemetry outlives what it describes.
+    `counts_basis` is what makes `co2e_kg_per_diner_or_meal` readable, and `report`'s copy goes
+    with the organization; the metrics plan's report tombstone does not keep it.
+  - Input: `input_rows`, `input_kilograms`, `input_unique_products`, `categorization_cache_entries`.
   - Categorization:
-    - `raw_product_history_products`, `cleaned_name_history_products`, `llm_products`;
-    - `history_uncategorized_products`, `llm_uncategorized_products`,
+    - `cache_raw_name_products`, `cache_cleaned_name_products`, `llm_matched_products`;
+    - `cache_no_match_products`, `llm_no_match_products`,
       `unrecognized_llm_answers`;
     - `categorized_rows`, `categorized_kilograms`.
-  - Report: `quality_status`, `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct`,
-    `plant_protein_pct` (null when the report has no protein share).
-  - Timing: `read_ms`, `categorize_ms`, `report_ms`, `pdf_ms`, `xlsx_ms`, and
-    `peak_memory_kib`.
+  - Report: `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct_by_weight`, `plant_protein_pct_by_weight`
+    (null when the report has no protein share).
+  - Timing: `read_duration_ms`, `categorize_duration_ms`, `report_duration_ms`, `pdf_duration_ms`, `xlsx_duration_ms`. Each is set once its
+    stage finishes, so a killed run has a prefix of them.
+  - `peak_memory_kib`, `NOT NULL`: the child reads it at every write of the document.
 
-  Each group is all null or all set, by named CHECK. The sums the child guarantees are CHECKs
-  too: the three match types add up to `input_unique_products`, and categorized rows are at most rows
-  read. So a dashboard can tell "never reached the report" from "zero".
+  The input, categorization and report groups are each all null or all set, by named CHECK, and
+  each requires the one before it. The stage times are a chain instead: each requires the one
+  before it, so a run killed mid-report keeps `read_duration_ms` and `categorize_duration_ms`. An all-or-none CHECK
+  on them would reject exactly the endings this plan exists to record, and the transaction would
+  drop the attempt's usage and quality rows with it.
+  The integer sums the child guarantees are CHECKs too: the three match types add up to
+  `input_unique_products`, and categorized rows are at most rows read. So a dashboard can tell
+  "never reached the report" from "zero". The contract fixtures in PR 1 mirror these CHECKs, so
+  the child cannot write a document the parent's insert would refuse.
+  *Rejected: `categorized_kilograms <= input_kilograms`.* The two are float sums over different
+  rows, so they can differ in the last bit. In a simulation of 2,000 uploads of 5,000 rows each,
+  where only zero-weight rows went uncategorized, 316 had more kilograms categorized than read.
   *Rejected: a table per stage.* Every panel would join three or four 1:1 tables.
 - **`analysis_attempt_quality_check`: one row per attempt × check × status**, holding the number
   of findings. The status counts per check are what threshold tuning reads, and success rows
@@ -206,7 +234,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **`analysis_attempt.worker_git_sha`**, written at claim, is the one new attempt column. The
   claim is before the row is frozen.
 - **Typed columns, never jsonb**, per #230 and the metrics plan's no-free-text rule. The two
-  text columns are `served_model` (alongside `model` in the key) and `worker_git_sha`. Each has a
+  text columns are `served_model` (alongside `requested_model` in the key) and `worker_git_sha`. Each has a
   pattern CHECK, so the metrics conventions test can allowlist them with a reason.
   `integer` for counts and milliseconds, since the worst plausible upload is under 1e9 tokens.
   `double precision` for kilograms, CO2e and percentages.
@@ -223,13 +251,17 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   `23503`.
 - **That is safe to keep because none of it is personal data.** It holds counts, tokens,
   kilograms, emissions, check names, model ids and three uuids. Those uuids resolve to nothing
-  once the organization is gone. There are no names, no product text, no user ids and no file
-  names.
+  once the organization is gone: the `organization.deleted` audit event keeps the id but not the
+  name, which goes only into GBD's notification email. There are no names, no product text, no
+  user ids and no file names.
 
-  The figures describe a business's purchasing, not a person. This is the same call as
-  `REQUIREMENTS.md`'s "the raw user ID stays in the audit log", with less in it. A requested
-  hard delete, GBD's TBD script, removes these rows by `organization_id`. `REQUIREMENTS.md`
-  § Data deletion gains a line saying both.
+  The figures describe a business's purchasing, not a person: kilograms bought, CO2e and plant
+  share are the report's headline numbers. Keeping them is a call about what a customer expects,
+  not a legal one, and it is the line `metrics-dashboards.md` draws too: ids, timestamps, enums
+  and numbers, never free text. This is the same call as `REQUIREMENTS.md`'s "the raw user ID
+  stays in the audit log". A requested hard delete, GBD's TBD script, removes these rows by
+  `organization_id`. `REQUIREMENTS.md` § Data deletion gains a line saying both, naming the
+  report figures so the policy does not understate what is kept.
 - **Status comes from a join, not a copy.** A view `LEFT JOIN`s `metrics.attempt` for status,
   failure reason and `worker_git_sha`. Once `metrics-dashboards.md` PR 6 lands, that includes a
   hard-deleted attempt's tombstone, so the outcome survives too.
@@ -291,7 +323,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   `_complete`'s `finally`, that replaces the call's own error, so the run reads `unknown`.
   `progress.json` has the same exposure. Accepted.
 - **Two fsync'd writes per call, instead of one, are probably free**, since a call takes hundreds
-  of milliseconds and three are in flight. PR 2 measures it and has a fallback.
+  of milliseconds and three are in flight. PR 1 measures it and has a fallback.
 
 ### The parent records after the verdict, whatever the ending
 
@@ -325,69 +357,13 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - **No `WORKER_CONTRACT_VERSION` bump.** The parent and child ship in one image, and every
   change is additive.
 
-## PR 1 — the three tables and the build's SHA column
+## PR 1 — the contract, and the child writes `telemetry.json`
 
-`packages/db`, migration `0NN_attempt_telemetry.ts`.
-
-- Enums:
-  - `llm_operation ('clean','match')`
-  - `quality_status ('pass','warning','invalid')`
-  - `diagnostic_status ('success','info','warning','error')`
-  - `quality_check` (the six names)
-- `analysis_attempt_llm_usage`:
-  - PK `(analysis_attempt_id, operation, model)`, with the FK to the telemetry row.
-  - Named CHECKs:
-    - `calls >= 1`;
-    - `requests >= failed_requests >= rate_limited_requests >= 0`;
-    - `requests - failed_requests <= calls`;
-    - `truncated_calls <= calls`;
-    - `0 <= cached_input_tokens <= input_tokens`;
-    - the non-negatives;
-    - `model` and `served_model` match `^[a-z0-9][a-z0-9._:-]{0,99}$`.
-- `analysis_attempt_telemetry`:
-  - PK `analysis_attempt_id`, with *no* FK. Also `report_id` and `organization_id` (uuids, no
-    FK) and `recorded_at timestamptz DEFAULT now()`, with an index on `(organization_id)` for the
-    hard-delete script and one on `(recorded_at)` for the views.
-  - The column groups from § Decisions, with one all-or-none CHECK per group.
-  - Categorization requires input, and report requires categorization.
-  - The match types sum to `input_unique_products`.
-  - Categorized rows and kilograms are at most those read.
-  - Every count and millisecond is non-negative, `peak_memory_kib > 0`, and the percentages
-    are 0–100.
-- `analysis_attempt_quality_check`: PK `(analysis_attempt_id, check, status)`, with the FK to
-  the telemetry row, and `findings >= 1`.
-- `analysis_attempt.worker_git_sha text` with CHECK `^[0-9a-f]{40}$`, nullable.
-- The two child FKs are `ON DELETE CASCADE` from the telemetry row, so the hard-delete script
-  deletes one table.
-- Each table's `COMMENT` says:
-  - written after the verdict, on every ending the child left a document for;
-  - cost is list price at run time;
-  - groups fill as stages finish;
-  - the rows outlive the attempt, report and organization they name, and hold no personal data.
-    The migration's header carries § Telemetry outlives what it describes.
-- Regenerate `public-schema.sql` and `src/generated`. Add a fixture per table to
-  `src/testing/fixtures.ts`, with a case each.
-- `tests/attempt-telemetry.test.ts`, under `withRollback`, asserting `{code, constraint}`:
-  - every CHECK by name;
-  - the duplicate keys;
-  - deleting the organization leaves all three tables' rows;
-  - an insert for an attempt id that no longer exists succeeds;
-  - deleting the telemetry row cascades to its usage and quality rows.
-- `packages/db/README.md`: the three tables in the model, and one bullet on why they carry raw
-  ids rather than FKs. That bullet goes beside the conventions test's FK-index rule, which they
-  satisfy through their PKs.
-- `REQUIREMENTS.md` § Data deletion: analysis telemetry (counts, tokens, costs and stage times;
-  no names, product text or user ids) outlives organization deletion, and a requested hard delete
-  removes it by organization. Drop the stale `ai_*` from its line 102 and from `apps/worker/src/attempt/queue.ts:8`,
-  and rename the "ai columns" test titles in `lifecycle.test.ts` and `queue.test.ts`.
-
-## PR 2 — the contract, and the child writes `telemetry.json`
-
-Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet. This
-needs PR 1.
+Both halves plus `contract/`, per `contract/README.md`. The parent does not read it yet.
 
 - `contract/contract.json`: `runDirectory.telemetry: "output/telemetry.json"`, plus the
-  operation, quality-status, diagnostic-status and check vocabularies.
+  operation, diagnostic-status and check vocabularies. The document's `report` section leaves
+  out `ReportSummary.quality_status`, since the database stores no copy of it.
   - One valid fixture: every section set, two usage rows, a null `plantProteinPct`.
   - A second valid fixture: killed during categorization, so `input` is set and the later
     sections are null.
@@ -438,7 +414,7 @@ needs PR 1.
     second plus a final one.
   - Put the numbers in the PR.
 
-## PR 3 — the parent records telemetry on every ending
+## PR 2 — the parent records telemetry on every ending
 
 `apps/worker`. This is the first PR that writes telemetry in production.
 
@@ -448,8 +424,9 @@ needs PR 1.
     or parse error is one `error` log and `undefined`.
   - An exported `recordTelemetry(dependencies, prepared, telemetry)` writes the three tables in
     one transaction through `dependencies.db`, under the retry, with `ON CONFLICT DO NOTHING`.
-    The identity comes from `prepared`'s `attemptId`, `reportId` and `organizationId`. It never
-    throws.
+    The identity comes from `prepared`'s `attemptId`, `reportId`, `organizationId` and
+    `countsBasis`. `PreparedAttempt` gains `countsBasis`, which the claim already selects into
+    its report details. It never throws.
   - `settleAttempt` awaits it after the verdict.
 - `testing/fake-child.ts`: a `{ step: 'telemetry', document? }` step and an exported
   `FAKE_TELEMETRY`. `writeRaw` covers malformed documents.
@@ -475,13 +452,13 @@ needs PR 1.
     post-verdict records get the bounded retry, then are dropped.
   - `REQUIREMENTS.md` § Persistence: both **Open**s become statements.
   - `packages/db/README.md`: who writes the tables.
-- Go-live: hand-run PR 1's migration against production before dispatching a worker deploy that
-  contains this PR. If someone forgets, every settle logs `42P01` and loses that telemetry, but
+- Go-live: hand-run `003_attempt_telemetry` against production before dispatching a worker deploy
+  that contains this PR, unless `deploy.yml` has already migrated it. If someone forgets, every settle logs `42P01` and loses that telemetry, but
   verdicts are untouched.
 
-## PR 4 — the build's SHA on every attempt
+## PR 3 — the build's SHA on every attempt
 
-Independent of PRs 2–3 except PR 1's column. This touches CI and the image, which is this task.
+Independent of PRs 1–2. This touches CI and the image, which is this task.
 
 - `.github/actions/build-image/action.yml`: `build-args: GIT_SHA=${{ inputs.sha }}`. Both
   images get it; the web's Dockerfile ignores it.
@@ -493,8 +470,7 @@ Independent of PRs 2–3 except PR 1's column. This touches CI and the image, wh
   - `claimNextAttempt` sets `workerGitSha` beside `workerId`.
 - Tests:
   - `queue.test.ts`: a claim with and without a SHA;
-  - `config.test.ts`: the variable's three cases;
-  - `packages/db`: the pattern CHECK (in PR 1).
+  - `config.test.ts`: the variable's three cases.
 - `ARCHITECTURE.md` § Images: the image carries its SHA as an env var as well as the OCI label.
   Promotion keeps it true, since the SHA is the build's.
 - Verify after the first deploy: a production attempt's `worker_git_sha` equals the deployed
@@ -512,18 +488,30 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - `metrics.attempt_llm_usage`: each usage row, with `cost_usd` as a numeric.
   - `metrics.attempt_telemetry`:
     - the telemetry columns;
+    - `quality_status`, derived as `quality_status_from_findings` does: `invalid` if any
+      quality row is `error`, else `warning` if any is `warning`, else `pass`. Null when the
+      report group is null, so a run that never reached the report is not a `pass`;
     - `cache_hit_rate`;
-    - `categorized_kilograms_share`;
+    - `categorized_kilograms_share`, which can exceed 1 by an ulp (§ Decisions), so a panel
+      clamps it rather than the view hiding the row;
     - `categorized_products_share`.
   - `metrics.attempt_quality_check`.
-  - Each view gets its tests. The conventions test allowlists `model`, `served_model` and
+  - A panel that aggregates `co2e_kg_per_diner_or_meal` across reports groups by
+    `counts_basis`, since a per-diner and a per-meal figure do not average.
+  - Each view gets its tests. The conventions test allowlists `requested_model`, `served_model` and
     `worker_git_sha` with their reasons.
 - `insertSyntheticHistory`:
   - writes telemetry and usage for every settled attempt that was claimed;
   - writes quality rows and the report group for every succeeded one;
-  - gives some failed attempts a categorization group under 20%.
+  - gives some failed attempts a categorization group under 20%;
+  - takes `counts_basis` from the synthetic report, so both values occur.
 
   Without this, that plan's "every panel returns a row" check fails.
+- `seed:history`'s replace deletes the marked organizations' telemetry rows by
+  `organization_id`, beside their tombstones, in the same transaction. With no FK, deleting the
+  organizations leaves those rows behind, so a second run would double every telemetry panel. The
+  cascade from the telemetry row takes the usage and quality rows. Its replace test gains the
+  case.
 - Panels on the product dashboard:
   - AI cost per week, and per succeeded report;
   - reports analyzed and organizations active per week, deleted ones included;
@@ -538,7 +526,7 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   PR 4. The rows are queryable in Studio, and this PR moves into `metrics-dashboards.md` as one of
   its "one small PR each" metrics, with the synthetic rows added to its PR 3.
 
-Order: 1, then 2, then 3. PR 4 can go any time after 1. PR 5 is last.
+Order: 1, then 2. PR 3 can go any time. PR 5 is last.
 
 ## Failure paths
 
@@ -563,25 +551,25 @@ Order: 1, then 2, then 3. PR 4 can go any time after 1. PR 5 is last.
 Each PR runs its stack's gate:
 
 - Python: `just lint && just check && just test`.
-- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 2 and 3.
+- TypeScript: `pnpm lint && pnpm check && pnpm test`, plus `pnpm test:system` for PRs 1 and 2.
 
 Then by hand, against the dev stack:
 
-- After PR 3, on `stubbed`:
+- After PR 2, on `stubbed`:
   - An upload leaves `STUB_TELEMETRY`'s rows in all three tables.
   - A `!slow` upload canceled from the waiting page leaves its usage and input group on a
     `canceled` attempt.
-- After PR 3, on `mock-llm`:
+- After PR 2, on `mock-llm`:
   - An upload leaves a full telemetry row, quality rows, and no usage.
   - Deleting that organization from the app leaves the telemetry and quality rows, with ids
     that no longer join.
   - An upload that is mostly unknown products fails `unusable_data`, with a categorized share
     under 20%.
-- After PR 3, on `live`, with a small real file:
+- After PR 2, on `live`, with a small real file:
   - Usage rows land for both operations, at about 1k input tokens per call.
   - `cost_micro_usd` matches the tokens times the list price, worked by hand.
   - The day's total is close to the usage OpenAI's dashboard shows for the project.
   - The stage times add up to roughly the child's `durationMs` in the worker log.
-- After PR 4's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
+- After PR 3's first deploy: a production attempt's `worker_git_sha` is the deployed commit.
 - After PR 5: every panel draws from `pnpm seed:history`, and a real `live` attempt shows its
   cost.
