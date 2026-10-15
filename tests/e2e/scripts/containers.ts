@@ -77,6 +77,11 @@ export type ContainerStack = {
   siteUrl: string;
 };
 
+/** Passed to both builds as `GIT_SHA`, so the worker image's `ARG` → `ENV` wiring is what puts it
+ * on `analysis_attempt.worker_git_sha`. A constant rather than `HEAD`: only the worker's last
+ * layer depends on it, and a fixed value keeps the run deterministic. */
+export const E2E_GIT_SHA = '0123456789abcdef0123456789abcdef01234567';
+
 function imageTag(service: Service, runName: string): string {
   return `gbd-${service}:${runName}`;
 }
@@ -182,6 +187,8 @@ export async function buildContainerImages(
       path.join(repoRoot, 'apps', service, 'Dockerfile'),
       '--tag',
       tag,
+      '--build-arg',
+      `GIT_SHA=${E2E_GIT_SHA}`,
       '--label',
       `${RUN_LABEL}=${runName}`,
       '--label',

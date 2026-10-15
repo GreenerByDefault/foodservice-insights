@@ -54,7 +54,7 @@ async function main(): Promise<void> {
         ...resolved.overrides,
         maxConcurrentAttempts: optionalIntEnv('WORKER_MAX_CONCURRENT_ATTEMPTS'),
         drainGraceMs: optionalIntEnv('WORKER_DRAIN_GRACE_MS'),
-        // Unset locally and in the e2e build. The image's `ARG` leaves an empty string if a build
+        // Unset locally. The image's `ARG` leaves an empty string if a build
         // omits `GIT_SHA`, so empty counts as unset.
         workerGitSha: process.env.WORKER_GIT_SHA || undefined,
       },

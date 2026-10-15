@@ -11,6 +11,7 @@ import { type SharedWorkerFixtures, test } from '@gbd/browser-testing/fixtures';
 import type { ReportId } from '@gbd/db';
 import { readMailbox } from '@gbd/email/testing';
 import { expect, type Page } from '@playwright/test';
+import { E2E_GIT_SHA } from '../scripts/containers.ts';
 
 /** A product the keyword fake recognizes, so the run produces a real report. */
 const RECOGNIZED_CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
@@ -79,6 +80,14 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
       xlsxDurationRecorded: true,
       llmUsageRows: 0,
     });
+
+  // Set at claim from the image's `GIT_SHA` build arg, which only a real image build exercises.
+  const attempt = await db
+    .selectFrom('analysisAttempt')
+    .select('workerGitSha')
+    .where('reportId', '=', reportId)
+    .executeTakeFirstOrThrow();
+  expect(attempt.workerGitSha).toBe(E2E_GIT_SHA);
 
   // The run's identity is pointed at a mailbox no other run sends to (`scripts/test-run.ts`), but
   // both tests here share it — so match on the subject rather than taking whatever arrives first.
