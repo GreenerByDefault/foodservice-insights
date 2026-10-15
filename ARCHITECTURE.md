@@ -349,13 +349,9 @@ kills the old container outright. Two mitigations, both required:
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
-  are. An analysis attempt still running when the grace expires gets `failed('shut_down')`.
-
-**The trap: the hosting platform's own shutdown grace has to exceed the worker's drain grace.**
-DigitalOcean's default is two minutes at most, far short of the drain, and a grace that short
-SIGKILLs the worker mid-drain, which looks exactly like a worker bug.
-[`.do/worker.yaml`](.do/worker.yaml) sets the platform's grace beside `PLATFORM_SHUTDOWN_GRACE_MS`,
-which the drain is derived from, and `config.test.ts` fails if the two disagree.
+  are. An analysis attempt still running when the grace expires gets `failed('shut_down')`. The
+  drain is derived from the platform's own shutdown grace, which
+  [`.do/worker.yaml`](.do/worker.yaml) sets.
 
 ### Bad deploys are fixed forward
 

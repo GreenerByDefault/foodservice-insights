@@ -14,7 +14,8 @@ workers:
     # once production shows the parent plus three children staying well under 1 GB.
     instance_size_slug: apps-s-1vcpu-2gb
     instance_count: 2
-    # App Platform's maximum. `config.test.ts` holds `PLATFORM_SHUTDOWN_GRACE_MS` to it.
+    # App Platform's maximum. Its default of 120 would SIGKILL the worker mid-drain, which looks
+    # exactly like a worker bug. `config.test.ts` holds `PLATFORM_SHUTDOWN_GRACE_MS` to it.
     termination:
       grace_period_seconds: 600
 

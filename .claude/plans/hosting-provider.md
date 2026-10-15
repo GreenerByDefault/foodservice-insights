@@ -133,13 +133,13 @@ Dashboard work, with no code:
   its deploy job. Raise both deploy jobs' `timeout-minutes` above `doctl`'s own 30-minute wait, so
   a stuck deploy fails with `doctl`'s message rather than the runner's. A worker deploy can take
   the old worker's full ten-minute grace before it even starts the new one.
-- **`.do/README.md`:** drop the status line.
-- **`ARCHITECTURE.md` § Secrets management:** the `production` Environment is the one home of every
-  production secret, and each deploy writes them into the specs, so rotating a secret is a
-  redeploy.
-- **`ARCHITECTURE.md` § Bad deploys are fixed forward:** a rollback restores the old deployment's
-  env, including any secret rotated since. If the next deploy is refused because the rollback
-  pinned the app, commit or revert the rollback in the dashboard.
+- **`.do/README.md`:** drop the status line. Add that rotating a secret is changing it in the
+  Environment and redeploying (for the worker, dispatching one), and how to roll back: a rollback
+  restores the old deployment's env, including any secret rotated since, and if the next deploy is
+  refused because the rollback pinned the app, commit or revert the rollback in the dashboard.
+- **`ARCHITECTURE.md` § Secrets management:** at most a clause, that the `production` Environment
+  is also where the running apps' secrets live. The mechanism stays in `.do/README.md`; the root
+  docs stay high level.
 - Delete this plan.
 
 ## Verification
