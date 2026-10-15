@@ -148,7 +148,7 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 | --- | --- | --- |
 | Read | **Rows**, **kilograms** (after lb→kg), **unique products**, **entries in the cache** | Rows and products are the size of the work. An empty cache is the alarm, whether a missing CSV today or an empty verified table after `caches-to-supabase.md` |
 | Categorize | **Unique products by match type**; **uncategorized, split by whether the history or the LLM said "No Matches Found"**; **unrecognized LLM answers**; **rows** and **kilograms categorized** | The share of weight left uncategorized is the coverage figure the customer never sees. The products share is what the 20% cutoff tests, so successful runs show how close they came. `MergeCounts`' other fields are redundant with these |
-| Report | **`quality_status`**; **per check and status, the number of findings**; **total kg CO2e**, **kg CO2e per diner or meal**, **plant %**, **plant-protein %** | Findings' messages, samples and thresholds are text or constants. `quality_status` can only be `pass` or `warning` today, because no check emits `error`. The impact numbers are for a cross-customer dashboard |
+| Report | `quality_status`; **per check and status, the number of findings**; **total kg CO2e**, **kg CO2e per diner or meal**, **plant %**, **plant-protein %** | Findings' messages, samples and thresholds are text or constants. `quality_status` is `quality_status_from_findings` over the findings, so a view derives it from the per-check rows rather than storing a copy that could disagree. The impact numbers are for a cross-customer dashboard |
 | Every stage | **Milliseconds per stage** (read, categorize, report, pdf, xlsx); **peak memory** | Tests REQUIREMENTS § Performance's "almost entirely the AI tool", and sizes `maxConcurrentAttempts`. A killed run's stage timings say how far it got |
 | Failure | Why data was unusable | Derivable: the products categorized fall under 20%, or kilograms categorized are 0 |
 | Output | PDF pages, XLSX sheets | Fixed functions of what is already stored; `result_file` has the sizes |
@@ -180,22 +180,33 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   latency percentiles and request ids that are log material.
 - **`analysis_attempt_telemetry`: one row per attempt, in column groups that fill in as stages
   finish.**
-  - Identity: `analysis_attempt_id`, `report_id`, `organization_id`, `recorded_at`. They are raw
-    ids, per § Telemetry outlives what it describes.
+  - Identity, written by the parent: `analysis_attempt_id`, `report_id`, `organization_id`,
+    `counts_basis`, `recorded_at`. The ids are raw, per § Telemetry outlives what it describes.
+    `counts_basis` is what makes `co2e_kg_per_diner_or_meal` readable, and `report`'s copy goes
+    with the organization; the metrics plan's report tombstone does not keep it.
   - Input: `input_rows`, `input_kilograms`, `input_unique_products`, `cache_entries`.
   - Categorization:
     - `raw_product_history_products`, `cleaned_name_history_products`, `llm_products`;
     - `history_uncategorized_products`, `llm_uncategorized_products`,
       `unrecognized_llm_answers`;
     - `categorized_rows`, `categorized_kilograms`.
-  - Report: `quality_status`, `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct`,
-    `plant_protein_pct` (null when the report has no protein share).
-  - Timing: `read_ms`, `categorize_ms`, `report_ms`, `pdf_ms`, `xlsx_ms`, and
-    `peak_memory_kib`.
+  - Report: `total_co2e_kg`, `co2e_kg_per_diner_or_meal`, `plant_pct`, `plant_protein_pct`
+    (null when the report has no protein share).
+  - Timing: `read_ms`, `categorize_ms`, `report_ms`, `pdf_ms`, `xlsx_ms`. Each is set once its
+    stage finishes, so a killed run has a prefix of them.
+  - `peak_memory_kib`, `NOT NULL`: the child reads it at every write of the document.
 
-  Each group is all null or all set, by named CHECK. The sums the child guarantees are CHECKs
-  too: the three match types add up to `input_unique_products`, and categorized rows are at most rows
-  read. So a dashboard can tell "never reached the report" from "zero".
+  The input, categorization and report groups are each all null or all set, by named CHECK, and
+  each requires the one before it. The stage times are a chain instead: each requires the one
+  before it, so a run killed mid-report keeps `read_ms` and `categorize_ms`. An all-or-none CHECK
+  on them would reject exactly the endings this plan exists to record, and the transaction would
+  drop the attempt's usage and quality rows with it.
+  The integer sums the child guarantees are CHECKs too: the three match types add up to
+  `input_unique_products`, and categorized rows are at most rows read. So a dashboard can tell
+  "never reached the report" from "zero".
+  *Rejected: `categorized_kilograms <= input_kilograms`.* The two are float sums over different
+  rows, so they can differ in the last bit. In a simulation of 2,000 uploads of 5,000 rows each,
+  where only zero-weight rows went uncategorized, 316 had more kilograms categorized than read.
   *Rejected: a table per stage.* Every panel would join three or four 1:1 tables.
 - **`analysis_attempt_quality_check`: one row per attempt × check × status**, holding the number
   of findings. The status counts per check are what threshold tuning reads, and success rows
@@ -223,13 +234,17 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
   `23503`.
 - **That is safe to keep because none of it is personal data.** It holds counts, tokens,
   kilograms, emissions, check names, model ids and three uuids. Those uuids resolve to nothing
-  once the organization is gone. There are no names, no product text, no user ids and no file
-  names.
+  once the organization is gone: the `organization.deleted` audit event keeps the id but not the
+  name, which goes only into GBD's notification email. There are no names, no product text, no
+  user ids and no file names.
 
-  The figures describe a business's purchasing, not a person. This is the same call as
-  `REQUIREMENTS.md`'s "the raw user ID stays in the audit log", with less in it. A requested
-  hard delete, GBD's TBD script, removes these rows by `organization_id`. `REQUIREMENTS.md`
-  § Data deletion gains a line saying both.
+  The figures describe a business's purchasing, not a person: kilograms bought, CO2e and plant
+  share are the report's headline numbers. Keeping them is a call about what a customer expects,
+  not a legal one, and it is the line `metrics-dashboards.md` draws too: ids, timestamps, enums
+  and numbers, never free text. This is the same call as `REQUIREMENTS.md`'s "the raw user ID
+  stays in the audit log". A requested hard delete, GBD's TBD script, removes these rows by
+  `organization_id`. `REQUIREMENTS.md` § Data deletion gains a line saying both, naming the
+  report figures so the policy does not understate what is kept.
 - **Status comes from a join, not a copy.** A view `LEFT JOIN`s `metrics.attempt` for status,
   failure reason and `worker_git_sha`. Once `metrics-dashboards.md` PR 6 lands, that includes a
   hard-deleted attempt's tombstone, so the outcome survives too.
@@ -331,7 +346,6 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 
 - Enums:
   - `llm_operation ('clean','match')`
-  - `quality_status ('pass','warning','invalid')`
   - `diagnostic_status ('success','info','warning','error')`
   - `quality_check` (the six names)
 - `analysis_attempt_llm_usage`:
@@ -346,14 +360,19 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
     - `model` and `served_model` match `^[a-z0-9][a-z0-9._:-]{0,99}$`.
 - `analysis_attempt_telemetry`:
   - PK `analysis_attempt_id`, with *no* FK. Also `report_id` and `organization_id` (uuids, no
-    FK) and `recorded_at timestamptz DEFAULT now()`, with an index on `(organization_id)` for the
-    hard-delete script and one on `(recorded_at)` for the views.
-  - The column groups from § Decisions, with one all-or-none CHECK per group.
-  - Categorization requires input, and report requires categorization.
-  - The match types sum to `input_unique_products`.
-  - Categorized rows and kilograms are at most those read.
-  - Every count and millisecond is non-negative, `peak_memory_kib > 0`, and the percentages
-    are 0–100.
+    FK), `counts_basis` (the existing enum, `NOT NULL`) and `recorded_at timestamptz DEFAULT
+    now()`, with an index on `(organization_id)` for the hard-delete script and
+    `seed:history`, and one on `(recorded_at)` for the views.
+  - Named CHECKs:
+    - the input, categorization and report groups are each all null or all set;
+    - categorization requires input, and report requires categorization;
+    - each stage time requires the one before it (`categorize_ms` requires `read_ms`, through
+      `xlsx_ms` requiring `pdf_ms`), with no all-or-none rule across them;
+    - the match types sum to `input_unique_products`;
+    - `categorized_rows <= input_rows`, and no comparison between the two float kilograms, per
+      § Decisions;
+    - every count and millisecond is non-negative, `peak_memory_kib > 0`, and the percentages
+      are 0–100.
 - `analysis_attempt_quality_check`: PK `(analysis_attempt_id, check, status)`, with the FK to
   the telemetry row, and `findings >= 1`.
 - `analysis_attempt.worker_git_sha text` with CHECK `^[0-9a-f]{40}$`, nullable.
@@ -370,15 +389,20 @@ The survey behind the choices below. **Bold** is stored; the rest is why not.
 - `tests/attempt-telemetry.test.ts`, under `withRollback`, asserting `{code, constraint}`:
   - every CHECK by name;
   - the duplicate keys;
+  - a killed run's partial row inserts: input and categorization set, report null, `read_ms` and
+    `categorize_ms` set and the later stage times null;
+  - a fully categorized row whose `categorized_kilograms` exceeds `input_kilograms` by an ulp
+    inserts;
   - deleting the organization leaves all three tables' rows;
   - an insert for an attempt id that no longer exists succeeds;
   - deleting the telemetry row cascades to its usage and quality rows.
 - `packages/db/README.md`: the three tables in the model, and one bullet on why they carry raw
   ids rather than FKs. That bullet goes beside the conventions test's FK-index rule, which they
   satisfy through their PKs.
-- `REQUIREMENTS.md` § Data deletion: analysis telemetry (counts, tokens, costs and stage times;
-  no names, product text or user ids) outlives organization deletion, and a requested hard delete
-  removes it by organization. Drop the stale `ai_*` from its line 102 and from `apps/worker/src/attempt/queue.ts:8`,
+- `REQUIREMENTS.md` § Data deletion: analysis telemetry outlives organization deletion, and a
+  requested hard delete removes it by organization. It holds AI usage and cost, product counts,
+  stage times, which quality checks fired, and each report's headline figures: kilograms bought,
+  CO2e and plant share. It holds no names, product text, file names or user ids. Drop the stale `ai_*` from its line 102 and from `apps/worker/src/attempt/queue.ts:8`,
   and rename the "ai columns" test titles in `lifecycle.test.ts` and `queue.test.ts`.
 
 ## PR 2 — the contract, and the child writes `telemetry.json`
@@ -387,7 +411,8 @@ Both halves plus `contract/`, per `contract/README.md`. The parent does not read
 needs PR 1.
 
 - `contract/contract.json`: `runDirectory.telemetry: "output/telemetry.json"`, plus the
-  operation, quality-status, diagnostic-status and check vocabularies.
+  operation, diagnostic-status and check vocabularies. The document's `report` section leaves
+  out `ReportSummary.quality_status`, since PR 1 stores no copy of it.
   - One valid fixture: every section set, two usage rows, a null `plantProteinPct`.
   - A second valid fixture: killed during categorization, so `input` is set and the later
     sections are null.
@@ -448,8 +473,9 @@ needs PR 1.
     or parse error is one `error` log and `undefined`.
   - An exported `recordTelemetry(dependencies, prepared, telemetry)` writes the three tables in
     one transaction through `dependencies.db`, under the retry, with `ON CONFLICT DO NOTHING`.
-    The identity comes from `prepared`'s `attemptId`, `reportId` and `organizationId`. It never
-    throws.
+    The identity comes from `prepared`'s `attemptId`, `reportId`, `organizationId` and
+    `countsBasis`. `PreparedAttempt` gains `countsBasis`, which the claim already selects into
+    its report details. It never throws.
   - `settleAttempt` awaits it after the verdict.
 - `testing/fake-child.ts`: a `{ step: 'telemetry', document? }` step and an exported
   `FAKE_TELEMETRY`. `writeRaw` covers malformed documents.
@@ -512,18 +538,30 @@ This needs `metrics-dashboards.md` PR 1. The panels also need its PRs 2 and 4.
   - `metrics.attempt_llm_usage`: each usage row, with `cost_usd` as a numeric.
   - `metrics.attempt_telemetry`:
     - the telemetry columns;
+    - `quality_status`, derived as `quality_status_from_findings` does: `invalid` if any
+      quality row is `error`, else `warning` if any is `warning`, else `pass`. Null when the
+      report group is null, so a run that never reached the report is not a `pass`;
     - `cache_hit_rate`;
-    - `categorized_kilograms_share`;
+    - `categorized_kilograms_share`, which can exceed 1 by an ulp (§ Decisions), so a panel
+      clamps it rather than the view hiding the row;
     - `categorized_products_share`.
   - `metrics.attempt_quality_check`.
+  - A panel that aggregates `co2e_kg_per_diner_or_meal` across reports groups by
+    `counts_basis`, since a per-diner and a per-meal figure do not average.
   - Each view gets its tests. The conventions test allowlists `model`, `served_model` and
     `worker_git_sha` with their reasons.
 - `insertSyntheticHistory`:
   - writes telemetry and usage for every settled attempt that was claimed;
   - writes quality rows and the report group for every succeeded one;
-  - gives some failed attempts a categorization group under 20%.
+  - gives some failed attempts a categorization group under 20%;
+  - takes `counts_basis` from the synthetic report, so both values occur.
 
   Without this, that plan's "every panel returns a row" check fails.
+- `seed:history`'s replace deletes the marked organizations' telemetry rows by
+  `organization_id`, beside their tombstones, in the same transaction. With no FK, deleting the
+  organizations leaves those rows behind, so a second run would double every telemetry panel. The
+  cascade from the telemetry row takes the usage and quality rows. Its replace test gains the
+  case.
 - Panels on the product dashboard:
   - AI cost per week, and per succeeded report;
   - reports analyzed and organizations active per week, deleted ones included;
