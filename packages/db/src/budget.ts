@@ -27,9 +27,10 @@ export const SUPERUSER_RESERVED_CONNECTIONS = 3;
  * dashboard or a `psql` session as `postgres`. */
 export const BUDGET_SHARE = 0.8;
 
-/** Instance counts are set in the host's dashboard; these are what the budget assumes of it. */
-const WEB_INSTANCES = 1;
-const WORKER_INSTANCES = 2;
+/** The `instance_count`s in `.do/web.yaml` and `.do/worker.yaml`, which `budget.test.ts` holds to
+ * these. */
+export const WEB_INSTANCES = 1;
+export const WORKER_INSTANCES = 2;
 
 /** Five, not the default ten: the web's queries take milliseconds, and its traffic is polls and
  * page loads. */

@@ -1,0 +1,75 @@
+# The worker's DigitalOcean App Platform spec. A deploy submits this whole file, and App Platform
+# replaces the app's spec with it, so a setting changed in the dashboard lasts only until the next
+# deploy. Change it here.
+#
+# Each `${NAME}` is filled in at deploy from the `production` GitHub Environment's secrets and
+# variables, and an unset or empty one fails the deploy before anything is submitted. That rules out
+# App Platform's own bindable variables, such as `${APP_URL}`, in this file.
+#
+# A separate app from the web's, because an update redeploys every component of an app: in one app,
+# every push to main would restart the worker and cut off its in-flight attempts.
+
+name: foodservice-insights-worker
+# The region nearest the Supabase project: every claim, lease renewal, and poll is a round trip to
+# the database.
+region: nyc
+
+workers:
+  - name: worker
+    image:
+      registry_type: GHCR
+      registry: greenerbydefault
+      repository: foodservice-insights/worker
+      digest: ${IMAGE_DIGEST}
+    # Change the count together with `WORKER_INSTANCES` in `packages/db/src/budget.ts`, which
+    # `budget.test.ts` checks this against. **Open:** drop to `apps-s-1vcpu-1gb` once production
+    # shows the parent plus three children staying well under 1 GB.
+    instance_size_slug: apps-s-1vcpu-2gb
+    instance_count: 2
+
+    # App Platform's maximum. `config.test.ts` checks that it matches `PLATFORM_SHUTDOWN_GRACE_MS`.
+    termination:
+      grace_period_seconds: 600
+
+    envs:
+      - key: WORKER_MODE
+        value: live
+      - key: PLATFORM_SHUTDOWN_GRACE_MS
+        value: "600000"
+      - key: OPENAI_API_KEY
+        type: SECRET
+        value: ${OPENAI_API_KEY}
+
+      - key: DB_CONNECTION_STRING
+        type: SECRET
+        value: ${DB_CONNECTION_STRING}
+      - key: DB_SSL_CA
+        value: ${DB_SSL_CA}
+
+      - key: S3_ENDPOINT
+        value: ${S3_ENDPOINT}
+      - key: S3_REGION
+        value: ${S3_REGION}
+      - key: S3_ACCESS_KEY_ID
+        type: SECRET
+        value: ${S3_ACCESS_KEY_ID}
+      - key: S3_SECRET_ACCESS_KEY
+        type: SECRET
+        value: ${S3_SECRET_ACCESS_KEY}
+      - key: S3_BUCKET
+        value: ${S3_BUCKET}
+
+      # `provider` is a stub whose every send fails with an `EmailError`, rather than going nowhere,
+      # until `.claude/plans/email-provider.md` wires up Postmark.
+      - key: EMAIL_TRANSPORT
+        value: provider
+      - key: EMAIL_FROM_ADDRESS
+        value: insights@greenerbydefault.org
+      - key: EMAIL_SUPPORT_ADDRESS
+        value: insights@greenerbydefault.org
+      # A stand-in until GBD names the address for its notices.
+      - key: EMAIL_GBD_ADDRESS
+        value: insights@greenerbydefault.org
+      # The web app's origin, which every link in an email is built against.
+      - key: SITE_URL
+        value: ${SITE_URL}

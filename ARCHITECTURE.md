@@ -351,10 +351,11 @@ kills the old container outright. Two mitigations, both required:
   [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
   are. An analysis attempt still running when the grace expires gets `failed('shut_down')`.
 
-**The trap: the hosting platform's own shutdown grace has to exceed the worker's drain grace, and
-that relation lives on the platform, not in this repo** — nothing here can check it. DigitalOcean's
-default grace is two minutes at most, far short of the drain; a grace that short SIGKILLs the
-worker mid-drain, which looks exactly like a worker bug.
+**The trap: the hosting platform's own shutdown grace has to exceed the worker's drain grace.**
+DigitalOcean's default is two minutes at most, far short of the drain, and a grace that short
+SIGKILLs the worker mid-drain, which looks exactly like a worker bug.
+[`.do/worker.yaml`](.do/worker.yaml) sets the platform's grace beside `PLATFORM_SHUTDOWN_GRACE_MS`,
+which the drain is derived from, and `config.test.ts` fails if the two disagree.
 
 ### Bad deploys are fixed forward
 

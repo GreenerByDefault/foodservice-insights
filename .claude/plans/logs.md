@@ -72,8 +72,6 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 
 ## PR 1 — forward to Better Stack
 
-After `hosting-provider.md` PR 1 creates the specs.
-
 - By hand first:
   - the Better Stack team, with every team member invited;
   - one source of platform *DigitalOcean*;

@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises';
+import { SECOND_MS } from '@gbd/core';
 import { WORKER_DB_LIMITS } from '@gbd/db';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { parse } from 'yaml';
 import {
   createWorkerConfig,
   EMAIL_LATENCY_TARGET_MS,
@@ -183,6 +186,17 @@ describe('createWorkerConfig', () => {
   describe("the relation against the hosting platform's own shutdown grace", () => {
     const drainPlusKillPlusWrite =
       WORKER_DEFAULTS.drainGraceMs + WORKER_DEFAULTS.killGraceMs + MAX_RENEWAL_ROUND_TRIP_MS;
+
+    test("PLATFORM_SHUTDOWN_GRACE_MS matches the worker's App Platform spec", async () => {
+      const spec = parse(
+        await readFile(new URL('../../../.do/worker.yaml', import.meta.url), 'utf8'),
+      );
+      const [worker] = spec.workers;
+      expect(worker.envs).toContainEqual({
+        key: 'PLATFORM_SHUTDOWN_GRACE_MS',
+        value: String(worker.termination.grace_period_seconds * SECOND_MS),
+      });
+    });
 
     test('is skipped when the platform grace is not known', () => {
       expect(createWorkerConfig(REQUIRED_FIELDS)).toEqual({
