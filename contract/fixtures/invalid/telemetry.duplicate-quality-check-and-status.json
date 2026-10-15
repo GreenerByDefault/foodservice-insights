@@ -1,0 +1,89 @@
+{
+  "llmUsage": [
+    {
+      "operation": "clean",
+      "requestedModel": "gpt-4.1-mini",
+      "servedModel": "gpt-4.1-mini-2025-04-14",
+      "calls": 412,
+      "requests": 415,
+      "failedRequests": 3,
+      "rateLimitedRequests": 2,
+      "truncatedCalls": 0,
+      "inputTokens": 432600,
+      "cachedInputTokens": 380160,
+      "outputTokens": 3296,
+      "costMicroUsd": 64266
+    },
+    {
+      "operation": "match",
+      "requestedModel": "gpt-4.1-mini",
+      "servedModel": "gpt-4.1-mini-2025-04-14",
+      "calls": 396,
+      "requests": 396,
+      "failedRequests": 0,
+      "rateLimitedRequests": 0,
+      "truncatedCalls": 1,
+      "inputTokens": 451440,
+      "cachedInputTokens": 418176,
+      "outputTokens": 2772,
+      "costMicroUsd": 59558
+    }
+  ],
+  "input": {
+    "rows": 5210,
+    "kilograms": 48213.5,
+    "uniqueProducts": 800,
+    "categorizationCacheEntries": 12000
+  },
+  "categorization": {
+    "cacheRawNameProducts": 380,
+    "cacheCleanedNameProducts": 8,
+    "llmMatchedProducts": 412,
+    "cacheNoMatchProducts": 21,
+    "llmNoMatchProducts": 37,
+    "unrecognizedLlmAnswers": 2,
+    "categorizedRows": 4870,
+    "categorizedKilograms": 45120.25
+  },
+  "report": {
+    "totalCo2eKg": 98123.5,
+    "co2eKgPerDinerOrMeal": 2.5,
+    "plantPctByWeight": 41.2,
+    "plantProteinPctByWeight": null,
+    "findingCounts": [
+      {
+        "qualityCheck": "date_distribution",
+        "status": "success",
+        "findings": 1
+      },
+      {
+        "qualityCheck": "missing_internal_months",
+        "status": "success",
+        "findings": 1
+      },
+      {
+        "qualityCheck": "outlier_line_items",
+        "status": "info",
+        "findings": 2
+      },
+      {
+        "qualityCheck": "outlier_line_items",
+        "status": "info",
+        "findings": 3
+      },
+      {
+        "qualityCheck": "per_product_weight_bounds",
+        "status": "error",
+        "findings": 1
+      }
+    ]
+  },
+  "stageDurationMs": {
+    "read": 850,
+    "categorize": 412000,
+    "report": 3100,
+    "pdf": 5200,
+    "xlsx": 900
+  },
+  "peakMemoryKib": 412345
+}

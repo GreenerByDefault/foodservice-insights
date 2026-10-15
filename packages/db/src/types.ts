@@ -10,10 +10,13 @@ export type { default as AnalysisAttemptStatus } from './generated/public/Analys
 export type { default as AnalysisFailureReason } from './generated/public/AnalysisFailureReason.ts';
 export type { AuditEventId } from './generated/public/AuditEvent.ts';
 export type { default as CountsBasis } from './generated/public/CountsBasis.ts';
+export type { default as DiagnosticStatus } from './generated/public/DiagnosticStatus.ts';
+export type { default as LlmOperation } from './generated/public/LlmOperation.ts';
 export type { OrganizationId } from './generated/public/Organization.ts';
 export type { OrganizationInviteId } from './generated/public/OrganizationInvite.ts';
 export type { default as OrganizationInviteStatus } from './generated/public/OrganizationInviteStatus.ts';
 export type { default as OrganizationRole } from './generated/public/OrganizationRole.ts';
+export type { default as QualityCheck } from './generated/public/QualityCheck.ts';
 export type { default as RejectedUploadReason } from './generated/public/RejectedUploadReason.ts';
 export type { default as ResultFileKind } from './generated/public/ResultFileKind.ts';
 export type { default as UnitSystem } from './generated/public/UnitSystem.ts';

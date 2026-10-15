@@ -8,7 +8,7 @@ two stacks. This directory is its source of truth.
   directory, the input CSV's columns and date format, the invocation shape, the exit codes, and
   who may claim each failure reason. Neither side reads it at runtime; both copy it into their
   own constants and assert equality in a unit test.
-- [`fixtures/valid/`](fixtures/valid/) — one golden document per message. The side that *writes*
+- [`fixtures/valid/`](fixtures/valid/) — golden documents for each message. The side that *writes*
   a message in production asserts its writer reproduces the fixture; the side that *reads* it
   asserts its parser accepts it.
 - [`fixtures/invalid/`](fixtures/invalid/) — one semantic violation each. Both sides assert they

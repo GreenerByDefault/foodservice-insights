@@ -7,9 +7,13 @@ import { describe, expect, test } from 'vitest';
 import { DIRECTORIES_CREATED_BY_PARENT, RESULT_FILE_NAMES, RUN_DIRECTORY } from './layout.ts';
 import {
   COUNTS_BASES,
+  DIAGNOSTIC_STATUSES,
   EXIT_CODES,
   FAILURE_REASON_CLAIMANT,
   INVOCATION,
+  LLM_OPERATIONS,
+  QUALITY_CHECKS,
+  STAGES,
   UNIT_SYSTEMS,
 } from './names.ts';
 
@@ -35,6 +39,15 @@ describe('contract/contract.json', () => {
   test('agrees on the report enums the manifest carries', () => {
     expect(contract.reportEnums.countsBasis).toEqual(COUNTS_BASES);
     expect(contract.reportEnums.unitSystem).toEqual(UNIT_SYSTEMS);
+  });
+
+  test('agrees on the enums telemetry.json carries', () => {
+    expect(contract.telemetryEnums).toEqual({
+      llmOperation: LLM_OPERATIONS,
+      stage: STAGES,
+      qualityCheck: QUALITY_CHECKS,
+      diagnosticStatus: DIAGNOSTIC_STATUSES,
+    });
   });
 
   test('agrees on the exit codes', () => {

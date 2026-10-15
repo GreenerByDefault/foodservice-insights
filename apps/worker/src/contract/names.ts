@@ -1,6 +1,13 @@
 /** The vocabularies the parent and child must spell identically from `contract/contract.json`. */
 
-import type { AnalysisFailureReason, CountsBasis, UnitSystem } from '@gbd/db';
+import type {
+  AnalysisFailureReason,
+  CountsBasis,
+  DiagnosticStatus,
+  LlmOperation,
+  QualityCheck,
+  UnitSystem,
+} from '@gbd/db';
 
 export const INVOCATION = {
   module: 'worker_child',
@@ -21,6 +28,24 @@ export const EXIT_CODES = {
 
 export const COUNTS_BASES = ['people', 'meals'] as const satisfies readonly CountsBasis[];
 export const UNIT_SYSTEMS = ['lb', 'kg'] as const satisfies readonly UnitSystem[];
+
+export const LLM_OPERATIONS = ['clean', 'match'] as const satisfies readonly LlmOperation[];
+// In the order they run, which is the order `telemetry.json`'s `stageDurationMs` fills in.
+export const STAGES = ['read', 'categorize', 'report', 'pdf', 'xlsx'] as const;
+export const QUALITY_CHECKS = [
+  'outlier_line_items',
+  'per_product_weight_bounds',
+  'month_over_month_total_volatility',
+  'diner_meal_count_reasonableness',
+  'missing_internal_months',
+  'date_distribution',
+] as const satisfies readonly QualityCheck[];
+export const DIAGNOSTIC_STATUSES = [
+  'success',
+  'info',
+  'warning',
+  'error',
+] as const satisfies readonly DiagnosticStatus[];
 
 /** `satisfies Record<AnalysisFailureReason, …>` makes a new database enum value a compile error
  * here until someone assigns it an owner.

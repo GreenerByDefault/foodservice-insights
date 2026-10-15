@@ -16,6 +16,7 @@ INPUT_CSV_DATE_FORMAT: Final = "YYYY-MM-DD"
 PROGRESS: Final = "output/progress.json"
 RESULT: Final = "output/result.json"
 FAILURE: Final = "output/failure.json"
+TELEMETRY: Final = "output/telemetry.json"
 RESULT_FILES_DIRECTORY: Final = "output/files"
 WORK_DIRECTORY: Final = "work"
 

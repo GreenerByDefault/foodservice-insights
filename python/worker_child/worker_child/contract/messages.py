@@ -1,11 +1,19 @@
-"""The four documents that cross the run directory: the child parses `run.json` and builds the
-other three as payload dicts."""
+"""The five documents that cross the run directory: the child parses `run.json` and builds the
+other four as payload dicts."""
 
+import math
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
+
+from gbd_foodservice_insights.analysis import (
+    CategorizationSummary,
+    InputSummary,
+    ReportSummary,
+    cost_micro_usd,
+)
 
 from worker_child.contract import ContractError
 from worker_child.contract.fields import parse_object
@@ -13,14 +21,21 @@ from worker_child.contract.layout import MANIFEST
 from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
+    STAGES,
     UNIT_SYSTEMS,
     ChildFailureReason,
     CountsBasis,
+    LlmOperation,
+    Stage,
     UnitSystem,
 )
 
 MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+# The `analysis_attempt_llm_usage_*_model_format` CHECKs.
+MODEL_PATTERN = re.compile(r"[a-z0-9][a-z0-9._:-]{0,99}")
+# Every count in `telemetry.json` lands in a Postgres `integer`.
+MAX_POSTGRES_INTEGER: Final = 2**31 - 1
 
 
 @dataclass(frozen=True)
@@ -91,6 +106,218 @@ def failure_payload(
     _require(reason in CHILD_FAILURE_REASONS, f"'{reason}' is not a reason a child may claim")
     _require(bool(detail), "detail must not be empty")
     return {"reason": reason, "detail": detail, "traceback": traceback}
+
+
+@dataclass(frozen=True)
+class LlmUsage:
+    """Every `LlmCall` of one operation on one requested model, summed."""
+
+    operation: LlmOperation
+    requested_model: str
+    served_model: str | None  # the latest that answered
+    calls: int
+    requests: int
+    failed_requests: int
+    rate_limited_requests: int
+    truncated_calls: int
+    input_tokens: int
+    cached_input_tokens: int
+    output_tokens: int
+
+
+@dataclass(frozen=True)
+class TelemetryState:
+    """What the run has reported so far. A summary is `None` until its stage finishes."""
+
+    llm_usage: Mapping[tuple[LlmOperation, str], LlmUsage] = field(default_factory=dict)
+    input: InputSummary | None = None
+    categorization: CategorizationSummary | None = None
+    report: ReportSummary | None = None
+    stage_duration_ms: Mapping[Stage, int] = field(default_factory=dict)
+
+
+def telemetry_payload(state: TelemetryState, *, peak_memory_kib: int) -> dict[str, Any]:
+    """Refuses anything the parent's insert would: each rule mirrors a CHECK on the telemetry
+    tables, which `contract/fixtures/invalid/telemetry.*` pin on the parent's side."""
+    _require(
+        state.categorization is None or state.input is not None,
+        "categorization reported before input",
+    )
+    _require(
+        state.report is None or state.categorization is not None,
+        "report reported before categorization",
+    )
+    stage_duration_ms: dict[str, int] = {
+        stage: state.stage_duration_ms[stage]
+        for stage in STAGES
+        if stage in state.stage_duration_ms
+    }
+    _require(
+        list(stage_duration_ms) == list(STAGES[: len(stage_duration_ms)]),
+        f"a stage finished before the one ahead of it: {', '.join(stage_duration_ms)}",
+    )
+    _require_counts("stageDurationMs", stage_duration_ms)
+    _require_counts("telemetry.json", {"peakMemoryKib": peak_memory_kib}, minimum=1)
+
+    return {
+        "llmUsage": [_llm_usage_payload(usage) for _, usage in sorted(state.llm_usage.items())],
+        "input": None if state.input is None else _input_payload(state.input),
+        "categorization": (
+            None
+            if state.categorization is None or state.input is None
+            else _categorization_payload(state.categorization, state.input)
+        ),
+        "report": None if state.report is None else _report_payload(state.report),
+        "stageDurationMs": stage_duration_ms,
+        "peakMemoryKib": peak_memory_kib,
+    }
+
+
+def _llm_usage_payload(usage: LlmUsage) -> dict[str, Any]:
+    _require(
+        MODEL_PATTERN.fullmatch(usage.requested_model),
+        f"{usage.requested_model!r} is not a model id",
+    )
+    _require(
+        usage.served_model is None or MODEL_PATTERN.fullmatch(usage.served_model),
+        f"{usage.served_model!r} is not a model id",
+    )
+    counts = {
+        "calls": usage.calls,
+        "requests": usage.requests,
+        "failedRequests": usage.failed_requests,
+        "rateLimitedRequests": usage.rate_limited_requests,
+        "truncatedCalls": usage.truncated_calls,
+        "inputTokens": usage.input_tokens,
+        "cachedInputTokens": usage.cached_input_tokens,
+        "outputTokens": usage.output_tokens,
+    }
+    _require_counts("llmUsage", counts)
+    _require(usage.calls >= 1, "llmUsage: a row needs at least one call")
+    _require(
+        usage.requests >= usage.failed_requests >= usage.rate_limited_requests,
+        "llmUsage: needs requests >= failedRequests >= rateLimitedRequests",
+    )
+    # Only a call's last request can succeed.
+    _require(
+        usage.requests - usage.failed_requests <= usage.calls,
+        "llmUsage: needs at most one successful request per call",
+    )
+    _require(usage.truncated_calls <= usage.calls, "llmUsage: needs truncatedCalls <= calls")
+    _require(
+        usage.cached_input_tokens <= usage.input_tokens,
+        "llmUsage: needs cachedInputTokens <= inputTokens",
+    )
+    # From the totals, so the cost is rounded once rather than once per call.
+    cost = cost_micro_usd(
+        usage.requested_model,
+        input_tokens=usage.input_tokens,
+        cached_input_tokens=usage.cached_input_tokens,
+        output_tokens=usage.output_tokens,
+    )
+    _require_counts("llmUsage", {"costMicroUsd": cost})
+    return {
+        "operation": usage.operation,
+        "requestedModel": usage.requested_model,
+        "servedModel": usage.served_model,
+        **counts,
+        "costMicroUsd": cost,
+    }
+
+
+def _input_payload(summary: InputSummary) -> dict[str, Any]:
+    counts = {
+        "rows": summary.rows,
+        "uniqueProducts": summary.unique_products,
+        "categorizationCacheEntries": summary.categorization_cache_entries,
+    }
+    _require_counts("input", counts)
+    _require_quantity("input.kilograms", summary.kilograms)
+    return {**counts, "kilograms": summary.kilograms}
+
+
+def _categorization_payload(
+    summary: CategorizationSummary, input_summary: InputSummary
+) -> dict[str, Any]:
+    counts = {
+        "cacheRawNameProducts": summary.cache_raw_name_products,
+        "cacheCleanedNameProducts": summary.cache_cleaned_name_products,
+        "llmMatchedProducts": summary.llm_matched_products,
+        "cacheNoMatchProducts": summary.cache_no_match_products,
+        "llmNoMatchProducts": summary.llm_no_match_products,
+        "unrecognizedLlmAnswers": summary.unrecognized_llm_answers,
+        "categorizedRows": summary.categorized_rows,
+    }
+    _require_counts("categorization", counts)
+    _require_quantity("categorization.categorizedKilograms", summary.categorized_kilograms)
+    matched = (
+        summary.cache_raw_name_products
+        + summary.cache_cleaned_name_products
+        + summary.llm_matched_products
+    )
+    _require(
+        matched == input_summary.unique_products,
+        f"categorization: the match types sum to {matched}, not the "
+        f"{input_summary.unique_products} unique products read",
+    )
+    _require(
+        summary.categorized_rows <= input_summary.rows,
+        f"categorization: {summary.categorized_rows} rows categorized of {input_summary.rows} read",
+    )
+    return {**counts, "categorizedKilograms": summary.categorized_kilograms}
+
+
+def _report_payload(summary: ReportSummary) -> dict[str, Any]:
+    _require_quantity("report.totalCo2eKg", summary.total_co2e_kg)
+    _require_quantity("report.co2eKgPerDinerOrMeal", summary.co2e_kg_per_diner_or_meal)
+    _require_percentage("report.plantPctByWeight", summary.plant_pct_by_weight)
+    if summary.plant_protein_pct_by_weight is not None:
+        _require_percentage("report.plantProteinPctByWeight", summary.plant_protein_pct_by_weight)
+    pairs = [(count.quality_check, count.status) for count in summary.finding_counts]
+    _require(len(set(pairs)) == len(pairs), "report: each quality check and status at most once")
+    _require_counts(
+        "report.findingCounts",
+        {
+            f"{quality_check}/{status}": count.findings
+            for (quality_check, status), count in zip(pairs, summary.finding_counts, strict=True)
+        },
+        minimum=1,
+    )
+    return {
+        "totalCo2eKg": summary.total_co2e_kg,
+        "co2eKgPerDinerOrMeal": summary.co2e_kg_per_diner_or_meal,
+        "plantPctByWeight": summary.plant_pct_by_weight,
+        "plantProteinPctByWeight": summary.plant_protein_pct_by_weight,
+        "findingCounts": [
+            {
+                "qualityCheck": count.quality_check,
+                "status": count.status,
+                "findings": count.findings,
+            }
+            for count in summary.finding_counts
+        ],
+    }
+
+
+def _require_counts(path: str, counts: Mapping[str, int], *, minimum: int = 0) -> None:
+    for name, value in counts.items():
+        _require(
+            # `bool` subclasses `int` and would be written as `true`; a float may be fractional.
+            # The type checker lets both through, and the parent refuses both.
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and minimum <= value <= MAX_POSTGRES_INTEGER,
+            f"{path}.{name} must be an integer in [{minimum}, {MAX_POSTGRES_INTEGER}], "
+            f"got {value!r}",
+        )
+
+
+def _require_quantity(path: str, value: float) -> None:
+    _require(math.isfinite(value) and value >= 0, f"{path} must be finite and >= 0, got {value}")
+
+
+def _require_percentage(path: str, value: float) -> None:
+    _require(0 <= value <= 100, f"{path} must be in [0, 100], got {value}")
 
 
 def _require(condition: object, problem: str) -> None:

@@ -25,6 +25,7 @@ def test_agrees_on_the_run_directory_layout() -> None:
         "progress": layout.PROGRESS,
         "result": layout.RESULT,
         "failure": layout.FAILURE,
+        "telemetry": layout.TELEMETRY,
         "resultFilesDirectory": layout.RESULT_FILES_DIRECTORY,
         "workDirectory": layout.WORK_DIRECTORY,
         "directoriesCreatedByParent": list(layout.DIRECTORIES_CREATED_BY_PARENT),
@@ -48,6 +49,15 @@ def test_agrees_on_the_result_file_names() -> None:
 def test_agrees_on_the_report_enums() -> None:
     assert CONTRACT["reportEnums"]["countsBasis"] == list(names.COUNTS_BASES)
     assert CONTRACT["reportEnums"]["unitSystem"] == list(names.UNIT_SYSTEMS)
+
+
+def test_agrees_on_the_telemetry_enums() -> None:
+    assert CONTRACT["telemetryEnums"] == {
+        "llmOperation": list(names.LLM_OPERATIONS),
+        "stage": list(names.STAGES),
+        "qualityCheck": list(names.QUALITY_CHECKS),
+        "diagnosticStatus": list(names.DIAGNOSTIC_STATUSES),
+    }
 
 
 def test_agrees_on_the_exit_codes() -> None:
