@@ -51,6 +51,8 @@ export function renderText(document: Document): string {
 }
 
 // Styles are inline because email clients discard `<head>`.
+// An image must come from the web app's `static/`: anything served through `handle` answers
+// `Cross-Origin-Resource-Policy: same-origin`, which blocks webmail clients that load it directly.
 export const BODY_STYLE =
   'margin:0;padding:24px;background:#f5f5f4;' +
   "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;" +

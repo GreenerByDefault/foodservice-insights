@@ -19,6 +19,7 @@ export const EMAILER: Emailer = initializeEmailer({
     parseTransportSettings({
       name: requireEnv('EMAIL_TRANSPORT'),
       endpoint: process.env.EMAIL_ENDPOINT,
+      postmarkServerToken: process.env.POSTMARK_SERVER_TOKEN,
     }),
   ),
   from: { address: requireEnv('EMAIL_FROM_ADDRESS'), name: APP_NAME },

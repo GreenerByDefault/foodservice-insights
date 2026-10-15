@@ -1,18 +1,23 @@
 import { exhaustiveArray } from '@gbd/core';
 import type { EmailTransport } from '../client.ts';
 import { mailpitTransport } from './mailpit.ts';
+import { postmarkTransport } from './postmark.ts';
 import { providerTransport } from './provider.ts';
 
-export type TransportName = 'mailpit' | 'provider';
+export type TransportName = 'mailpit' | 'postmark' | 'provider';
 
-const TRANSPORT_NAMES = exhaustiveArray<TransportName>()(['mailpit', 'provider']);
+const TRANSPORT_NAMES = exhaustiveArray<TransportName>()(['mailpit', 'postmark', 'provider']);
 
 export type RawTransportSettings = {
   name: string;
   endpoint: string | undefined;
+  postmarkServerToken: string | undefined;
 };
 
-export type TransportSettings = { name: 'mailpit'; endpoint: string } | { name: 'provider' };
+export type TransportSettings =
+  | { name: 'mailpit'; endpoint: string }
+  | { name: 'postmark'; serverToken: string }
+  | { name: 'provider' };
 
 /** Validate the raw environment settings, or throw naming what went wrong. */
 export function parseTransportSettings(settings: RawTransportSettings): TransportSettings {
@@ -30,6 +35,14 @@ export function parseTransportSettings(settings: RawTransportSettings): Transpor
       }
       return { name: 'mailpit', endpoint: settings.endpoint };
     }
+    case 'postmark': {
+      if (!settings.postmarkServerToken) {
+        throw new Error(
+          'EMAIL_TRANSPORT=postmark needs POSTMARK_SERVER_TOKEN, the Server API token.',
+        );
+      }
+      return { name: 'postmark', serverToken: settings.postmarkServerToken };
+    }
     case 'provider':
       return { name: 'provider' };
   }
@@ -39,6 +52,8 @@ export function resolveTransport(settings: TransportSettings): EmailTransport {
   switch (settings.name) {
     case 'mailpit':
       return mailpitTransport({ endpoint: settings.endpoint });
+    case 'postmark':
+      return postmarkTransport({ serverToken: settings.serverToken });
     case 'provider':
       return providerTransport();
   }
