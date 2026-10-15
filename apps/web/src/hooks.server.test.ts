@@ -100,6 +100,8 @@ describe('handle', () => {
   test.each([
     ['/orgs/acme/poll', '/(app)/orgs/[organizationSlug=slug]/poll'],
     ['/csp-report', '/csp-report'],
+    ['/health/live', '/health/live'],
+    ['/health/ready', '/health/ready'],
   ] as const)(
     'logs %s at debug, so the default level shows only what a person did',
     async (pathname, routeId) => {
@@ -144,14 +146,18 @@ describe('handle', () => {
     expect(authorization.loadAuthorization).not.toHaveBeenCalled();
   });
 
-  test('leaves the liveness probe alone, so it can report on the database', async () => {
-    const event = anEvent('/health');
+  test.each(['/health/live', '/health/ready'])(
+    'leaves the probe at %s alone, so it answers without Supabase',
+    async (pathname) => {
+      const event = anEvent(pathname);
 
-    await handle({ event, resolve: respond });
+      await handle({ event, resolve: respond });
 
-    expect(event.locals.auth).toBeNull();
-    expect(authorization.loadAuthorization).not.toHaveBeenCalled();
-  });
+      expect(event.locals.auth).toBeNull();
+      expect(identify.identifyUser).not.toHaveBeenCalled();
+      expect(authorization.loadAuthorization).not.toHaveBeenCalled();
+    },
+  );
 
   test('identifies no one sending a violation report', async () => {
     const event = anEvent('/csp-report');
@@ -288,7 +294,7 @@ describe('handleError', () => {
       const body = await handleError({
         kind: 'framework',
         error: { status: 405, message: 'Method Not Allowed' },
-        event: anEvent('/health'),
+        event: anEvent('/health/ready'),
       });
 
       expect(body).toBeUndefined();

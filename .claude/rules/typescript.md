@@ -144,7 +144,7 @@ Applies to `packages/storage` and every app or package that imports it.
 - **For route handlers, put the logic in an exported `_`-prefixed function** that takes a
   `db: DatabaseExecutor` — SvelteKit permits those alongside `GET`/`POST` — and have the
   handler call it with `database()`. Call `database()` inside the handler, never at module
-  scope. Name that function's test file without a `+` prefix (e.g. `check-health.test.ts`,
+  scope. Name that function's test file without a `+` prefix (e.g. `check-readiness.test.ts`,
   not `+server.test.ts`) — SvelteKit reserves `+` names, and the build fails on one it
   doesn't recognize.
 - **The exported `_`-prefixed function wraps its own DB calls in `withDbErrorHandling`**

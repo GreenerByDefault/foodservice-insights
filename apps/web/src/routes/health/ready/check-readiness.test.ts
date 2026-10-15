@@ -4,22 +4,22 @@ import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
 import { requirePrivateVar } from '#lib/server/env.js';
 import { blobStore } from '#lib/server/storage.js';
-import { _checkHealth } from './+server.ts';
+import { _checkReadiness } from './+server.ts';
 
-describe('_checkHealth', () => {
+describe('_checkReadiness', () => {
   test('ok when both the database and the bucket are reachable', async () => {
     await withRollback(database(), async (transaction) => {
-      expect(await _checkHealth(transaction, blobStore())).toEqual({ status: 'ok' });
+      expect(await _checkReadiness(transaction, blobStore())).toEqual({ status: 'ok' });
     });
   });
 
   test('degraded when the database is unreachable', async () => {
     await withRollback(database(), async (transaction) => {
       // The point here is what `divideByZero` leaves behind: an aborted transaction, so
-      // `_checkHealth`'s own `SELECT 1` fails too.
+      // `_checkReadiness`'s own `SELECT 1` fails too.
       await divideByZero(transaction).catch(() => {});
 
-      expect(await _checkHealth(transaction, blobStore())).toEqual({ status: 'degraded' });
+      expect(await _checkReadiness(transaction, blobStore())).toEqual({ status: 'degraded' });
     });
   });
 
@@ -35,7 +35,7 @@ describe('_checkHealth', () => {
 
     try {
       await withRollback(database(), async (transaction) => {
-        expect(await _checkHealth(transaction, missingBucket)).toEqual({ status: 'degraded' });
+        expect(await _checkReadiness(transaction, missingBucket)).toEqual({ status: 'degraded' });
       });
     } finally {
       shutdownBlobStore(missingBucket);

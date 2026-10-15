@@ -17,8 +17,7 @@ Other plans own these pieces:
 
 - **Our own domain and Cloudflare**: [`cloudflare-and-domain.md`](cloudflare-and-domain.md). Until
   it lands, the web app is served from its App Platform starter domain.
-- **The specs' `alerts:`, alert destinations, and `liveness_health_check`**:
-  [`alerts.md`](alerts.md). **`log_destinations:`**: [`logs.md`](logs.md). Both add to the spec
+- **The specs' `alerts:` and alert destinations**: [`alerts.md`](alerts.md). **`log_destinations:`**: [`logs.md`](logs.md). Both add to the spec
   files PR 1 creates, and both pass their tokens the same way as every other secret (§ Secrets).
 - **Postmark's credentials**: [`email-provider.md`](email-provider.md) adds them the same way.
 - **The site password** has landed (`SITE_PASSWORD`, checked by
@@ -117,12 +116,12 @@ variable. A test reads `.do/worker.yaml` and fails if the two values disagree. T
 still cuts off are recorded `shut_down`, and the user retries them. Dispatching worker deploys at a
 quiet hour avoids most of them.
 
-### `/health` is the readiness check only
+### The web app's two probes
 
-The web app's `health_check` points at `/health`, which checks the database and the bucket. That
-is right for readiness: a deploy whose instance cannot reach Supabase fails and rolls back instead
-of going live. As a liveness check, `/health` would restart every web container whenever Supabase
-blipped, so `alerts.md` owns the liveness check and points it at a route with no dependencies.
+`health_check` points at `/health/ready`, which checks the database and the bucket, so a deploy
+whose instance cannot reach Supabase fails and rolls back instead of going live.
+`liveness_health_check` points at `/health/live`, which touches nothing, so a wedged process
+restarts but a Supabase blip restarts nothing.
 
 ### Sizes, counts, and region
 
@@ -184,7 +183,7 @@ until the first CI dispatch, so it spends nothing on OpenAI. Record each app's I
 variable (`DO_WEB_APP_ID`, `DO_WORKER_APP_ID`). Then check the things the docs leave open:
 
 - App Platform pulls the nested GHCR repository `foodservice-insights/web` by digest.
-- `DB_SSL_CA` arrives intact: the web app's `/health` answers 200.
+- `DB_SSL_CA` arrives intact: the web app's `/health/ready` answers 200.
 - An update with a deliberately wrong secret fails, `doctl` exits nonzero, and the previous
   deployment keeps serving.
 - An attempt that is running when the worker is redeployed either finishes or ends `shut_down`.

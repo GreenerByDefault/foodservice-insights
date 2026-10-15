@@ -16,7 +16,7 @@ const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'Cross-Origin-Resource-Policy': 'same-origin',
 };
 
-/** For everything that is not a page: `/api`, polls, `__data.json`, redirects, `/health`. */
+/** For everything that is not a page: `/api`, polls, `__data.json`, redirects, `/health/*`. */
 const NON_PAGE_POLICY = "default-src 'none'; frame-ancestors 'none'";
 
 export function applySecurityHeaders(response: Response): Response {

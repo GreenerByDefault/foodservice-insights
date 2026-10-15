@@ -13,16 +13,21 @@ import { applySecurityHeaders } from '#lib/server/security-headers.js';
 import { closeBlobStore } from '#lib/server/storage.js';
 import type { RouteId } from '$app/types';
 
-/** Paths no caller identifies itself on. The liveness probe reports on the database, so it must
- * be able to answer without one; a violation report would otherwise cost a Supabase round trip
- * to learn a user nothing logs. */
-const ANONYMOUS_PATHS: ReadonlySet<string> = new Set(['/health', '/csp-report']);
+/** Paths no caller identifies itself on. Identifying a caller needs Supabase, which the readiness
+ * probe reports on and the liveness probe must not depend on; a violation report would otherwise
+ * cost a Supabase round trip to learn a user nothing logs. */
+const ANONYMOUS_PATHS: ReadonlySet<string> = new Set([
+  '/health/live',
+  '/health/ready',
+  '/csp-report',
+]);
 
 /** Called by a timer or a browser rather than by a person, so their access lines are `debug`, not
  * `info`. A failure on one still writes its own line at `error`, and a violation report its own at
  * `warn`. */
 const UNATTENDED_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
-  '/health',
+  '/health/live',
+  '/health/ready',
   '/csp-report',
   '/(app)/orgs/[organizationSlug=slug]/poll',
   '/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/poll',
