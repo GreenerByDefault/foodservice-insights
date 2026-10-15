@@ -16,7 +16,7 @@ import math
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -24,8 +24,16 @@ from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisOutcome,
     AnalysisRequest,
+    CategorizationSummary,
+    FindingCount,
+    InputSummary,
     InvalidInputError,
+    LlmCall,
     ReportProgress,
+    ReportSummary,
+    ReportTelemetry,
+    StageFinished,
+    Telemetry,
     UnusableDataError,
     UpstreamApiError,
 )
@@ -50,6 +58,54 @@ FAIL_REASONS: Final = {
 }
 
 KNOWN_SCENARIOS: Final = ("slow", "hang", "crash", "fail", "missing-pdf")
+
+_STUB_CALL: Final = LlmCall(
+    operation="clean",
+    requested_model="gpt-4.1-mini",
+    served_model="gpt-4.1-mini-2025-04-14",
+    requests=1,
+    failed_requests=0,
+    rate_limited_requests=0,
+    truncated=False,
+    input_tokens=1_050,
+    cached_input_tokens=1_024,
+    output_tokens=8,
+)
+
+# What every scenario reports before it does anything else: a whole run's worth, so a `!slow` or
+# `!hang` run that is canceled or killed still leaves a full document behind.
+STUB_TELEMETRY: Final[tuple[Telemetry, ...]] = (
+    StageFinished("read", duration_ms=120),
+    InputSummary(rows=36, kilograms=163.29, unique_products=14, categorization_cache_entries=0),
+    _STUB_CALL,
+    replace(_STUB_CALL, requests=2, failed_requests=1, rate_limited_requests=1),
+    replace(_STUB_CALL, operation="match", output_tokens=6),
+    StageFinished("categorize", duration_ms=2_400),
+    CategorizationSummary(
+        cache_raw_name_products=0,
+        cache_cleaned_name_products=0,
+        llm_matched_products=14,
+        cache_no_match_products=0,
+        llm_no_match_products=2,
+        unrecognized_llm_answers=0,
+        categorized_rows=30,
+        categorized_kilograms=136.08,
+    ),
+    ReportSummary(
+        quality_status="warning",
+        finding_counts=(
+            FindingCount("date_distribution", "success", 1),
+            FindingCount("missing_internal_months", "warning", 1),
+        ),
+        total_co2e_kg=1_024.5,
+        co2e_kg_per_diner_or_meal=0.25,
+        plant_pct_by_weight=18.4,
+        plant_protein_pct_by_weight=None,
+    ),
+    StageFinished("report", duration_ms=310),
+    StageFinished("pdf", duration_ms=1_850),
+    StageFinished("xlsx", duration_ms=95),
+)
 
 USAGE: Final = f"usage: python -m worker_child.testing <{'> <'.join(names.POSITIONAL_ARGUMENTS)}>"
 
@@ -79,15 +135,24 @@ def _no_op_progress() -> None:
     pass
 
 
+def _no_op_telemetry(telemetry: Telemetry) -> None:
+    pass
+
+
 def build_analyze(*, sleep: Callable[[float], None] = time.sleep) -> Analyze:
     """The `analyze` every `WORKER_MODE=stubbed` run injects. `sleep` is overridable so a test
     can drive `!slow` without waiting out real seconds; production never passes it.
     """
 
     def analyze(
-        request: AnalysisRequest, *, report_progress: ReportProgress = _no_op_progress
+        request: AnalysisRequest,
+        *,
+        report_progress: ReportProgress = _no_op_progress,
+        report_telemetry: ReportTelemetry = _no_op_telemetry,
     ) -> AnalysisOutcome:
         scenario = parse_scenario(request.report_name)
+        for record in STUB_TELEMETRY:
+            report_telemetry(record)
 
         if scenario.name is None:
             return stub_analysis(request, report_progress=report_progress)

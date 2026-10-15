@@ -17,7 +17,7 @@ from worker_child.contract.messages import (
     result_payload,
 )
 from worker_child.failures import classify_error
-from worker_child.writer import progress_reporter, write_json_atomically
+from worker_child.writer import progress_reporter, telemetry_reporter, write_json_atomically
 
 # `stub_analysis` takes extra keyword-only params beyond what `analyze()` does,
 # so `Callable[..., AnalysisOutcome]` is the honest type.
@@ -48,7 +48,11 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     manifest = read_run_manifest(run_directory)
     request = _build_request(run_directory, manifest)
 
-    outcome = analyze(request, report_progress=progress_reporter(run_directory))
+    outcome = analyze(
+        request,
+        report_progress=progress_reporter(run_directory),
+        report_telemetry=telemetry_reporter(run_directory),
+    )
 
     payload = result_payload(analysis_attempt_id=manifest.analysis_attempt_id)
     place_result_files(run_directory, outcome)
