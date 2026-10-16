@@ -38,7 +38,8 @@ services:
       # Any restart: a crash, an out-of-memory kill, or a failed liveness probe.
       - rule: RESTART_COUNT
         operator: GREATER_THAN
-        value: 0
+        # Not 0: the API reads 0 as missing and rejects the spec. There is no GREATER_THAN_OR_EQUAL.
+        value: 0.5
         window: FIVE_MINUTES
       # A page is a few database round trips, so seconds means the database or the bucket is
       # slow. A slow upload trips it only when no report page is open, since each one polls every
