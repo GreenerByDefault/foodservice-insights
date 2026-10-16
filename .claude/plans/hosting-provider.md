@@ -151,7 +151,7 @@ the docs left open turns up; fix forward:
   DigitalOcean is running matches the one in the run's log, and `/health/ready` on the starter
   domain answers 200, which shows the database CA arrived intact.
 - Dispatching `deploy.yml` deploys the worker at `deploy/web`'s commit, and the web app does not
-  redeploy.
+  redeploy. The next attempt it claims has that commit as its `worker_git_sha`.
 - A worker dispatch while an attempt is running ends that attempt `succeeded` or `shut_down`.
   Ending `abandoned` would mean App Platform did not honor the grace.
 - With a secret deleted from the Environment, the deploy fails before anything is submitted.
