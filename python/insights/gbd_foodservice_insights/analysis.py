@@ -112,6 +112,8 @@ class AnalysisRequest:
 class AnalysisOutcome:
     pdf: Path
     xlsx: Path
+    # The products the LLM categorized, which the worker suggests to the cache.
+    new_categorizations: tuple[NewCategorization, ...] = ()
 
 
 LB_TO_KG: Final = 0.45359237
@@ -190,7 +192,9 @@ def analyze(
         xlsx_path = request.output_directory / "report.xlsx"
         write_client_workbook(report, xlsx_path)
 
-    return AnalysisOutcome(pdf=pdf_path, xlsx=xlsx_path)
+    return AnalysisOutcome(
+        pdf=pdf_path, xlsx=xlsx_path, new_categorizations=categorized.new_categorizations
+    )
 
 
 @contextmanager

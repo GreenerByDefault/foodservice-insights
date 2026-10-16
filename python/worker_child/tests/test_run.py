@@ -12,6 +12,7 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     InputSummary,
     InvalidInputError,
+    NewCategorization,
     StageFinished,
     UnusableDataError,
     UpstreamApiError,
@@ -43,6 +44,50 @@ def test_places_result_files_under_contract_names(run_directory: Path) -> None:
     files_directory = run_directory / layout.RESULT_FILES_DIRECTORY
     assert (files_directory / layout.PDF_FILE_NAME).read_bytes().startswith(b"%PDF")
     assert (files_directory / layout.XLSX_FILE_NAME).is_file()
+
+
+def test_writes_no_new_categorizations_for_a_stub_analysis(run_directory: Path) -> None:
+    run(run_directory, analyze=stub_analysis)
+
+    assert read_json(run_directory / layout.NEW_CATEGORIZATIONS) == {
+        "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
+        "rows": [],
+    }
+
+
+def test_writes_the_new_categorizations_the_analysis_returns(run_directory: Path) -> None:
+    rows = (
+        NewCategorization("Pork Loin", "pork loin", "Pork (pig meat)"),
+        NewCategorization("Paper Towels", None, "No Matches Found"),
+    )
+
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        return stub_analysis(request, new_categorizations=rows)
+
+    run(run_directory, analyze=analyze)
+
+    assert read_json(run_directory / layout.NEW_CATEGORIZATIONS) == {
+        "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
+        "rows": [
+            {"product": "Pork Loin", "cleanedName": "pork loin", "category": "Pork (pig meat)"},
+            {"product": "Paper Towels", "cleanedName": None, "category": "No Matches Found"},
+        ],
+    }
+
+
+def test_a_product_repeated_in_the_new_categorizations_is_a_contract_violation(
+    run_directory: Path,
+) -> None:
+    rows = (NewCategorization("Pork Loin", "pork", "Pork (pig meat)"),) * 2
+
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        return stub_analysis(request, new_categorizations=rows)
+
+    exit_code = run(run_directory, analyze=analyze)
+
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
+    assert not (run_directory / layout.RESULT).exists()
 
 
 def test_reports_progress_once_per_report_progress_call(run_directory: Path) -> None:

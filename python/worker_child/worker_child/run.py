@@ -14,6 +14,7 @@ from worker_child.contract import layout, names
 from worker_child.contract.messages import (
     RunManifest,
     failure_payload,
+    new_categorizations_payload,
     read_categorization_cache,
     read_run_manifest,
     result_payload,
@@ -43,8 +44,8 @@ def run(run_directory: Path, analyze: Analyze = default_analyze) -> int:
 
 
 def _produce_result(run_directory: Path, analyze: Analyze) -> None:
-    """Ordering is load-bearing: every result file lands before `result.json`, because the
-    parent treats a declared-but-missing file as a `contract_violation`.
+    """Ordering is load-bearing: every result file and `new-categorizations.json` land before
+    `result.json`, because the parent treats a declared-but-missing file as a `contract_violation`.
     """
     layout.require_created_by_parent(run_directory)
     manifest = read_run_manifest(run_directory)
@@ -58,7 +59,11 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     )
 
     payload = result_payload(analysis_attempt_id=manifest.analysis_attempt_id)
+    new_categorizations = new_categorizations_payload(
+        analysis_attempt_id=manifest.analysis_attempt_id, rows=outcome.new_categorizations
+    )
     place_result_files(run_directory, outcome)
+    write_json_atomically(run_directory / layout.NEW_CATEGORIZATIONS, new_categorizations)
     write_json_atomically(run_directory / layout.RESULT, payload)
 
 

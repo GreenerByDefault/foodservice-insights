@@ -110,6 +110,32 @@ def test_a_successful_analysis_exits_zero_and_writes_the_contracts_result(
     assert (run_directory / layout.RESULT_FILES_DIRECTORY / layout.PDF_FILE_NAME).is_file()
 
 
+def test_a_scenarios_new_categorizations_reach_the_document_through_a_real_process(
+    run_directory: Path,
+) -> None:
+    row = {"product": "Pork Loin", "cleanedName": "pork loin", "category": "Pork (pig meat)"}
+    process = spawn_child({"newCategorizations": [row]}, run_directory)
+
+    process.communicate(timeout=CHILD_TIMEOUT_SECONDS)
+
+    assert read_json(run_directory / layout.NEW_CATEGORIZATIONS) == {
+        "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
+        "rows": [row],
+    }
+
+
+def test_without_new_categorizations_leaves_a_result_and_no_document(
+    run_directory: Path,
+) -> None:
+    process = spawn_child({"withoutNewCategorizations": True}, run_directory)
+
+    process.communicate(timeout=CHILD_TIMEOUT_SECONDS)
+
+    assert process.returncode == names.EXIT_WROTE_RESULT
+    assert (run_directory / layout.RESULT).is_file()
+    assert not (run_directory / layout.NEW_CATEGORIZATIONS).exists()
+
+
 def test_an_analysis_error_reaches_failure_json_through_a_real_process(
     run_directory: Path,
 ) -> None:

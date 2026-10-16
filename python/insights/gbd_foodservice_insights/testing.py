@@ -10,6 +10,7 @@ from gbd_foodservice_insights.analysis import (
     AnalysisOutcome,
     AnalysisRequest,
     LlmOperation,
+    NewCategorization,
     ReportProgress,
     ReportTelemetry,
     Telemetry,
@@ -40,6 +41,7 @@ def stub_analysis(
     progress_calls: int = 2,
     telemetry: Sequence[Telemetry] = (),
     raises: type[AnalysisError] | None = None,
+    new_categorizations: Sequence[NewCategorization] = (),
 ) -> AnalysisOutcome:
     """The library's own definition of a valid `analyze()`, shipped for `worker_child`'s
     tests the same way `@gbd/db/testing` ships fakes for its consumers.
@@ -66,7 +68,7 @@ def stub_analysis(
     if write_xlsx:
         xlsx.write_bytes(XLSX_MAGIC_BYTES)
 
-    return AnalysisOutcome(pdf=pdf, xlsx=xlsx)
+    return AnalysisOutcome(pdf=pdf, xlsx=xlsx, new_categorizations=tuple(new_categorizations))
 
 
 # The first keyword found in a name wins, so a keyword must come before any shorter one it

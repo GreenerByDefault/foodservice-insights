@@ -26,6 +26,7 @@ from gbd_foodservice_insights.analysis import (
     AnalysisOutcome,
     AnalysisRequest,
     InvalidInputError,
+    NewCategorization,
     ReportProgress,
     ReportTelemetry,
     UnusableDataError,
@@ -67,6 +68,8 @@ class Scenario:
     hang: bool = False
     spawn_grandchild: bool = False
     telemetry: bool = False  # report `STUB_TELEMETRY`
+    new_categorizations: tuple[NewCategorization, ...] = ()
+    without_new_categorizations: bool = False
 
 
 def parse_scenario(data: Mapping[str, Any]) -> Scenario:
@@ -77,6 +80,13 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
         hang=data.get("hang", False),
         spawn_grandchild=data.get("spawnGrandchild", False),
         telemetry=data.get("telemetry", False),
+        new_categorizations=tuple(
+            NewCategorization(
+                product=row["product"], cleaned_name=row["cleanedName"], category=row["category"]
+            )
+            for row in data.get("newCategorizations", ())
+        ),
+        without_new_categorizations=data.get("withoutNewCategorizations", False),
     )
 
 
@@ -108,6 +118,7 @@ def build_analyze(scenario: Scenario) -> Analyze:
             write_pdf=layout.PDF_FILE_NAME not in scenario.without_files,
             write_xlsx=layout.XLSX_FILE_NAME not in scenario.without_files,
             progress_calls=0,  # already reported above
+            new_categorizations=scenario.new_categorizations,
         )
 
     return analyze
@@ -143,7 +154,12 @@ def _spawn_grandchild() -> None:
 def main(argv: list[str]) -> int:
     scenario_json, run_directory = argv[1], argv[2]
     scenario = parse_scenario(json.loads(scenario_json))
-    return run(Path(run_directory), analyze=build_analyze(scenario))
+    exit_code = run(Path(run_directory), analyze=build_analyze(scenario))
+    if scenario.without_new_categorizations:
+        # `run()` always writes the document, so the scenario removes it afterwards: a child that
+        # exits 0 without it.
+        (Path(run_directory) / layout.NEW_CATEGORIZATIONS).unlink()
+    return exit_code
 
 
 if __name__ == "__main__":

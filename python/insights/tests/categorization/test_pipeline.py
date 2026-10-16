@@ -10,6 +10,7 @@ from gbd_foodservice_insights.categorization.llm import LLM_CONCURRENCY
 from gbd_foodservice_insights.categorization.pipeline import (
     CategorizationSummary,
     CategorizedProducts,
+    NewCategorization,
     categorize_unique_products,
     summarize_categorization,
 )
@@ -191,6 +192,13 @@ def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFi
     assert [r.getMessage() for r in caplog.records if r.name.endswith(".steps")] == [
         "2 of 5 LLM answers were not recognized; most common: [('pork', 1), ('None', 1)]",
     ]
+    assert categorized.new_categorizations == (
+        NewCategorization("Cheddar Shred", "cheddar shred", "Cheese"),
+        NewCategorization("Salted Butter", "salted butter", "Butter"),
+        NewCategorization("Pork Loin", "pork loin", no_match),
+        NewCategorization("Mozzarella Block", "mozzarella block", "Cheese"),
+        NewCategorization("Cheesecake Slice", "cheesecake slice", no_match),
+    )
 
 
 def test_categorize_unique_products_makes_llm_calls_concurrently() -> None:
