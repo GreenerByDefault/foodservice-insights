@@ -4,12 +4,18 @@
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { loadLocalEnv, optionalIntEnv, requireEnv } from '@gbd/core/env';
+import { type Database, shutdownDatabase } from '@gbd/db';
 import { EMAILER } from '@gbd/email/env';
 import { bucketExists } from '@gbd/storage';
 import { BLOB_STORE, shutdown as shutdownBlobStore } from '@gbd/storage/env';
+import type { Kysely } from 'kysely';
 import { SYSTEM_CLOCK } from './clock.ts';
 import { createWorkerConfig } from './config.ts';
-import { shutdown as shutdownDatabase, WORKER_DATABASE } from './db.ts';
+import {
+  initializeCacheDatabase,
+  shutdown as shutdownWorkerDatabase,
+  WORKER_DATABASE,
+} from './db.ts';
 import { WORKER_LOG } from './log.ts';
 import { resolveWorkerMode } from './modes.ts';
 import { resolvePythonBin } from './python-bin.ts';
@@ -29,6 +35,8 @@ process.on('unhandledRejection', (reason) => {
 });
 
 async function main(): Promise<void> {
+  // Set only when `CACHE_DB_CONNECTION_STRING` points the cache at a database of its own.
+  let separateCacheDb: Kysely<Database> | undefined;
   try {
     const platformShutdownGraceMs = optionalIntEnv('PLATFORM_SHUTDOWN_GRACE_MS');
     const resolved = resolveWorkerMode({
@@ -36,6 +44,7 @@ async function main(): Promise<void> {
       pythonBin: resolvePythonBin(process.env.PYTHON_BIN),
       openAiApiKey: process.env.OPENAI_API_KEY,
       platformShutdownGraceMs,
+      cacheDbConnectionString: process.env.CACHE_DB_CONNECTION_STRING,
     });
     if (resolved.mode === 'off') {
       WORKER_LOG.info('WORKER_MODE=off; not starting a worker.');
@@ -68,17 +77,31 @@ async function main(): Promise<void> {
       );
     }
 
+    const { cacheDatabase } = resolved;
+    if (cacheDatabase.kind === 'separate') {
+      separateCacheDb = initializeCacheDatabase(cacheDatabase.connectionString);
+    }
+
     const log = WORKER_LOG.child({ workerId: config.workerId });
+    if (cacheDatabase.kind === 'worker' && cacheDatabase.ignoredVariable) {
+      log.warn(
+        { mode: resolved.mode },
+        'Ignoring CACHE_DB_CONNECTION_STRING, which only live honors, so that this mode cannot ' +
+          "suggest to a shared cache. The cache is the worker's own database.",
+      );
+    }
     log.info(
       {
         mode: resolved.mode,
         maxConcurrentAttempts: config.maxConcurrentAttempts,
         workerGitSha: config.workerGitSha,
+        cacheDatabase: cacheDatabase.kind === 'separate' ? cacheDatabase.redacted : 'worker',
       },
       'Worker started',
     );
     const worker = createWorker({
       db: WORKER_DATABASE,
+      cacheDb: separateCacheDb ?? WORKER_DATABASE,
       store: BLOB_STORE,
       emailer: EMAILER,
       clock: SYSTEM_CLOCK,
@@ -104,7 +127,10 @@ async function main(): Promise<void> {
     await worker.run();
   } finally {
     // There is no emailer shutdown.
-    await shutdownDatabase();
+    await Promise.all([
+      shutdownWorkerDatabase(),
+      separateCacheDb && shutdownDatabase(separateCacheDb),
+    ]);
     shutdownBlobStore();
   }
 }

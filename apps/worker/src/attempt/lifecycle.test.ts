@@ -57,6 +57,7 @@ function dependencies(
 ): AttemptDependencies {
   return {
     db: WORKER_DATABASE,
+    cacheDb: WORKER_DATABASE,
     store: BLOB_STORE,
     workerId,
     runRoot: fixture.runRoot,
@@ -623,6 +624,7 @@ describe('failure rows', () => {
       await withAttemptFixture(workerId, async (fixture) => {
         const badDependencies: AttemptDependencies = {
           db: WORKER_DATABASE,
+          cacheDb: WORKER_DATABASE,
           store: BLOB_STORE,
           workerId,
           runRoot: fixture.runRoot,

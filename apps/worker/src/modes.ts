@@ -42,7 +42,19 @@ export type RawWorkerModeSettings = {
   /** Required by `live`. Without it, `drainGraceMs` falls back to a default no platform was sized
    * against, and a deploy kills in-flight attempts as an ordinary `shut_down`. */
   platformShutdownGraceMs: number | undefined;
+  /** `CACHE_DB_CONNECTION_STRING`. Honored only by `live`. */
+  cacheDbConnectionString: string | undefined;
 };
+
+/** Where the parent reads and suggests categorizations. */
+export type CacheDatabase =
+  /** The worker's own handle, which is production's configuration. `ignoredVariable` is set when
+   * `CACHE_DB_CONNECTION_STRING` is, but the mode must not use it: a keyword categorization in a
+   * shared cache would block the real LLM's suggestion for that product forever, since the first
+   * suggestion wins. */
+  | { kind: 'worker'; ignoredVariable: boolean }
+  /** `redacted` is the string without its password, for the startup log line. */
+  | { kind: 'separate'; connectionString: string; redacted: string };
 
 export type ResolvedWorkerMode =
   | { mode: 'off' }
@@ -50,6 +62,7 @@ export type ResolvedWorkerMode =
       mode: Exclude<WorkerMode, 'off'>;
       childCommand: ChildCommand;
       overrides: WorkerDefaultableFields;
+      cacheDatabase: CacheDatabase;
     };
 
 /** Validate `WORKER_MODE` and the variables that mode needs, or throw naming what went wrong.
@@ -86,5 +99,32 @@ export function resolveWorkerMode(settings: RawWorkerModeSettings): ResolvedWork
 
   // `mock-llm` runs on the production profile: it is `live` minus the API, and the point is a
   // real `killAfterNoProgressMs` against a real workload.
-  return { mode, childCommand, overrides: mode === 'stubbed' ? STUBBED_OVERRIDES : {} };
+  return {
+    mode,
+    childCommand,
+    overrides: mode === 'stubbed' ? STUBBED_OVERRIDES : {},
+    cacheDatabase: resolveCacheDatabase(mode, settings.cacheDbConnectionString),
+  };
+}
+
+function resolveCacheDatabase(
+  mode: Exclude<WorkerMode, 'off'>,
+  connectionString: string | undefined,
+): CacheDatabase {
+  if (!connectionString) return { kind: 'worker', ignoredVariable: false };
+  if (mode !== 'live') return { kind: 'worker', ignoredVariable: true };
+  return { kind: 'separate', connectionString, redacted: redactPassword(connectionString) };
+}
+
+/** `user@host:port/database`, dropping the password and the query. Never echoes an unparseable
+ * string, which may hold a password in a place `URL` did not recognize. */
+function redactPassword(connectionString: string): string {
+  let url: URL;
+  try {
+    url = new URL(connectionString);
+  } catch {
+    throw new Error('CACHE_DB_CONNECTION_STRING is not a valid postgresql:// URL.');
+  }
+  const user = url.username ? `${url.username}@` : '';
+  return `${user}${url.host}${url.pathname}`;
 }

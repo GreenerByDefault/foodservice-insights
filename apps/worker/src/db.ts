@@ -6,7 +6,13 @@
  */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
-import { type Database, initializeDatabase, shutdownDatabase, WORKER_DB_LIMITS } from '@gbd/db';
+import {
+  type Database,
+  DEFAULT_LIMITS,
+  initializeDatabase,
+  shutdownDatabase,
+  WORKER_DB_LIMITS,
+} from '@gbd/db';
 import type { Kysely } from 'kysely';
 import { WORKER_LOG } from './log.ts';
 
@@ -19,6 +25,21 @@ export const WORKER_DATABASE: Kysely<Database> = initializeDatabase({
   limits: WORKER_DB_LIMITS,
   log: WORKER_LOG,
 });
+
+/** The handle for `CACHE_DB_CONNECTION_STRING`, which only a laptop's `live` worker sets, as
+ * `cache_client` on the hosted project.
+ *
+ * Two connections and none kept while idle, because everyone who holds the role shares its 10
+ * (`CACHE_CLIENT_CONNECTION_LIMIT` in `@gbd/db`). No `sslCa`: a hand-composed string carries its
+ * own `sslmode` and `sslrootcert`, and `DB_SSL_CA` belongs to the production handles alone. */
+export function initializeCacheDatabase(connectionString: string): Kysely<Database> {
+  return initializeDatabase({
+    connectionString,
+    applicationName: 'worker-cache',
+    limits: { ...DEFAULT_LIMITS, minConnections: 0, maxConnections: 2 },
+    log: WORKER_LOG,
+  });
+}
 
 /** Close `WORKER_DATABASE`. Call this at the end of every script, or it will hang. */
 export async function shutdown(): Promise<void> {
