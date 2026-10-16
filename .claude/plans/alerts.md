@@ -39,12 +39,13 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   `.do/web.yaml` and `.do/worker.yaml`, so every app-level rule appears twice. Each file is
   canonical, because an update replaces the whole spec. Secrets in a spec are `${NAME}`
   placeholders that the deploy step fills from the `production` Environment.
-- **[`metrics-dashboards.md`](metrics-dashboards.md) builds the pipe that data alerts ride.** It
+- **[`metrics-pipeline.md`](metrics-pipeline.md) builds the pipe that data alerts ride.** It
   adds views in a `metrics` schema, read only by `metrics_reader`; `apps/grafana`, which holds
   dashboards as files; a local Grafana behind `gcx dev serve`; a check in `pnpm test` that runs
   every panel's query; and a `deploy-web` step that pushes to Grafana Cloud after the migration.
-  None of it has landed. Its `metrics.attempt` (PR 1) carries `status`, `failure_reason` and the
-  three timestamps, but no notification columns. gcx manages alert rules as well as dashboards
+  None of it has landed. Its `metrics.attempt` (PR 1) carries `status`, `failure_reason`, the
+  three timestamps, and the notification columns these rules read. gcx manages alert rules as
+  well as dashboards
   ([overview](https://grafana.com/docs/grafana/latest/as-code/observability-as-code/grafana-cli/gcx/overview/)).
 - **Grafana Cloud can scrape Supabase's metrics endpoint**, about 200 series of database CPU,
   memory, disk and connections, through a built-in Supabase integration. **But it authenticates
@@ -117,7 +118,7 @@ rule fires instead.
 ### Data rules
 
 - **Each rule is a `count(*)` over a `metrics` view, with a threshold.** The view holds the
-  definition (`metrics-dashboards.md` § Definitions), and the rule holds the threshold, so tuning
+  definition (`metrics-pipeline.md` § Definitions), and the rule holds the threshold, so tuning
   an alert is an edit to a rule file, never a migration. The rules, with where each starts:
   - **Queue wait:** a `pending` attempt created more than 30 minutes ago. At six concurrent slots
     and 2–15-minute attempts, a wait that long means demand beyond capacity, or no worker
@@ -132,14 +133,14 @@ rule fires instead.
   - **Notifications gave up** and **stuck:** ARCHITECTURE.md's two queries. *Stuck* also
     requires that the attempt still have a requester, as the due predicate in
     [`notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) does. Otherwise an attempt
-    whose requester was deleted would fire forever. `metrics.attempt` gains
-    `notification_attempts`, `notification_email_sent_at`, and whether a requester remains, as a
-    boolean.
+    whose requester was deleted would fire forever. `metrics.attempt` carries
+    `notification_attempts`, `notification_email_sent_at`, and `has_requester` from its first
+    version.
   - **Connections:** total connections above 80% of `max_connections`.
 - **`metrics.database_connection` is one row per role**, counted from `pg_stat_activity`, beside
   the role's `CONNECTION LIMIT` and the server's `max_connections`. Like every view, it runs with
-  its owner's rights, so `metrics_reader` needs no new grant. It has a panel on the product
-  dashboard, so a person can see who holds the connections.
+  its owner's rights, so `metrics_reader` needs no new grant. It has a panel on the operations
+  dashboard ([`dashboards.md`](dashboards.md)), so a person can see who holds the connections.
   [`budget.ts`](../../packages/db/src/budget.ts) remains where the limits are decided. The view
   only reports them.
 - **A rule that errors fires.** Every rule's error state is *Alerting*. So a query broken by a
@@ -155,7 +156,7 @@ rule fires instead.
 - **The contact point and notification policy are code**, like the data source. They are built
   from `ALERT_EMAILS`, which points at Mailpit locally, and upserted by the same script. Each
   person gets one email when an alert fires and one when it resolves.
-- **Every rule's query runs in `pnpm test`.** The panel check from `metrics-dashboards.md` PR 4
+- **Every rule's query runs in `pnpm test`.** The panel check from `metrics-pipeline.md` PR 5
   also reads the rule files and sends each query through Grafana against its run database. A rule
   must return exactly one number, and zero passes. So a view change that breaks a rule fails
   `pnpm test` and names the rule. Whether each rule fires on the rows it should is checked once,
@@ -213,24 +214,17 @@ After `hosting-provider.md` commits the app specs.
   `PUT /v2/apps` replaces the whole spec. If they do not, the deploy step re-applies them after
   every update, from `ALERT_EMAILS`.
 
-## PR 2 — the views
+## PR 2 — the connections view
 
-`packages/db`, the next migration. Needs `metrics-dashboards.md` PR 1.
+`packages/db`, the next migration. Needs `metrics-pipeline.md` PR 1.
 
-- `metrics.attempt` gains the notification columns and the requester boolean. Adding columns
-  means dropping and recreating it (`metrics-dashboards.md` § Definitions). If that plan's PR 6
-  has landed, tombstoned attempts carry nulls in the new columns.
 - `metrics.database_connection`, as in Decisions.
-- Tests in `tests/metrics.test.ts`:
-  - The notification columns carry what the row holds.
-  - A deleted requester shows as no requester.
-  - `metrics.database_connection` counts the test's own connection, under its role.
-  - The existing conventions cover the rest: no free text, and `metrics_reader` can read both
-    views.
+- A test in `tests/metrics.test.ts` that it counts the test's own connection, under its role.
+  The existing conventions cover the rest: no free text, and `metrics_reader` can read it.
 
 ## PR 3 — the data rules
 
-Needs `metrics-dashboards.md` PR 5, so that a push to Grafana Cloud exists, and PR 2 here.
+Needs `metrics-pipeline.md` PR 6, so that a push to Grafana Cloud exists, and PR 2 here.
 
 - `apps/grafana/resources/`: one rule file per rule from Decisions, in a folder of its own.
   Thresholds sit in the files, each with a comment saying what firing would mean.
@@ -239,7 +233,8 @@ Needs `metrics-dashboards.md` PR 5, so that a push to Grafana Cloud exists, and 
 - The local Grafana's compose file sends SMTP to Mailpit. `.env.example` and `.env.test` set
   `ALERT_EMAILS` to a placeholder address, since Mailpit accepts any.
 - The panel check reads the rule files too (§ Data rules).
-- A panel for `metrics.database_connection` on the product dashboard.
+- A panel for `metrics.database_connection` on the operations dashboard, which this PR creates
+  if `dashboards.md` PR 3 has not.
 - `ALERT_EMAILS` joins the `production` Environment, and `deploy-web`'s Grafana step passes it.
 
 ## PR 4 — Better Stack, and the docs
