@@ -5,8 +5,8 @@ The parent (`apps/worker`, TypeScript) sets up a run directory and spawns the ch
 two stacks. This directory is its source of truth.
 
 - [`contract.json`](contract.json) — every name both sides must agree on: paths within the run
-  directory, the input CSV's columns and date format, the invocation shape, the exit codes, and
-  who may claim each failure reason. Neither side reads it at runtime; both copy it into their
+  directory, the input CSV's columns and date format, the invocation shape, the exit codes, who
+  may claim each failure reason, and how many bytes a categorization's product may hold. Neither side reads it at runtime; both copy it into their
   own constants and assert equality in a unit test.
 - [`fixtures/valid/`](fixtures/valid/) — golden documents for each message. The side that *writes*
   a message in production asserts its writer reproduces the fixture; the side that *reads* it

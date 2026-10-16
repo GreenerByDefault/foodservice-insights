@@ -1,9 +1,15 @@
-/** The parent's half of parsing and validating the documents `contract/` defines: the manifest it
- * writes for the child, and the progress/result/failure/telemetry documents it reads back. A document that
- * fails to parse or fails its schema throws `ContractError`.
+/** The parent's half of parsing and validating the documents `contract/` defines: the manifest and
+ * categorization cache it writes for the child, and the progress, result, failure, telemetry and
+ * new-categorizations documents it reads back. A document that fails to parse or fails its schema
+ * throws `ContractError`.
  */
 
-import type { AnalysisAttemptId, CountsBasis, UnitSystem } from '@gbd/db';
+import {
+  type AnalysisAttemptId,
+  type CountsBasis,
+  MAX_CACHE_KEY_BYTES,
+  type UnitSystem,
+} from '@gbd/db';
 import * as v from 'valibot';
 import {
   CHILD_FAILURE_REASONS,
@@ -189,6 +195,49 @@ const TelemetrySchema = v.pipe(
   ),
 );
 
+// Rows straight from `product_categorization`, whose CHECKs already hold them, so this only pins
+// the shape. Nothing is trimmed: the child matches products exactly as stored.
+const CategorizationCacheSchema = v.strictObject({
+  rows: v.array(
+    v.strictObject({
+      product: nonEmptyString,
+      category: nonEmptyString,
+      cleanedName: v.nullable(nonEmptyString),
+    }),
+  ),
+});
+
+// The `product_categorization` CHECKs, so a harvest insert never fails on a row that parsed: one
+// failing row would fail its whole chunk. `\s` is close enough to Postgres's `[[:space:]]` and
+// Python's `str.strip` for what the child writes, which it strips itself.
+const UNSTRIPPED_PATTERN = /^\s|\s$/;
+const UTF8 = new TextEncoder();
+
+const stripped = v.pipe(
+  nonEmptyString,
+  v.check((value) => !UNSTRIPPED_PATTERN.test(value), 'needs no surrounding whitespace'),
+);
+
+const NewCategorizationsSchema = v.strictObject({
+  analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),
+  rows: v.pipe(
+    v.array(
+      v.strictObject({
+        product: v.pipe(
+          stripped,
+          v.check(
+            (product) => UTF8.encode(product).length <= MAX_CACHE_KEY_BYTES,
+            `needs at most ${MAX_CACHE_KEY_BYTES} bytes of UTF-8`,
+          ),
+        ),
+        cleanedName: v.nullable(v.pipe(v.string(), v.regex(/\S/))),
+        category: stripped,
+      }),
+    ),
+    v.check((rows) => isUnique(rows.map(({ product }) => product)), 'needs each product once'),
+  ),
+});
+
 function isUnique(keys: readonly string[]): boolean {
   return new Set(keys).size === keys.length;
 }
@@ -198,6 +247,8 @@ export type Progress = v.InferOutput<typeof ProgressSchema>;
 export type ChildResult = v.InferOutput<typeof ChildResultSchema>;
 export type ChildFailure = v.InferOutput<typeof ChildFailureSchema>;
 export type Telemetry = v.InferOutput<typeof TelemetrySchema>;
+export type CategorizationCache = v.InferOutput<typeof CategorizationCacheSchema>;
+export type NewCategorizations = v.InferOutput<typeof NewCategorizationsSchema>;
 
 // `monthlyCounts` is `unknown` because Kysely hands back a `jsonb` column untyped.
 export type RunManifestInput = {
@@ -222,6 +273,15 @@ export function parseRunManifest(text: string): RunManifest {
   return parseDocument(RunManifestSchema, 'run.json', text);
 }
 
+export function buildCategorizationCache(rows: CategorizationCache['rows']): CategorizationCache {
+  return validate(CategorizationCacheSchema, 'categorization-cache.json', { rows });
+}
+
+// Like `parseRunManifest`, for this stack's fixture tests only.
+export function parseCategorizationCache(text: string): CategorizationCache {
+  return parseDocument(CategorizationCacheSchema, 'categorization-cache.json', text);
+}
+
 export function parseProgress(text: string): Progress {
   return parseDocument(ProgressSchema, 'progress.json', text);
 }
@@ -236,6 +296,10 @@ export function parseFailure(text: string): ChildFailure {
 
 export function parseTelemetry(text: string): Telemetry {
   return parseDocument(TelemetrySchema, 'telemetry.json', text);
+}
+
+export function parseNewCategorizations(text: string): NewCategorizations {
+  return parseDocument(NewCategorizationsSchema, 'new-categorizations.json', text);
 }
 
 function parseDocument<TSchema extends v.GenericSchema>(

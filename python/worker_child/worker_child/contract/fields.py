@@ -47,6 +47,17 @@ class Fields:
     def nested(self, key: str) -> Fields:
         return Fields(f"{self._path}.{key}", self._object(key))
 
+    def objects(self, key: str) -> list[Fields]:
+        value = self._take(key)
+        if not isinstance(value, list):
+            raise self._fail(key, "an array")
+        items: list[Fields] = []
+        for index, item in enumerate(value):
+            if not isinstance(item, dict):
+                raise ContractError(f"{self._path}.{key}[{index}]: expected an object")
+            items.append(Fields(f"{self._path}.{key}[{index}]", item))
+        return items
+
     def counts(self, key: str, month: re.Pattern[str]) -> Mapping[str, int]:
         raw = self._object(key)
         if not raw:

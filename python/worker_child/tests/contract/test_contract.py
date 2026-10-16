@@ -26,6 +26,8 @@ def test_agrees_on_the_run_directory_layout() -> None:
         "result": layout.RESULT,
         "failure": layout.FAILURE,
         "telemetry": layout.TELEMETRY,
+        "categorizationCache": layout.CATEGORIZATION_CACHE,
+        "newCategorizations": layout.NEW_CATEGORIZATIONS,
         "resultFilesDirectory": layout.RESULT_FILES_DIRECTORY,
         "workDirectory": layout.WORK_DIRECTORY,
         "directoriesCreatedByParent": list(layout.DIRECTORIES_CREATED_BY_PARENT),
@@ -58,6 +60,10 @@ def test_agrees_on_the_telemetry_enums() -> None:
         "qualityCheck": list(names.QUALITY_CHECKS),
         "diagnosticStatus": list(names.DIAGNOSTIC_STATUSES),
     }
+
+
+def test_agrees_on_the_categorization_bounds() -> None:
+    assert CONTRACT["categorization"] == {"maxProductBytes": names.MAX_PRODUCT_BYTES}
 
 
 def test_agrees_on_the_exit_codes() -> None:

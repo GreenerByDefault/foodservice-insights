@@ -31,6 +31,9 @@ CONTRACT: dict[str, Any] = json.loads(
 VALID_MANIFEST = read("valid", "run.json")
 VALID_ANALYSIS_ATTEMPT_ID = json.loads(VALID_MANIFEST)["analysisAttemptId"]
 
-# `run.json` is the only document the child parses — it writes the other three — so these are
-# the only invalid fixtures this stack is responsible for rejecting.
+# `run.json` and `categorization-cache.json` are the only documents the child parses — it writes
+# the rest — so these are the only invalid fixtures this stack is responsible for rejecting.
 INVALID_RUN_FIXTURE_NAMES = [name for name in names_in("invalid") if name.startswith("run.")]
+INVALID_CATEGORIZATION_CACHE_FIXTURE_NAMES = [
+    name for name in names_in("invalid") if name.startswith("categorization-cache.")
+]

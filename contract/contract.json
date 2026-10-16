@@ -13,6 +13,8 @@
     "result": "output/result.json",
     "failure": "output/failure.json",
     "telemetry": "output/telemetry.json",
+    "categorizationCache": "input/categorization-cache.json",
+    "newCategorizations": "output/new-categorizations.json",
     "resultFilesDirectory": "output/files",
     "workDirectory": "work",
     "directoriesCreatedByParent": ["input", "output", "output/files", "work"]
@@ -20,6 +22,9 @@
   "inputCsv": {
     "columns": ["product", "date", "weight"],
     "dateFormat": "YYYY-MM-DD"
+  },
+  "categorization": {
+    "maxProductBytes": 2000
   },
   "resultFiles": {
     "pdf": "report.pdf",

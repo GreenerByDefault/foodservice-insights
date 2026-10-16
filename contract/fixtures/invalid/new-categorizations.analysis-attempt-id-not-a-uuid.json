@@ -1,0 +1,15 @@
+{
+  "analysisAttemptId": "not-a-uuid",
+  "rows": [
+    {
+      "product": "Beyond Burger Patty 4oz",
+      "cleanedName": "plant-based burger patty",
+      "category": "Plant-based Meats"
+    },
+    {
+      "product": "Foil Pan Half Size",
+      "cleanedName": null,
+      "category": "No Matches Found"
+    }
+  ]
+}

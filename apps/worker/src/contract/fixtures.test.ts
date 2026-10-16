@@ -3,12 +3,15 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@gbd/core/env';
-import type { AnalysisAttemptId } from '@gbd/db';
+import { type AnalysisAttemptId, MAX_CACHE_KEY_BYTES } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import {
+  buildCategorizationCache,
   buildRunManifest,
   ContractError,
+  parseCategorizationCache,
   parseFailure,
+  parseNewCategorizations,
   parseProgress,
   parseResult,
   parseRunManifest,
@@ -24,6 +27,8 @@ const PARSERS = {
   result: parseResult,
   failure: parseFailure,
   telemetry: parseTelemetry,
+  'categorization-cache': parseCategorizationCache,
+  'new-categorizations': parseNewCategorizations,
 } as const;
 
 type DocumentName = keyof typeof PARSERS;
@@ -57,7 +62,9 @@ describe('the fixture set itself', () => {
 
   test('covers every document, so a moved directory cannot pass vacuously', () => {
     expect(VALID.sort()).toEqual([
+      'categorization-cache.json',
       'failure.json',
+      'new-categorizations.json',
       'progress.json',
       'result.json',
       'run.json',
@@ -124,6 +131,52 @@ describe('valid fixtures', () => {
     telemetry.report.findingCounts = [];
 
     expect(parseTelemetry(JSON.stringify(telemetry))).toEqual(telemetry);
+  });
+
+  test('categorization-cache.json is what the parent writes', () => {
+    const rows = [
+      {
+        product: 'Chicken Breast, Boneless 4oz',
+        category: 'Poultry (Chicken & Turkey)',
+        cleanedName: 'chicken breast',
+      },
+      { product: 'Napkins 2-ply', category: 'No Matches Found', cleanedName: null },
+      {
+        product: 'Oat Milk "Barista" 32oz,\ncase of 12',
+        category: 'Oat Milk',
+        cleanedName: 'oat milk',
+      },
+    ];
+
+    expect(buildCategorizationCache(rows)).toEqual(
+      JSON.parse(read('valid', 'categorization-cache.json')),
+    );
+  });
+
+  test('categorization-cache.json refuses a row the child could not match', () => {
+    expect(() =>
+      buildCategorizationCache([{ product: '', category: 'Oat Milk', cleanedName: null }]),
+    ).toThrow(ContractError);
+  });
+
+  test('new-categorizations.json parses into exactly what the parent inserts', () => {
+    const text = read('valid', 'new-categorizations.json');
+
+    expect(parseNewCategorizations(text)).toEqual(JSON.parse(text));
+  });
+
+  test('new-categorizations.json accepts a product of exactly the byte bound', () => {
+    const document = JSON.parse(read('valid', 'new-categorizations.json'));
+    document.rows[0].product = 'é'.repeat(MAX_CACHE_KEY_BYTES / 2);
+
+    expect(parseNewCategorizations(JSON.stringify(document))).toEqual(document);
+  });
+
+  test('new-categorizations.json rejects a blank cleaned name, which the table refuses', () => {
+    const document = JSON.parse(read('valid', 'new-categorizations.json'));
+    document.rows[0].cleanedName = ' ';
+
+    expect(() => parseNewCategorizations(JSON.stringify(document))).toThrow(ContractError);
   });
 
   test('progress.json parses into a sequence', () => {

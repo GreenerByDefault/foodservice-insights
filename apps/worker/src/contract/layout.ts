@@ -2,8 +2,9 @@
  *
  * ```
  * <runRoot>/{analysis_attempt_id}
- *     /input          run.json, input.csv
- *     /output         progress.json, result.json, failure.json, telemetry.json
+ *     /input          run.json, input.csv, categorization-cache.json
+ *     /output         progress.json, result.json, failure.json, telemetry.json,
+ *                     new-categorizations.json
  *         /files      report.pdf, report.xlsx
  *     /work           child scratch
  * ```
@@ -32,6 +33,8 @@ export const RUN_DIRECTORY = {
   result: 'output/result.json',
   failure: 'output/failure.json',
   telemetry: 'output/telemetry.json',
+  categorizationCache: 'input/categorization-cache.json',
+  newCategorizations: 'output/new-categorizations.json',
   resultFilesDirectory: 'output/files',
   workDirectory: 'work',
 } as const;
