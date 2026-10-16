@@ -5,6 +5,7 @@ import { Input } from '#lib/components/ui/input/index.js';
 import type { MonthsFromFile } from '#lib/reports/metadata.js';
 import {
   type CountDraft,
+  countsHeading,
   formatMonth,
   groupByYear,
   missingMonthCount,
@@ -18,7 +19,7 @@ interface Props {
 
 let { months, basis, counts = $bindable() }: Props = $props();
 
-const legend = $derived(basis === 'people' ? 'Diners per month' : 'Meals per month');
+const legend = $derived(countsHeading(basis));
 const groups = $derived(groupByYear(months));
 const showYearHeadings = $derived(groups.length > 1);
 const missing = $derived(missingMonthCount(counts, months));

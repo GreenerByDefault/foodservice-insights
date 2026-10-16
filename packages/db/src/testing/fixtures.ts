@@ -30,6 +30,7 @@ import type {
 } from '../generated/public/AnalysisAttemptTelemetry.ts';
 import type AnalysisFailureReason from '../generated/public/AnalysisFailureReason.ts';
 import type { AppUser } from '../generated/public/AppUser.ts';
+import type CountsBasis from '../generated/public/CountsBasis.ts';
 import type {
   EntreeClassification,
   NewEntreeClassification,
@@ -47,6 +48,7 @@ import type {
 import type { Report, ReportId } from '../generated/public/Report.ts';
 import type { ResultFile } from '../generated/public/ResultFile.ts';
 import type ResultFileKind from '../generated/public/ResultFileKind.ts';
+import type UnitSystem from '../generated/public/UnitSystem.ts';
 import type { NewUnitWeight, UnitWeight } from '../generated/public/UnitWeight.ts';
 import type { DatabaseExecutor } from '../schema.ts';
 
@@ -284,7 +286,9 @@ export async function insertReport(
     createdByUserId: AppUser['id'] | null;
     name: string;
     siteName: string | null;
+    countsBasis: CountsBasis;
     monthlyCounts: unknown;
+    unitSystem: UnitSystem;
     createdAt: Date | RawBuilder<Date>;
   }> = {},
 ): Promise<Report> {
@@ -298,9 +302,9 @@ export async function insertReport(
       createdByUserId: overrides.createdByUserId ?? null,
       name: overrides.name ?? 'Q1 procurement',
       siteName: overrides.siteName ?? null,
-      countsBasis: 'people',
+      countsBasis: overrides.countsBasis ?? 'people',
       monthlyCounts: overrides.monthlyCounts ?? { '2026-01': 120, '2026-02': 135 },
-      unitSystem: 'lb',
+      unitSystem: overrides.unitSystem ?? 'lb',
       ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
     })
     .returningAll()

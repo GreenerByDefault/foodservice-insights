@@ -2,6 +2,7 @@
  * form submits.
  */
 
+import type { CountsBasis } from '@gbd/db';
 import type { MonthlyCounts, MonthsFromFile } from './metadata.ts';
 
 /** One month's value while the user is still typing it. `undefined` because `bind:value` on
@@ -20,6 +21,11 @@ const monthFormat = new Intl.DateTimeFormat('en-US', {
 export function formatMonth(month: string): string {
   const [year = 0, monthNumber = 1] = month.split('-').map(Number);
   return monthFormat.format(new Date(Date.UTC(year, monthNumber - 1, 1)));
+}
+
+/** Shared by the upload form and the report page, so the page echoes the form's own words. */
+export function countsHeading(basis: CountsBasis): string {
+  return basis === 'people' ? 'Diners per month' : 'Meals per month';
 }
 
 /** Carries a value forward for a month still in `months`, drops the rest, and leaves a month new

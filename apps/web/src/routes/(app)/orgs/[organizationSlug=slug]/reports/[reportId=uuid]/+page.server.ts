@@ -2,15 +2,18 @@ import {
   type AnalysisAttemptId,
   type AnalysisAttemptStatus,
   type AnalysisFailureReason,
+  type CountsBasis,
   type DatabaseExecutor,
   type InputFileId,
   type OrganizationId,
   type ReportId,
   type ResultFileId,
   requireConstraint,
+  type UnitSystem,
 } from '@gbd/db';
 import { error } from '@sveltejs/kit';
 import { sql } from 'kysely';
+import * as v from 'valibot';
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import { inputFileHref, newReportHref, reportPollHref, resultFileHref } from '#lib/hrefs.js';
 import { pollIntervalMsForWorkerMode } from '#lib/polling/schedule.js';
@@ -70,6 +73,8 @@ export type Attempt =
   | { status: 'failed'; finishedAt: Date; attemptNumber: number; failure: FailureCopy }
   | { status: 'canceled'; stoppedAt: Date };
 
+export type MonthlyCount = { month: string; count: number };
+
 export type ReportPageData = {
   organizationSlug: string;
   report: {
@@ -77,6 +82,10 @@ export type ReportPageData = {
     name: string;
     siteName: string | null;
     creator: Creator;
+    unitSystem: UnitSystem;
+    countsBasis: CountsBasis;
+    /** Oldest month first. */
+    monthlyCounts: MonthlyCount[];
   };
   newReportHref: string;
   pollHref: string;
@@ -93,6 +102,9 @@ type ReportRow = {
   reportId: ReportId;
   reportName: string;
   siteName: string | null;
+  unitSystem: UnitSystem;
+  countsBasis: CountsBasis;
+  monthlyCounts: unknown;
   creatorDisplayName: string | null;
   /** Null exactly when there is no joined user — email is guaranteed for any real one (see
    * `authorization.ts`), so this is how a deleted creator is told apart from a present one. */
@@ -145,6 +157,9 @@ export async function _loadReport(
           'report.id as reportId',
           'report.name as reportName',
           'report.siteName as siteName',
+          'report.unitSystem as unitSystem',
+          'report.countsBasis as countsBasis',
+          'report.monthlyCounts as monthlyCounts',
           'appUser.displayName as creatorDisplayName',
           'auth.users.email as creatorEmail',
           'inputFile.id as inputFileId',
@@ -181,6 +196,9 @@ export async function _loadReport(
           creator: row.creatorEmail
             ? { displayName: row.creatorDisplayName, email: row.creatorEmail }
             : null,
+          unitSystem: row.unitSystem,
+          countsBasis: row.countsBasis,
+          monthlyCounts: toMonthlyCounts(row.monthlyCounts),
         },
         newReportHref: newReportHref(params.organizationSlug),
         pollHref: reportPollHref(params.organizationSlug, row.reportId),
@@ -222,6 +240,16 @@ async function failNotFoundOrBug(
 
   logger().error({ reportId: params.reportId }, 'A report has no analysis_attempt');
   error(500, UNEXPECTED_ERROR_MESSAGE);
+}
+
+// Looser than `MonthlyCountsSchema` on purpose: that also enforces upload-time limits, and a report
+// stored under older limits must still load if they ever tighten.
+const StoredMonthlyCountsSchema = v.record(v.string(), v.number());
+
+function toMonthlyCounts(json: unknown): MonthlyCount[] {
+  return Object.entries(v.parse(StoredMonthlyCountsSchema, json))
+    .map(([month, count]) => ({ month, count }))
+    .sort((a, b) => a.month.localeCompare(b.month));
 }
 
 async function toAttempt(

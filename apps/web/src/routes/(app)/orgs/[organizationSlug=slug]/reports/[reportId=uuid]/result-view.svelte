@@ -12,13 +12,12 @@ interface Props {
   finishedAt: Date;
   now: Date;
   files: ResultFiles;
-  inputFile: { href: string; originalFilename: string; byteSize: number };
   organizationSlug: string;
   reportId: string;
   reportName: string;
 }
 
-let { finishedAt, now, files, inputFile, organizationSlug, reportId, reportName }: Props = $props();
+let { finishedAt, now, files, organizationSlug, reportId, reportName }: Props = $props();
 </script>
 
 <div class="space-y-6">
@@ -38,16 +37,5 @@ let { finishedAt, now, files, inputFile, organizationSlug, reportId, reportName 
       Download Excel
     </Button>
     <DeleteButton {organizationSlug} {reportId} {reportName} />
-  </div>
-
-  <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-    <span>Uploaded file:</span>
-    <a
-      class="inline-flex min-w-0 items-center gap-1.5 underline hover:no-underline"
-      href={inputFile.href}
-    >
-      <FileSpreadsheetIcon class="size-4 shrink-0" aria-hidden="true" />
-      <span class="truncate">{inputFile.originalFilename}</span>
-    </a>
   </div>
 </div>
