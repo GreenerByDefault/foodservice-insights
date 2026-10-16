@@ -205,7 +205,8 @@ secret key, so it can be revoked on its own.
 
 ## PR 1 — host rules
 
-- `.do/web.yaml` and `.do/worker.yaml`: the component rules and `DEPLOYMENT_FAILED`. The web's
+- `.do/web.yaml` and `.do/worker.yaml`: the component rules, alongside the `DEPLOYMENT_FAILED`
+  and `DOMAIN_FAILED` each already carries. The web's
   spec also gets the p95 rule.
 - Once, by hand: alert destinations through `doctl apps update-alert-destinations`, to the team's
   emails. **Open, verify in this PR:** whether destinations survive the next deploy, given that

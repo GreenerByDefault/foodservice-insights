@@ -37,8 +37,10 @@ leaves the DigitalOcean team.
    `DO_WEB_APP_ID` and `DO_WORKER_APP_ID`:
 
    ```sh
-   read -s DO_TOKEN && curl -s -H "Authorization: Bearer $DO_TOKEN" \
-     "https://api.digitalocean.com/v2/apps/<app id>" | jq '.app | {id, default_ingress}'
+   read -s "DO_TOKEN?Paste the DigitalOcean token, then press Enter: "; echo
+   curl -s -H "Authorization: Bearer $DO_TOKEN" \
+     "https://api.digitalocean.com/v2/apps/<app id>" | jq '.app | {id, default_ingress} // .'
+   unset DO_TOKEN
    ```
 
 8. Delete the old token in the dashboard.
