@@ -28,10 +28,12 @@ services:
         operator: GREATER_THAN
         value: 80
         window: TEN_MINUTES
-      # Close to being killed for memory, or leaking.
+      # Leaking. Node caps its heap at 259 MiB on this size, and reaches it, and crashes, with the
+      # container near 57%, so 80% would only ever fire after the restart rule. Idle is ~10%, and
+      # a maximum-size upload's spike lasts under a second, which the window averages away.
       - rule: MEM_UTILIZATION
         operator: GREATER_THAN
-        value: 80
+        value: 50
         window: TEN_MINUTES
       # Any restart: a crash, an out-of-memory kill, or a failed liveness probe.
       - rule: RESTART_COUNT
@@ -39,7 +41,8 @@ services:
         value: 0
         window: FIVE_MINUTES
       # A page is a few database round trips, so seconds means the database or the bucket is
-      # slow. At low traffic one slow upload of a large workbook can trip it on its own.
+      # slow. A slow upload trips it only when no report page is open, since each one polls every
+      # 10 seconds and those fast requests keep a single slow one above the 95th percentile.
       - rule: REQUEST_DURATION_P95_MS
         operator: GREATER_THAN
         value: 5000

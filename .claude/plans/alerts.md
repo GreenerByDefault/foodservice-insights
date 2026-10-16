@@ -92,8 +92,8 @@ point per vendor, if the team ends up working in a Slack channel.
 - **Each rule is a `count(*)` over a `metrics` view, with a threshold.** The view holds the
   definition (`metrics-pipeline.md` § Definitions), and the rule holds the threshold, so tuning
   an alert is an edit to a rule file, never a migration. The rules, with where each starts:
-  - **Queue wait:** a `pending` attempt created more than 30 minutes ago. At six concurrent slots
-    and 2–15-minute attempts, a wait that long means demand beyond capacity, or no worker
+  - **Queue wait:** a `pending` attempt created more than 30 minutes ago. At three concurrent
+    slots (one worker, `maxConcurrentAttempts`) and 2–15-minute attempts, a wait that long means demand beyond capacity, or no worker
     claiming. It is also what fires when the only worker is wedged (`.do/worker.yaml` says why
     the worker has no probe).
   - **Failures:** any attempt failed for a reason that is ours. That is every reason except
@@ -110,6 +110,10 @@ point per vendor, if the team ends up working in a Slack channel.
     `notification_attempts`, `notification_email_sent_at`, and `has_requester` from its first
     version.
   - **Connections:** total connections above 80% of `max_connections`.
+  - *Considered, not done: a child's peak memory.* `analysis_attempt_telemetry.peak_memory_kib`
+    is the exact reading the worker's host memory rule averages away, but a child killed for
+    memory already fails its attempt, which the failures rule counts. Add it if those failures
+    show up, or when the worker drops to 1 GB.
 - **`metrics.database_connection` is one row per role**, counted from `pg_stat_activity`, beside
   the role's `CONNECTION LIMIT` and the server's `max_connections`. Like every view, it runs with
   its owner's rights, so `metrics_reader` needs no new grant. It has a panel on the operations
@@ -219,6 +223,8 @@ Each PR runs its stack's gate: `pnpm lint && pnpm check && pnpm test`. Then by h
 
 - Once the host rules deploy, `doctl apps list-alerts` shows them on both apps, and a threshold
   lowered below the current reading in the dashboard emails the team. The next deploy restores it.
+  A push to `main` redeploys the web without firing its restart rule, since the new container's
+  count starts at zero. If it does fire, the rule needs a threshold above one.
 - After PR 2, on the local Grafana against the dev database:
   - A `pending` attempt backdated past the queue-wait threshold puts one email in Mailpit, and
     claiming it brings the resolve email.

@@ -27,14 +27,19 @@ workers:
     #
     # There is no disk rule, because App Platform has none. Each run directory is deleted when its
     # attempt settles, and a full disk replaces the container. **Open:** whether the restart rule
-    # counts a replacement.
+    # counts a replacement. It likely does not, since the new container's count starts at zero, and
+    # then the attempts the old one held are what show it: reaped as `abandoned`, which the data
+    # layer's failures rule counts. Until that layer is built, a full disk goes unalerted.
     alerts:
       # Busy for longer than any one attempt takes, so attempts are slowing each other down.
       - rule: CPU_UTILIZATION
         operator: GREATER_THAN
         value: 90
         window: THIRTY_MINUTES
-      # A child is close to being killed for memory, which fails its attempt.
+      # Children are close to being killed for memory, which fails their attempts. The kernel
+      # kills the largest process, a child, so the container survives and the restart rule never
+      # sees it. One child climbing to that kill within an attempt is averaged away here too, so
+      # the data layer's failures rule is what catches it. Revisit when the size drops to 1 GB.
       - rule: MEM_UTILIZATION
         operator: GREATER_THAN
         value: 80
