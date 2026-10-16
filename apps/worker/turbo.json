@@ -3,7 +3,12 @@
   "extends": ["//"],
   "tasks": {
     "test:unit": {
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.md", "$TURBO_ROOT$/.do/worker.yaml"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.md",
+        "$TURBO_ROOT$/.do/worker.yaml",
+        "$TURBO_ROOT$/.env.example"
+      ]
     }
   }
 }

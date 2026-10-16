@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { parseEnv } from 'node:util';
 import { SECOND_MS } from '@gbd/core';
 import { WORKER_DB_LIMITS } from '@gbd/db';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
@@ -212,6 +213,16 @@ describe('createWorkerConfig', () => {
         key: 'PLATFORM_SHUTDOWN_GRACE_MS',
         value: String(worker.termination.grace_period_seconds * SECOND_MS),
       });
+    });
+
+    test(".env.example's PLATFORM_SHUTDOWN_GRACE_MS leaves a drain", async () => {
+      const env = parseEnv(
+        await readFile(new URL('../../../.env.example', import.meta.url), 'utf8'),
+      );
+      const platformShutdownGraceMs = Number(env.PLATFORM_SHUTDOWN_GRACE_MS);
+      expect(createWorkerConfig(REQUIRED_FIELDS, {}, platformShutdownGraceMs).drainGraceMs).toBe(
+        30 * SECOND_MS,
+      );
     });
 
     test('is skipped when the platform grace is not known', () => {
