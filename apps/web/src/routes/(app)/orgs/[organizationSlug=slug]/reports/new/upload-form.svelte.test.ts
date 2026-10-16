@@ -76,7 +76,7 @@ describe('UploadForm', () => {
       await fillRequiredFields(screen);
       await screen.getByLabelText('Site name (optional)').fill('Main kitchen');
       await screen
-        .getByRole('radiogroup', { name: 'Counts basis' })
+        .getByRole('radiogroup', { name: 'Count by' })
         .getByRole('radio', { name: 'Meals' })
         .click();
       await screen.getByRole('button', { name: 'Upload report' }).click();
@@ -277,10 +277,32 @@ describe('UploadForm', () => {
       await screen.getByRole('button', { name: 'Upload report' }).click();
 
       const unitSystem = screen.getByRole('radiogroup', { name: 'Weight unit' });
-      await expect.element(unitSystem).toHaveAccessibleDescription('Choose lb or kg.');
+      await expect
+        .element(unitSystem)
+        .toHaveAccessibleDescription('The unit your file uses for weight. Choose lb or kg.');
       await expect.element(unitSystem).toHaveAttribute('aria-invalid', 'true');
       await expect.element(unitSystem.getByRole('radio', { name: 'lb' })).toHaveFocus();
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('hints', () => {
+    test('each hint describes the control it explains', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+
+      await expect
+        .element(screen.getByLabelText('Site name (optional)'))
+        .toHaveAccessibleDescription(
+          'The specific location your file covers, such as one dining hall on a university campus. Leave blank if your file covers your whole organization.',
+        );
+      await expect
+        .element(screen.getByRole('radiogroup', { name: 'Weight unit' }))
+        .toHaveAccessibleDescription('The unit your file uses for weight.');
+      await expect
+        .element(screen.getByRole('group', { name: 'Diners or meals served' }))
+        .toHaveAccessibleDescription(
+          "Enter how many diners or meals you served each month. The report uses these to show your emissions per diner or per meal. Use counts for the same sites as your file. For example, if your file only covers one dining hall, count only that dining hall's diners or meals, not the whole university's.",
+        );
     });
   });
 

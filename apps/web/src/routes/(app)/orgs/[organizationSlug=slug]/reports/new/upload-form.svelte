@@ -65,8 +65,12 @@ let replaceButtonElement: HTMLButtonElement | HTMLAnchorElement | null = $state(
 
 let unitSystemElement: HTMLElement | null = $state(null);
 const id = $props.id();
+const siteNameHintId = `${id}-site-name-hint`;
+const unitSystemHintId = `${id}-unit-system-hint`;
 const unitSystemErrorId = `${id}-unit-system-error`;
 const unitSystemTitleId = `${id}-unit-system-title`;
+const countsMeaningId = `${id}-counts-meaning`;
+const countsScopeId = `${id}-counts-scope`;
 const countsBasisTitleId = `${id}-counts-basis-title`;
 
 function fileRejectionMessage(reason: FileRejectedReason): string {
@@ -195,10 +199,10 @@ async function backToForm() {
     {/if}
 
     <Field.Set>
-      <Field.Legend>File</Field.Legend>
+      <Field.Legend>Purchasing data</Field.Legend>
       <Field.Description>
-        A CSV or Excel workbook with three columns: product name, date ordered, and weight. Up to
-        {MAX_UPLOAD_FIELD_MEGABYTES}MB.
+        A CSV or Excel workbook of your food purchases, with three columns: product name, date
+        ordered, and weight. Up to {MAX_UPLOAD_FIELD_MEGABYTES}MB.
       </Field.Description>
 
       {#if upload}
@@ -268,18 +272,28 @@ async function backToForm() {
           minlength={MIN_NAME_LENGTH}
           maxlength={MAX_FREE_TEXT_LENGTH}
           autocomplete="off"
+          aria-describedby={siteNameHintId}
           bind:value={siteName}
         />
+        <Field.Description id={siteNameHintId}>
+          The specific location your file covers, such as one dining hall on a university campus.
+          Leave blank if your file covers your whole organization.
+        </Field.Description>
       </Field.Field>
 
       <Field.Field>
         <Field.Title id={unitSystemTitleId}>Weight unit</Field.Title>
+        <Field.Description id={unitSystemHintId}>
+          The unit your file uses for weight.
+        </Field.Description>
         <RadioGroup
           bind:ref={unitSystemElement}
           aria-labelledby={unitSystemTitleId}
           name={FIELD.unitSystem}
           aria-invalid={unitSystemError ? true : undefined}
-          aria-describedby={unitSystemError ? unitSystemErrorId : undefined}
+          aria-describedby={unitSystemError
+            ? `${unitSystemHintId} ${unitSystemErrorId}`
+            : unitSystemHintId}
           value={unitSystem}
           onValueChange={(value) => (unitSystem = value as UnitSystem)}
         >
@@ -296,11 +310,19 @@ async function backToForm() {
       </Field.Field>
     </Field.Set>
 
-    <Field.Set>
-      <Field.Legend>Monthly counts</Field.Legend>
+    <Field.Set aria-describedby="{countsMeaningId} {countsScopeId}">
+      <Field.Legend>Diners or meals served</Field.Legend>
+      <Field.Description id={countsMeaningId}>
+        Enter how many diners or meals you served each month. The report uses these to show your
+        emissions per diner or per meal.
+      </Field.Description>
+      <Field.Description id={countsScopeId}>
+        Use counts for the same sites as your file. For example, if your file only covers one dining
+        hall, count only that dining hall's diners or meals, not the whole university's.
+      </Field.Description>
 
       <Field.Field>
-        <Field.Title id={countsBasisTitleId}>Counts basis</Field.Title>
+        <Field.Title id={countsBasisTitleId}>Count by</Field.Title>
         <RadioGroup
           aria-labelledby={countsBasisTitleId}
           name={FIELD.countsBasis}
