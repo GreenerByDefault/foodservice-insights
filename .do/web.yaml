@@ -19,6 +19,32 @@ services:
     liveness_health_check:
       http_path: /health/live
 
+    # Starting thresholds, to tune after the first month of real traffic.
+    # *Considered, not done: a request-rate rule.* Nothing yet says what rate is wrong, and
+    # Cloudflare absorbs floods.
+    alerts:
+      # Requests are waiting on CPU. Rendering a page is mostly waiting on the database.
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: TEN_MINUTES
+      # Close to being killed for memory, or leaking.
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: TEN_MINUTES
+      # Any restart: a crash, an out-of-memory kill, or a failed liveness probe.
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 0
+        window: FIVE_MINUTES
+      # A page is a few database round trips, so seconds means the database or the bucket is
+      # slow. At low traffic one slow upload of a large workbook can trip it on its own.
+      - rule: REQUEST_DURATION_P95_MS
+        operator: GREATER_THAN
+        value: 5000
+        window: TEN_MINUTES
+
     envs:
       - key: DB_CONNECTION_STRING
         type: SECRET

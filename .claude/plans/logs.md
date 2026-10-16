@@ -82,7 +82,7 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   that a line carries it.
 - `hooks.server.ts`: the comment on `requestId` drops "once the host is chosen".
 - By hand, after the first lines arrive: the saved queries and the dashboard.
-- `ARCHITECTURE.md` gains § Observability, or adds to it if `alerts.md` got there first. It says
+- `ARCHITECTURE.md` § Observability, which `alerts.md` created, gains § Logs. It says
   that logs leave the host only through App Platform's forwarding, into one Better Stack source
   kept for three days. A request is found by `requestId`, and an attempt by `attemptId`.
 - Delete this plan.

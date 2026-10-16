@@ -480,6 +480,22 @@ module may read config at the module-level while being imported.
 
 Extra care with production access is warranted because AI agents operate in this repo.
 
+## Observability
+
+### Alerts
+
+Each alert is evaluated by the system that already holds its data, so each layer keeps working
+when another's inputs fail.
+
+| Layer | Evaluated by | Sees | Rules live in |
+| --- | --- | --- | --- |
+| Host | DigitalOcean | Each container's resources and restarts, and failed deploys | Each app's spec in [`.do/`](.do/README.md) |
+| Data | Grafana Cloud | The queue and notifications, as the database's rows record them | **Open:** not built yet |
+| Outside | Better Stack | What a user sees, through Cloudflare and DNS | **Open:** not built yet |
+
+*Rejected: one system evaluating everything.* Each consolidation copies data out of its home, and
+each copy is one more thing that can break silently.
+
 ## Failure modes
 
 A design contract, not a description of the code — each row is a failure we have committed to
@@ -492,7 +508,7 @@ handling.
 | Web server has trouble with Supabase Auth | An unreachable Supabase Auth is a 503 rather than signing the user out; a session it refuses is signed out and its cookie cleared. `classifyAuthResult` (`apps/web/src/lib/server/auth/identify.ts`) |
 | Web server has trouble with Supabase | Timeouts on transactions; `withDbErrorHandling` returns 503 for a statement that never completed and 500 for one Postgres refused |
 | Worker has trouble with Supabase or Supabase Storage | An error is never treated as a verdict. Loops absorb the failure and retry by ticking; processing a claimed attempt fails it as `infrastructure`; terminal writes get a bounded retry and are then re-attempted each tick until the database recovers, with reaping as the backstop. Records written after the verdict, such as the attempt's telemetry, get the bounded retry and are then logged and dropped. A claim statement Postgres *refuses* makes the worker drain and exit nonzero. Reasoning in `apps/worker/src/failures.ts` |
-| Web server or worker is overloaded | Alerts on CPU, memory, and disk from the hosting provider |
+| Web server or worker is overloaded | Host alerts on CPU, memory, and restarts (§ Alerts). There is no disk alert, for reasons in `.do/worker.yaml` |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
 | Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [Progress, leases, and reaping](#progress-leases-and-reaping) |
 | A third-party API rate limits us, e.g. OpenAI | The child retries with backoff, then fails as `upstream_api`; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk. Reasoning in `OpenAiLlmClient` (`python/insights/gbd_foodservice_insights/categorization/llm.py`) |
