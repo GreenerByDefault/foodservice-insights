@@ -5,6 +5,7 @@ import pytest
 from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.cache import (
     CACHE_COLUMNS,
+    CachedCategorization,
     CategorizationCache,
     categorization_cache_path,
     load_categorization_cache,
@@ -118,6 +119,35 @@ def test_from_frame_indexes_only_unanimous_real_categories():
 
     # "No Matches Found" is neither reused nor a vote against a real category.
     assert result.cleaned_name_index == {"chicken breast": POULTRY}
+
+
+# ----------------------------------------------------------------------
+# CategorizationCache.from_rows
+# ----------------------------------------------------------------------
+def test_from_rows_drops_an_unknown_category_and_blanks_a_missing_cleaned_name(caplog):
+    with caplog.at_level("WARNING"):
+        result = CategorizationCache.from_rows(
+            (
+                CachedCategorization("Whole Milk", "Mlik", "milk"),
+                CachedCategorization("Cheddar", "Cheese", "cheddar"),
+                CachedCategorization("Napkins", "No Matches Found", None),
+            )
+        )
+
+    pd.testing.assert_frame_equal(
+        result.products,
+        _frame([("Cheddar", "Cheese", "cheddar"), ("Napkins", "No Matches Found", "")]),
+    )
+    assert result.cleaned_name_index == {"cheddar": "Cheese"}
+    assert "dropped 1 rows with a blank or unknown category ['Mlik']" in caplog.text
+
+
+def test_from_rows_of_nothing_is_an_empty_cache():
+    result = CategorizationCache.from_rows(())
+
+    assert list(result.products.columns) == list(CACHE_COLUMNS)
+    assert result.products.empty
+    assert result.cleaned_name_index == {}
 
 
 # ----------------------------------------------------------------------

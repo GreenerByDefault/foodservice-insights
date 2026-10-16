@@ -17,8 +17,9 @@ from gbd_foodservice_insights.analysis import (
     UpstreamApiError,
 )
 from gbd_foodservice_insights.testing import stub_analysis
-from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID
+from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID, VALID_CATEGORIZATION_CACHE
 from worker_child.contract import layout, names
+from worker_child.contract.messages import parse_categorization_cache
 from worker_child.run import run
 
 
@@ -135,6 +136,44 @@ def test_writes_a_contract_violation_when_the_manifest_is_missing(run_directory:
 
 def test_writes_a_contract_violation_when_the_manifest_is_malformed(run_directory: Path) -> None:
     (run_directory / layout.MANIFEST).write_text("not json", encoding="utf-8")
+
+    exit_code = run(run_directory, analyze=stub_analysis)
+
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
+
+
+def test_hands_analyze_the_categorization_cache(run_directory: Path) -> None:
+    received: list[AnalysisRequest] = []
+
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        received.append(request)
+        return stub_analysis(request)
+
+    run(run_directory, analyze=analyze)
+
+    assert [request.categorization_cache for request in received] == [
+        parse_categorization_cache(VALID_CATEGORIZATION_CACHE)
+    ]
+
+
+def test_writes_a_contract_violation_when_the_categorization_cache_is_missing(
+    run_directory: Path,
+) -> None:
+    (run_directory / layout.CATEGORIZATION_CACHE).unlink()
+
+    exit_code = run(run_directory, analyze=stub_analysis)
+
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    failure = read_json(run_directory / layout.FAILURE)
+    assert failure["reason"] == "contract_violation"
+    assert not (run_directory / layout.RESULT).exists()
+
+
+def test_writes_a_contract_violation_when_the_categorization_cache_is_malformed(
+    run_directory: Path,
+) -> None:
+    (run_directory / layout.CATEGORIZATION_CACHE).write_text('{"rows": {}}', encoding="utf-8")
 
     exit_code = run(run_directory, analyze=stub_analysis)
 

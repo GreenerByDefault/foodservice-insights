@@ -30,6 +30,7 @@ CONTRACT: dict[str, Any] = json.loads(
 
 VALID_MANIFEST = read("valid", "run.json")
 VALID_ANALYSIS_ATTEMPT_ID = json.loads(VALID_MANIFEST)["analysisAttemptId"]
+VALID_CATEGORIZATION_CACHE = read("valid", "categorization-cache.json")
 
 # `run.json` and `categorization-cache.json` are the only documents the child parses — it writes
 # the rest — so these are the only invalid fixtures this stack is responsible for rejecting.

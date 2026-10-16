@@ -34,8 +34,12 @@ without it. `.env.example` ships a working `SITE_PASSWORD`; if you change it, ke
 minimum length in [`site-password.ts`](apps/web/src/lib/server/auth/site-password.ts), or sign-in
 errors.
 
-Optionally, you can also get the `previously_categorized_items.csv` cache from Greener by Default and place it in
-[`python/insights/gbd_foodservice_insights/data_files/`](python/insights/gbd_foodservice_insights/data_files/).
+Optionally, get the `previously_categorized_items.csv` cache from Greener by Default and load it
+into your local database, once per machine; without it, every product goes to the LLM:
+
+```sh
+pnpm --filter @gbd/db temporary-go-live-cache-import --products <csv> --mirror --write
+```
 
 ### Start it
 
@@ -287,7 +291,8 @@ Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
 Which to run when:
 
-- After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`.
+- After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`,
+  then the cache import above if you have the CSV.
 - For tests, `test:e2e` and `test:screenshots` clone a fresh, migrated database per run and seed it
   themselves. The vitest tiers migrate the shared test database and never truncate it.
 
