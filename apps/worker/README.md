@@ -31,6 +31,7 @@ Beyond the vars every package reads from `.env`, it needs:
 | `WORKER_MAX_CONCURRENT_ATTEMPTS` | Optional. Overrides `maxConcurrentAttempts` |
 | `PLATFORM_SHUTDOWN_GRACE_MS` | The host's shutdown grace, which `drainGraceMs` is derived from. Required by `live`; optional otherwise |
 | `WORKER_DRAIN_GRACE_MS` | Optional. Overrides the derived `drainGraceMs` |
+| `CACHE_DB_CONNECTION_STRING` | Optional. Points the categorization cache's reads and suggestions at another database than `DB_CONNECTION_STRING`'s: on a laptop, the hosted project as `cache_client`. Only `live` honors it; `stubbed` and `mock-llm` log a warning and use their own. Production leaves it unset |
 
 `createWorkerConfig` in [`src/config.ts`](src/config.ts) is the only way to obtain a checked
 `WorkerConfig` — every tunable, and the relations enforced between them, is documented there

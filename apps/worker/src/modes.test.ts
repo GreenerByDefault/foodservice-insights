@@ -10,6 +10,7 @@ function resolve(settings: Partial<RawWorkerModeSettings> & Pick<RawWorkerModeSe
     pythonBin: PYTHON_BIN,
     openAiApiKey: 'sk-test',
     platformShutdownGraceMs: 600_000,
+    cacheDbConnectionString: undefined,
     ...settings,
   });
 }
@@ -37,6 +38,7 @@ describe('resolveWorkerMode', () => {
         notifyIntervalMs: 5_000,
         claimedCeilingMs: 900_000,
       },
+      cacheDatabase: { kind: 'worker', ignoredVariable: false },
     });
   });
 
@@ -48,6 +50,7 @@ describe('resolveWorkerMode', () => {
         leadingArguments: ['-m', INVOCATION.module],
       },
       overrides: {},
+      cacheDatabase: { kind: 'worker', ignoredVariable: false },
     });
   });
 
@@ -59,6 +62,7 @@ describe('resolveWorkerMode', () => {
         leadingArguments: ['-m', 'worker_child.mock_llm'],
       },
       overrides: {},
+      cacheDatabase: { kind: 'worker', ignoredVariable: false },
     });
   });
 
@@ -94,6 +98,63 @@ describe('resolveWorkerMode', () => {
       ).toEqual(resolve({ mode }));
     },
   );
+
+  describe('CACHE_DB_CONNECTION_STRING', () => {
+    const HOSTED =
+      'postgresql://cache_client:s3cret@db.abc.supabase.co:5432/postgres' +
+      '?sslmode=verify-full&sslrootcert=/repo/supabase-ca.crt';
+
+    function cacheDatabase(settings: Parameters<typeof resolve>[0]) {
+      const resolved = resolve(settings);
+      if (resolved.mode === 'off') throw new Error('expected a spawning mode');
+      return resolved.cacheDatabase;
+    }
+
+    test('live uses it, logged without the password or the query', () => {
+      expect(cacheDatabase({ mode: 'live', cacheDbConnectionString: HOSTED })).toEqual({
+        kind: 'separate',
+        connectionString: HOSTED,
+        redacted: 'cache_client@db.abc.supabase.co:5432/postgres',
+      });
+    });
+
+    test('a string without a user is logged as the host and database', () => {
+      const local = 'postgresql://127.0.0.1:55322/postgres';
+      expect(cacheDatabase({ mode: 'live', cacheDbConnectionString: local })).toEqual({
+        kind: 'separate',
+        connectionString: local,
+        redacted: '127.0.0.1:55322/postgres',
+      });
+    });
+
+    test('live refuses an unparseable string without echoing it', () => {
+      expect(() =>
+        resolve({ mode: 'live', cacheDbConnectionString: 'cache_client:s3cret@nowhere' }),
+      ).toThrow(
+        expect.objectContaining({
+          message: 'CACHE_DB_CONNECTION_STRING is not a valid postgresql:// URL.',
+        }),
+      );
+    });
+
+    test.each(['', undefined])('live with %j uses the worker database', (value) => {
+      expect(cacheDatabase({ mode: 'live', cacheDbConnectionString: value })).toEqual({
+        kind: 'worker',
+        ignoredVariable: false,
+      });
+    });
+
+    test.each(['stubbed', 'mock-llm'] as const)('%s ignores it', (mode) => {
+      expect(cacheDatabase({ mode, cacheDbConnectionString: HOSTED })).toEqual({
+        kind: 'worker',
+        ignoredVariable: true,
+      });
+    });
+
+    test('off ignores it silently', () => {
+      expect(resolve({ mode: 'off', cacheDbConnectionString: HOSTED })).toEqual({ mode: 'off' });
+    });
+  });
 
   test('an unknown mode names the valid ones back', () => {
     expect(() => resolve({ mode: 'fast' })).toThrow(

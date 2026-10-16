@@ -48,6 +48,7 @@ import { sleep, startTicker } from './ticker.ts';
 
 export type WorkerDependencies = {
   db: DatabaseExecutor;
+  cacheDb: DatabaseExecutor;
   store: BlobStore;
   emailer: Emailer;
   clock: Clock;
@@ -100,9 +101,9 @@ type InFlightAttempt = {
 };
 
 export function createWorker(dependencies: WorkerDependencies): Worker {
-  const { db, store, emailer, clock, config, log, candidateReports } = dependencies;
+  const { db, cacheDb, store, emailer, clock, config, log, candidateReports } = dependencies;
 
-  const attemptDependencies: AttemptDependencies = { ...config, db, store, log };
+  const attemptDependencies: AttemptDependencies = { ...config, db, cacheDb, store, log };
 
   const inFlight = new Map<AnalysisAttemptId, InFlightAttempt>();
   let shuttingDown = false;

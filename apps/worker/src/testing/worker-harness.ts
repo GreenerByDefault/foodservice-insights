@@ -127,8 +127,10 @@ export async function withWorker<T>(
         },
         { ...TEST_CONFIG, ...workerOptions.overrides },
       );
+      const db = workerOptions.db ?? WORKER_DATABASE;
       const worker = createWorker({
-        db: workerOptions.db ?? WORKER_DATABASE,
+        db,
+        cacheDb: db,
         store: workerOptions.store ?? BLOB_STORE,
         emailer: emails.service,
         clock: manual ?? SYSTEM_CLOCK,
