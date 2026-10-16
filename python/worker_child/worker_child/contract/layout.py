@@ -17,6 +17,8 @@ PROGRESS: Final = "output/progress.json"
 RESULT: Final = "output/result.json"
 FAILURE: Final = "output/failure.json"
 TELEMETRY: Final = "output/telemetry.json"
+CATEGORIZATION_CACHE: Final = "input/categorization-cache.json"
+NEW_CATEGORIZATIONS: Final = "output/new-categorizations.json"
 RESULT_FILES_DIRECTORY: Final = "output/files"
 WORK_DIRECTORY: Final = "work"
 

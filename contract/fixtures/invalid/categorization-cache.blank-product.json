@@ -1,0 +1,19 @@
+{
+  "rows": [
+    {
+      "product": "",
+      "category": "Poultry (Chicken & Turkey)",
+      "cleanedName": "chicken breast"
+    },
+    {
+      "product": "Napkins 2-ply",
+      "category": "No Matches Found",
+      "cleanedName": null
+    },
+    {
+      "product": "Oat Milk \"Barista\" 32oz,\ncase of 12",
+      "category": "Oat Milk",
+      "cleanedName": "oat milk"
+    }
+  ]
+}

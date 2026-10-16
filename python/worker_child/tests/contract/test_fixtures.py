@@ -4,12 +4,15 @@ from pathlib import Path
 
 import pytest
 from gbd_foodservice_insights.analysis import (
+    CachedCategorization,
     CategorizationSummary,
     FindingCount,
     InputSummary,
+    NewCategorization,
     ReportSummary,
 )
 from support.contract_fixtures import (
+    INVALID_CATEGORIZATION_CACHE_FIXTURE_NAMES,
     INVALID_RUN_FIXTURE_NAMES,
     VALID_ANALYSIS_ATTEMPT_ID,
     load,
@@ -21,14 +24,27 @@ from worker_child.contract.messages import (
     LlmUsage,
     TelemetryState,
     failure_payload,
+    new_categorizations_payload,
+    parse_categorization_cache,
     parse_run_manifest,
     progress_payload,
     read_run_manifest,
     result_payload,
     telemetry_payload,
 )
+from worker_child.contract.names import MAX_PRODUCT_BYTES
 
-DOCUMENTS = frozenset({"run", "progress", "result", "failure", "telemetry"})
+DOCUMENTS = frozenset(
+    {
+        "run",
+        "progress",
+        "result",
+        "failure",
+        "telemetry",
+        "categorization-cache",
+        "new-categorizations",
+    }
+)
 
 
 def document_of(file_name: str) -> str:
@@ -46,7 +62,9 @@ def test_names_every_fixture_after_a_document_both_stacks_know() -> None:
 
 def test_covers_every_document() -> None:
     assert VALID == [
+        "categorization-cache.json",
         "failure.json",
+        "new-categorizations.json",
         "progress.json",
         "result.json",
         "run.json",
@@ -54,6 +72,7 @@ def test_covers_every_document() -> None:
         "telemetry.partial.json",
     ]
     assert INVALID_RUN_FIXTURE_NAMES != []
+    assert INVALID_CATEGORIZATION_CACHE_FIXTURE_NAMES != []
 
 
 def test_parses_the_run_manifest_the_parent_writes() -> None:
@@ -98,6 +117,39 @@ def test_raises_a_contract_error_when_the_manifest_file_is_missing(tmp_path: Pat
         read_run_manifest(tmp_path)
 
 
+def test_parses_the_categorization_cache_the_parent_writes() -> None:
+    assert parse_categorization_cache(read("valid", "categorization-cache.json")) == (
+        CachedCategorization(
+            product="Chicken Breast, Boneless 4oz",
+            category="Poultry (Chicken & Turkey)",
+            cleaned_name="chicken breast",
+        ),
+        CachedCategorization(
+            product="Napkins 2-ply", category="No Matches Found", cleaned_name=None
+        ),
+        CachedCategorization(
+            product='Oat Milk "Barista" 32oz,\ncase of 12',
+            category="Oat Milk",
+            cleaned_name="oat milk",
+        ),
+    )
+
+
+def test_parses_an_empty_categorization_cache() -> None:
+    assert parse_categorization_cache('{"rows": []}') == ()
+
+
+@pytest.mark.parametrize("name", INVALID_CATEGORIZATION_CACHE_FIXTURE_NAMES)
+def test_rejects_an_invalid_categorization_cache_fixture(name: str) -> None:
+    with pytest.raises(ContractError):
+        parse_categorization_cache(read("invalid", name))
+
+
+def test_rejects_a_categorization_cache_row_that_is_not_an_object() -> None:
+    with pytest.raises(ContractError):
+        parse_categorization_cache('{"rows": ["Napkins 2-ply"]}')
+
+
 # ---------------------------------------------------------------------------------------
 # What the child writes
 # ---------------------------------------------------------------------------------------
@@ -129,6 +181,87 @@ def test_failure_payload_is_the_fixture() -> None:
 def test_refuses_to_write_a_reason_only_the_parent_may_claim() -> None:
     with pytest.raises(ContractError):
         failure_payload(reason="hung", detail="whatever")  # ty: ignore[invalid-argument-type]
+
+
+BURGER = NewCategorization(
+    product="Beyond Burger Patty 4oz",
+    cleaned_name="plant-based burger patty",
+    category="Plant-based Meats",
+)
+FOIL_PAN = NewCategorization(
+    product="Foil Pan Half Size", cleaned_name=None, category="No Matches Found"
+)
+
+
+def test_new_categorizations_payload_is_the_fixture() -> None:
+    payload = new_categorizations_payload(
+        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID, rows=[BURGER, FOIL_PAN]
+    )
+
+    assert payload == load("valid", "new-categorizations.json")
+
+
+@pytest.mark.parametrize("cleaned_name", ["", " \n"])
+def test_new_categorizations_payload_writes_a_blank_cleaned_name_as_null(
+    cleaned_name: str,
+) -> None:
+    payload = new_categorizations_payload(
+        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
+        rows=[replace(BURGER, cleaned_name=cleaned_name)],
+    )
+
+    assert payload["rows"] == [
+        {"product": BURGER.product, "cleanedName": None, "category": BURGER.category}
+    ]
+
+
+def test_new_categorizations_payload_accepts_a_product_of_exactly_the_byte_bound() -> None:
+    product = "é" * (MAX_PRODUCT_BYTES // 2)
+
+    payload = new_categorizations_payload(
+        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID, rows=[replace(BURGER, product=product)]
+    )
+
+    assert payload["rows"][0]["product"] == product
+
+
+# Each mirrors a fixture under `invalid/new-categorizations.*`, bar the shape violations the type
+# checker catches on this side.
+@pytest.mark.parametrize(
+    ("analysis_attempt_id", "rows"),
+    [
+        pytest.param("not-a-uuid", [BURGER], id="analysis-attempt-id-not-a-uuid"),
+        pytest.param(
+            VALID_ANALYSIS_ATTEMPT_ID,
+            [BURGER, replace(BURGER, category="Beef and Buffalo Meat")],
+            id="duplicate-product",
+        ),
+        pytest.param(
+            VALID_ANALYSIS_ATTEMPT_ID, [replace(BURGER, category="")], id="blank-category"
+        ),
+        pytest.param(
+            VALID_ANALYSIS_ATTEMPT_ID,
+            [replace(BURGER, category="Plant-based Meats ")],
+            id="category-not-stripped",
+        ),
+        pytest.param(VALID_ANALYSIS_ATTEMPT_ID, [replace(BURGER, product="")], id="blank-product"),
+        pytest.param(
+            VALID_ANALYSIS_ATTEMPT_ID,
+            [replace(BURGER, product="é" * (MAX_PRODUCT_BYTES // 2 + 1))],
+            id="product-over-max-bytes",
+        ),
+        pytest.param(
+            VALID_ANALYSIS_ATTEMPT_ID,
+            [replace(BURGER, product="\u3000Beyond Burger Patty 4oz")],
+            id="product-not-stripped",
+        ),
+    ],
+)
+def test_new_categorizations_payload_refuses_what_the_parent_would(
+    analysis_attempt_id: str, rows: list[NewCategorization]
+) -> None:
+    with pytest.raises(ContractError):
+        new_categorizations_payload(analysis_attempt_id=analysis_attempt_id, rows=rows)
 
 
 CLEAN_USAGE = LlmUsage(

@@ -43,6 +43,15 @@ class CategorizedProducts:
 
 
 @dataclass(frozen=True)
+class NewCategorization:
+    """A product the LLM categorized this run, as a suggestion for the cache."""
+
+    product: str
+    cleaned_name: str | None
+    category: str  # "No Matches Found" included
+
+
+@dataclass(frozen=True)
 class CategorizationSummary:
     """The upload's unique products by how each was categorized, and the upload's rows that
     categorization left usable. The three match types partition the unique products."""

@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@gbd/core/env';
+import { MAX_CACHE_KEY_BYTES } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { DIRECTORIES_CREATED_BY_PARENT, RESULT_FILE_NAMES, RUN_DIRECTORY } from './layout.ts';
 import {
@@ -48,6 +49,10 @@ describe('contract/contract.json', () => {
       qualityCheck: QUALITY_CHECKS,
       diagnosticStatus: DIAGNOSTIC_STATUSES,
     });
+  });
+
+  test("bounds a categorization's product as the cache tables do", () => {
+    expect(contract.categorization).toEqual({ maxProductBytes: MAX_CACHE_KEY_BYTES });
   });
 
   test('agrees on the exit codes', () => {

@@ -1,26 +1,29 @@
-"""The five documents that cross the run directory: the child parses `run.json` and builds the
-other four as payload dicts."""
+"""The seven documents that cross the run directory: the child parses `run.json` and
+`categorization-cache.json`, and builds the other five as payload dicts."""
 
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
 from gbd_foodservice_insights.analysis import (
+    CachedCategorization,
     CategorizationSummary,
     InputSummary,
+    NewCategorization,
     ReportSummary,
     cost_micro_usd,
 )
 
 from worker_child.contract import ContractError
-from worker_child.contract.fields import parse_object
+from worker_child.contract.fields import Fields, parse_object
 from worker_child.contract.layout import MANIFEST
 from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
+    MAX_PRODUCT_BYTES,
     STAGES,
     UNIT_SYSTEMS,
     ChildFailureReason,
@@ -85,6 +88,23 @@ def parse_run_manifest(text: str) -> RunManifest:
     return manifest
 
 
+def parse_categorization_cache(text: str) -> tuple[CachedCategorization, ...]:
+    root = parse_object("categorization-cache.json", text)
+    rows = tuple(_cached_categorization(row) for row in root.objects("rows"))
+    root.done()
+    return rows
+
+
+def _cached_categorization(row: Fields) -> CachedCategorization:
+    cached = CachedCategorization(
+        product=row.string("product"),
+        category=row.string("category"),
+        cleaned_name=row.nullable_string("cleanedName"),
+    )
+    row.done()
+    return cached
+
+
 def progress_payload(sequence: int) -> dict[str, Any]:
     if sequence < 1:
         raise ContractError(f"progress.json: sequence must be >= 1, got {sequence}")
@@ -106,6 +126,38 @@ def failure_payload(
     _require(reason in CHILD_FAILURE_REASONS, f"'{reason}' is not a reason a child may claim")
     _require(bool(detail), "detail must not be empty")
     return {"reason": reason, "detail": detail, "traceback": traceback}
+
+
+def new_categorizations_payload(
+    *, analysis_attempt_id: str, rows: Sequence[NewCategorization]
+) -> dict[str, Any]:
+    """Refuses anything the parent's insert into `product_categorization` would, since one bad row
+    fails its whole chunk: `contract/fixtures/invalid/new-categorizations.*` pin each rule."""
+    _require(UUID_PATTERN.fullmatch(analysis_attempt_id), "analysisAttemptId is not a uuid")
+    products = [row.product for row in rows]
+    _require(len(set(products)) == len(products), "new-categorizations.json: a product repeats")
+    return {
+        "analysisAttemptId": analysis_attempt_id,
+        "rows": [_new_categorization_payload(row) for row in rows],
+    }
+
+
+def _new_categorization_payload(row: NewCategorization) -> dict[str, Any]:
+    _require(
+        row.product and row.product == row.product.strip(),
+        f"product {row.product!r} is blank or has surrounding whitespace",
+    )
+    _require(
+        len(row.product.encode("utf-8")) <= MAX_PRODUCT_BYTES,
+        f"product {row.product[:40]!r}... is over {MAX_PRODUCT_BYTES} bytes",
+    )
+    _require(
+        row.category and row.category == row.category.strip(),
+        f"category {row.category!r} of {row.product!r} is blank or has surrounding whitespace",
+    )
+    # A blank cleaned name is the LLM's slip, not a reason to fail the report.
+    cleaned_name = row.cleaned_name if row.cleaned_name and row.cleaned_name.strip() else None
+    return {"product": row.product, "cleanedName": cleaned_name, "category": row.category}
 
 
 @dataclass(frozen=True)

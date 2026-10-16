@@ -47,6 +47,9 @@ from gbd_foodservice_insights.categorization.pipeline import (
     CategorizationSummary as CategorizationSummary,
 )
 from gbd_foodservice_insights.categorization.pipeline import (
+    NewCategorization as NewCategorization,
+)
+from gbd_foodservice_insights.categorization.pipeline import (
     categorize_unique_products,
     summarize_categorization,
 )
@@ -83,6 +86,15 @@ class InputSummary:
     # coverage — `CategorizationSummary` counts the hits — but 0 means every product goes to the
     # LLM.
     categorization_cache_entries: int
+
+
+@dataclass(frozen=True)
+class CachedCategorization:
+    """A verified row of the categorization cache."""
+
+    product: str
+    category: str
+    cleaned_name: str | None
 
 
 @dataclass(frozen=True)
