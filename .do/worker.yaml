@@ -13,7 +13,7 @@ workers:
     # `budget.test.ts` holds the count to `WORKER_INSTANCES`. **Open:** drop to `apps-s-1vcpu-1gb`
     # once production shows the parent plus three children staying well under 1 GB.
     instance_size_slug: apps-s-1vcpu-2gb
-    instance_count: 2
+    instance_count: 1
     # App Platform's maximum. Its default of 120 would SIGKILL the worker mid-drain, which looks
     # exactly like a worker bug. `config.test.ts` holds `PLATFORM_SHUTDOWN_GRACE_MS` to it.
     termination:
