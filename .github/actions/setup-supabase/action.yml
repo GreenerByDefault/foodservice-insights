@@ -8,7 +8,7 @@ runs:
     # upstream schema change would otherwise land in CI as a spurious `ts-db-types` failure on
     # an unrelated PR. Bump this deliberately, alongside `brew upgrade supabase` locally, so
     # the regenerated types land in the same commit.
-    - uses: supabase/setup-cli@v1
+    - uses: supabase/setup-cli@v3
       with:
         version: 2.113.0
 
