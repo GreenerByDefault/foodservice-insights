@@ -10,6 +10,7 @@ import type { DatabaseExecutor } from '@gbd/db';
 import {
   type AnalysisAttemptId,
   type CountsBasis,
+  listVerifiedProductCategorizations,
   newResultFileId,
   type OrganizationId,
   type ReportId,
@@ -23,6 +24,7 @@ import {
   readResultFiles,
   readTelemetry,
   removeRunDirectory,
+  writeCategorizationCache,
   writeInputCsv,
   writeManifest,
 } from '../child/run-directory.ts';
@@ -117,6 +119,19 @@ export async function startAttempt(
     const log = dependencies.log.child({ attemptId, reportId: inputs.reportId });
     log.info({ attemptNumber: inputs.attemptNumber }, 'Claimed an attempt');
 
+    // Read per claim, so a long-lived worker always runs the latest review in Studio; the query is a
+    // few milliseconds against a run of minutes. A failure fails the attempt like any other input.
+    // *Rejected: an in-process copy with a TTL*, one more thing to reason about for no real saving.
+    // *Rejected: running with an empty cache*, which silently pays for a full LLM pass.
+    const categorizationCache = await retryOnTransientDbError(
+      () => listVerifiedProductCategorizations(dependencies.cacheDb),
+      {
+        action: 'read the verified product categorizations',
+        log,
+        waitsMs: dependencies.transientRetryWaitsMs,
+      },
+    );
+
     runDirectory = await createRunDirectory(dependencies.runRoot, attemptId);
 
     const inputCsv = await getObject(dependencies.store, inputs.inputFile.storageKey);
@@ -129,6 +144,7 @@ export async function startAttempt(
       report: inputs.report,
     });
     await writeManifest(runDirectory, manifest);
+    await writeCategorizationCache(runDirectory, categorizationCache);
 
     const child = spawnChild(dependencies.childCommand, runDirectory, {
       killGraceMs: dependencies.killGraceMs,
