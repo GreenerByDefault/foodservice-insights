@@ -14,11 +14,6 @@ Three properties keep this seam agnostic and are worth preserving:
    as the stage finishes, and so before a later check raises. It too is called from any thread.
    `LlmCall`s come only from the LLM client `analyze()` builds: pass `llm=` and none are
    reported, though the summaries and stage times still are.
-
-**Open:** the categorization cache becomes a Postgres table with a human-approved flag; the parent
-materializes it into the run directory per run, and the child reports new values back through the
-contract. `AnalysisRequest` is where the cache will arrive. Until then the library's cache is
-read-only.
 """
 
 import time
@@ -36,9 +31,9 @@ import pandas as pd
 matplotlib.use("Agg")
 
 from gbd_foodservice_insights.categorization.cache import (
-    CategorizationCache,
-    load_categorization_cache,
+    CachedCategorization as CachedCategorization,
 )
+from gbd_foodservice_insights.categorization.cache import CategorizationCache
 from gbd_foodservice_insights.categorization.llm import LlmCall as LlmCall
 from gbd_foodservice_insights.categorization.llm import LlmClient, OpenAiLlmClient
 from gbd_foodservice_insights.categorization.llm import LlmOperation as LlmOperation
@@ -89,15 +84,6 @@ class InputSummary:
 
 
 @dataclass(frozen=True)
-class CachedCategorization:
-    """A verified row of the categorization cache."""
-
-    product: str
-    category: str
-    cleaned_name: str | None
-
-
-@dataclass(frozen=True)
 class StageFinished:
     stage: Stage
     duration_ms: int
@@ -119,6 +105,7 @@ class AnalysisRequest:
     counts_basis: CountsBasis
     unit_system: UnitSystem
     monthly_counts: Mapping[str, int]  # "YYYY-MM" -> diners or meals
+    categorization_cache: tuple[CachedCategorization, ...]
 
 
 @dataclass(frozen=True)
@@ -156,7 +143,7 @@ def analyze(
         df = read_input_csv(request.input_csv)
         if request.unit_system == "lb":
             df = df.assign(weight=df["weight"] * LB_TO_KG)
-        cache = load_categorization_cache()
+        cache = CategorizationCache.from_rows(request.categorization_cache)
     report_telemetry(_summarize_input(df, cache))
 
     with _stage("categorize", report_telemetry):

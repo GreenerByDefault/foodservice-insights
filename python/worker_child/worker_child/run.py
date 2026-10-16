@@ -5,6 +5,7 @@ from pathlib import Path
 from gbd_foodservice_insights.analysis import (
     AnalysisOutcome,
     AnalysisRequest,
+    CachedCategorization,
 )
 from gbd_foodservice_insights.analysis import analyze as default_analyze
 
@@ -13,6 +14,7 @@ from worker_child.contract import layout, names
 from worker_child.contract.messages import (
     RunManifest,
     failure_payload,
+    read_categorization_cache,
     read_run_manifest,
     result_payload,
 )
@@ -46,7 +48,8 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     """
     layout.require_created_by_parent(run_directory)
     manifest = read_run_manifest(run_directory)
-    request = _build_request(run_directory, manifest)
+    categorization_cache = read_categorization_cache(run_directory)
+    request = _build_request(run_directory, manifest, categorization_cache)
 
     outcome = analyze(
         request,
@@ -59,7 +62,11 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     write_json_atomically(run_directory / layout.RESULT, payload)
 
 
-def _build_request(run_directory: Path, manifest: RunManifest) -> AnalysisRequest:
+def _build_request(
+    run_directory: Path,
+    manifest: RunManifest,
+    categorization_cache: tuple[CachedCategorization, ...],
+) -> AnalysisRequest:
     return AnalysisRequest(
         run_id=manifest.analysis_attempt_id,
         input_csv=run_directory / layout.INPUT_CSV,
@@ -70,6 +77,7 @@ def _build_request(run_directory: Path, manifest: RunManifest) -> AnalysisReques
         counts_basis=manifest.report.counts_basis,
         unit_system=manifest.report.unit_system,
         monthly_counts=manifest.report.monthly_counts,
+        categorization_cache=categorization_cache,
     )
 
 

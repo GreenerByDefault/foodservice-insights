@@ -19,7 +19,7 @@ from gbd_foodservice_insights.analysis import (
 
 from worker_child.contract import ContractError
 from worker_child.contract.fields import Fields, parse_object
-from worker_child.contract.layout import MANIFEST
+from worker_child.contract.layout import CATEGORIZATION_CACHE, MANIFEST
 from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
@@ -58,12 +58,18 @@ class RunManifest:
 
 
 def read_run_manifest(run_directory: Path) -> RunManifest:
-    manifest_path = run_directory / MANIFEST
+    return parse_run_manifest(_read_input(run_directory, MANIFEST))
+
+
+def read_categorization_cache(run_directory: Path) -> tuple[CachedCategorization, ...]:
+    return parse_categorization_cache(_read_input(run_directory, CATEGORIZATION_CACHE))
+
+
+def _read_input(run_directory: Path, relative: str) -> str:
     try:
-        text = manifest_path.read_text(encoding="utf-8")
+        return (run_directory / relative).read_text(encoding="utf-8")
     except OSError as error:
-        raise ContractError(f"{MANIFEST}: {error}") from error
-    return parse_run_manifest(text)
+        raise ContractError(f"{relative}: {error}") from error
 
 
 def parse_run_manifest(text: str) -> RunManifest:

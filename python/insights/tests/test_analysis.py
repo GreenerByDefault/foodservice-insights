@@ -15,6 +15,7 @@ from gbd_foodservice_insights import analysis
 from gbd_foodservice_insights.analysis import (
     LB_TO_KG,
     AnalysisRequest,
+    CachedCategorization,
     CategorizationSummary,
     CountsBasis,
     InputSummary,
@@ -28,7 +29,6 @@ from gbd_foodservice_insights.analysis import (
     UpstreamApiError,
     analyze,
 )
-from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.llm import OnLlmCall
 from gbd_foodservice_insights.report import pdf
 from gbd_foodservice_insights.report.food_report import FindingCount, FoodReport, ReportCharts
@@ -55,6 +55,7 @@ def _request(
     counts_basis: CountsBasis = "people",
     unit_system: UnitSystem = "kg",
     site_name: str | None = None,
+    categorization_cache: tuple[CachedCategorization, ...] = (),
 ) -> AnalysisRequest:
     output_directory = tmp_path / "output"
     output_directory.mkdir(exist_ok=True)
@@ -69,16 +70,8 @@ def _request(
         unit_system=unit_system,
         # Not a `dict`: `worker_child` hands over a read-only view.
         monthly_counts=MappingProxyType(dict.fromkeys(SAMPLE_MONTHS, 1000)),
+        categorization_cache=categorization_cache,
     )
-
-
-@pytest.fixture(autouse=True)
-def cache_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Where the categorization cache is read from — absent unless a test writes it, so a
-    developer's local copy of the real cache never leaks into these tests."""
-    path = tmp_path / "previously_categorized_items.csv"
-    monkeypatch.setattr(cache, "categorization_cache_path", lambda: path)
-    return path
 
 
 FAKE_REPORT_SUMMARY = ReportSummary(
@@ -342,19 +335,21 @@ def _chart_titles(figure: Figure) -> list[str]:
     return [suptitle, *titles] if suptitle else titles
 
 
-def test_analyze_golden_deliverables(
-    tmp_path: Path, cache_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_analyze_golden_deliverables(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pins what the PDF is built from and every workbook sheet. `UPDATE_GOLDEN=1` rewrites
     the fixture, whose diff is then the review. The PDF's own bytes are not compared: the
     title page is dated and its fonts vary by machine."""
     baseline = pd.read_csv(Path(__file__).parent / "data" / "aggregated_baseline.csv")
     baseline = baseline[baseline["category"].notna() & (baseline["category"] != "No Matches Found")]
-    baseline.assign(cleaned_item_names=baseline["product"].str.lower())[
-        ["product", "category", "cleaned_item_names"]
-    ].drop_duplicates("product").to_csv(cache_path, index=False)
+    cached = baseline.drop_duplicates("product")
     request = dataclasses.replace(
-        _request(tmp_path),
+        _request(
+            tmp_path,
+            categorization_cache=tuple(
+                CachedCategorization(product, category, product.lower())
+                for product, category in zip(cached["product"], cached["category"], strict=True)
+            ),
+        ),
         monthly_counts=MappingProxyType({"2023-10": 900, "2023-11": 1000, "2023-12": 1100}),
     )
     request.input_csv.write_text(
@@ -538,16 +533,16 @@ class MysteryMeatLlmClient(KeywordLlmClient):
 
 
 def test_reports_each_stages_summary_and_time_in_order(
-    tmp_path: Path, cache_path: Path, fake_report: FakeReport
+    tmp_path: Path, fake_report: FakeReport
 ) -> None:
-    pd.DataFrame(
-        {
-            "product": ["House Blend 7", "Paper Towels", "OTHER PORK SKU"],
-            "category": ["Cheese", "No Matches Found", "Pork (pig meat)"],
-            "cleaned_item_names": ["house blend", "paper towels", "pork loin"],
-        }
-    ).to_csv(cache_path, index=False)
-    request = _request(tmp_path)
+    request = _request(
+        tmp_path,
+        categorization_cache=(
+            CachedCategorization("House Blend 7", "Cheese", "house blend"),
+            CachedCategorization("Paper Towels", "No Matches Found", "paper towels"),
+            CachedCategorization("OTHER PORK SKU", "Pork (pig meat)", "pork loin"),
+        ),
+    )
     request.input_csv.write_text(
         sample_input_csv(
             (
@@ -608,17 +603,11 @@ def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: Fake
     assert llm.calls == [("clean", "Cheddar Cheese"), ("match", "cheddar cheese")]
 
 
-def test_a_cached_product_skips_the_llm(
-    tmp_path: Path, cache_path: Path, fake_report: FakeReport
-) -> None:
-    pd.DataFrame(
-        {
-            "product": ["House Blend 7"],
-            "category": ["Cheese"],
-            "cleaned_item_names": ["house blend"],
-        }
-    ).to_csv(cache_path, index=False)
-    request = _request(tmp_path)
+def test_a_cached_product_skips_the_llm(tmp_path: Path, fake_report: FakeReport) -> None:
+    request = _request(
+        tmp_path,
+        categorization_cache=(CachedCategorization("House Blend 7", "Cheese", "house blend"),),
+    )
     request.input_csv.write_text(
         input_csv_text([("House Blend 7", "2025-01-15", 1.0), ("Pork Loin", "2025-01-15", 1.0)])
     )

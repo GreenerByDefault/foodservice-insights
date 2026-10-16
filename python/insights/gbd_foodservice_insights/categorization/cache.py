@@ -8,7 +8,7 @@ it only through GBD's review.
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -75,6 +75,15 @@ NO_MATCHES_FOUND: Final = "No Matches Found"
 
 
 @dataclass(frozen=True)
+class CachedCategorization:
+    """A verified row of the categorization cache."""
+
+    product: str
+    category: str
+    cleaned_name: str | None
+
+
+@dataclass(frozen=True)
 class CategorizationCache:
     """The reviewed cache, in the one shape the pipeline matches against: build it with
     `from_frame`, which enforces that shape. The constructor rejects only a category outside the
@@ -136,6 +145,21 @@ class CategorizationCache:
 
         logger.info("Categorization cache: kept %d of %d rows.", len(products), n_loaded)
         return cls(products=products, cleaned_name_index=_build_cleaned_name_index(products))
+
+    @classmethod
+    def from_rows(cls, rows: Sequence[CachedCategorization]) -> CategorizationCache:
+        """Drops what `from_frame` drops: a reviewer's typo in a category must not fail every
+        run."""
+        return cls.from_frame(
+            pd.DataFrame(
+                {
+                    "product": [row.product for row in rows],
+                    "category": [row.category for row in rows],
+                    "cleaned_item_names": [row.cleaned_name for row in rows],
+                },
+                columns=list(CACHE_COLUMNS),
+            )
+        )
 
 
 def _warn_dropped(mask: pd.Series, reason: str) -> None:

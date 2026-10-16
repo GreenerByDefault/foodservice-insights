@@ -31,6 +31,7 @@ def _request(tmp_path: Path) -> AnalysisRequest:
         counts_basis="people",
         unit_system="lb",
         monthly_counts={"2025-01": 100},
+        categorization_cache=(),
     )
 
 
