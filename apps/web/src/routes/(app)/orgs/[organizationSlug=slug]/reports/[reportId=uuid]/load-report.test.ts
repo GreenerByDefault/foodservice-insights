@@ -170,6 +170,36 @@ describe('_loadReport', () => {
         expect(data.report.siteName).toBe('Riverside Diner');
       });
     });
+
+    test('carries what the upload was entered with, oldest month first', async () => {
+      await withRollback(database(), async (transaction) => {
+        const { organization } = await insertOrganization(transaction);
+        const report = await insertReport(transaction, {
+          organizationId: organization.id,
+          unitSystem: 'kg',
+          countsBasis: 'meals',
+          monthlyCounts: { '2026-02': 135, '2025-12': 90, '2026-01': 120 },
+        });
+        await insertInputFile(transaction, { reportId: report.id });
+        await insertAnalysisAttempt(transaction, { reportId: report.id });
+
+        const data = await loadReport(transaction, organization, report.id);
+
+        expect({
+          unitSystem: data.report.unitSystem,
+          countsBasis: data.report.countsBasis,
+          monthlyCounts: data.report.monthlyCounts,
+        }).toEqual({
+          unitSystem: 'kg',
+          countsBasis: 'meals',
+          monthlyCounts: [
+            { month: '2025-12', count: 90 },
+            { month: '2026-01', count: 120 },
+            { month: '2026-02', count: 135 },
+          ],
+        });
+      });
+    });
   });
 
   describe('report.creator', () => {

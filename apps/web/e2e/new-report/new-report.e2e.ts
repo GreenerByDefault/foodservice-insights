@@ -13,7 +13,10 @@ const GOOD_CSV = ['product,date,weight', 'beef,2026-01-05,12'].join('\n');
 
 const BAD_ROWS_CSV = ['product,date,weight', 'beef,2026-01-05,5 oz'].join('\n');
 
-test('uploading a good CSV creates a report and lands on its page', async ({ page, org }) => {
+test('uploading a good CSV creates a report and lands on its page, which reads back what was entered', async ({
+  page,
+  org,
+}) => {
   await page.goto(`/orgs/${org.slug}`);
   await ensureHydrated(page);
   await page.getByRole('link', { name: 'New report' }).click();
@@ -21,13 +24,20 @@ test('uploading a good CSV creates a report and lands on its page', async ({ pag
   await page.getByLabel('Report name').fill('Q1 procurement');
   await chooseCsv(page, 'procurement.csv', GOOD_CSV);
   await expect(page.getByText('1 of 1 months still need a count')).toBeVisible();
-  await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
-  await page.getByRole('radio', { name: 'lb' }).click();
+  await page.getByRole('radio', { name: 'Meals' }).click();
+  await page.getByRole('spinbutton', { name: 'January 2026' }).fill('1250');
+  await page.getByRole('radio', { name: 'kg' }).click();
 
   await page.getByRole('button', { name: 'Upload report' }).click();
 
   await expect(page).toHaveURL(new RegExp(`/orgs/${org.slug}/reports/[0-9a-f-]+$`));
   await expect(page).toHaveTitle(`Q1 procurement · ${org.name} · ${APP_NAME}`);
+  const details = page.getByRole('region', { name: 'Upload details' });
+  await expect(details.getByRole('link', { name: 'procurement.csv' })).toBeVisible();
+  await expect(details.getByText('kg (kilograms)')).toBeVisible();
+  await expect(details.getByText('Meals per month')).toBeVisible();
+  await expect(details.getByText('January 2026')).toBeVisible();
+  await expect(details.getByText('1,250')).toBeVisible();
 });
 
 test('the file field works from the keyboard alone', async ({ page, org }) => {

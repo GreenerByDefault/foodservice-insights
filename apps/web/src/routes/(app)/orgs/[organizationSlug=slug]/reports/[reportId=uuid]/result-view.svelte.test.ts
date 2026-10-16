@@ -8,22 +8,16 @@ const FILES = {
   pdf: { href: '/file/result/00000000-0000-0000-0000-000000000001' },
   xlsx: { href: '/file/result/00000000-0000-0000-0000-000000000002' },
 };
-const INPUT_FILE = {
-  href: '/file/input/00000000-0000-0000-0000-000000000000',
-  originalFilename: 'orders.csv',
-  byteSize: 12_000,
-};
 const ORGANIZATION_SLUG = 'org-1';
 const REPORT_ID = 'report-1';
 const REPORT_NAME = 'Q1 procurement';
 
 describe('ResultView', () => {
-  test('links to the pdf, the excel file, and the original file', async () => {
+  test('links to the pdf and the excel file', async () => {
     const screen = await render(ResultView, {
       finishedAt: FINISHED_AT,
       now: NOW,
       files: FILES,
-      inputFile: INPUT_FILE,
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
       reportName: REPORT_NAME,
@@ -35,9 +29,5 @@ describe('ResultView', () => {
     await expect
       .element(screen.getByRole('link', { name: 'Download Excel' }))
       .toHaveAttribute('href', FILES.xlsx.href);
-    await expect
-      .element(screen.getByRole('link', { name: INPUT_FILE.originalFilename }))
-      .toHaveAttribute('href', INPUT_FILE.href);
-    await expect.element(screen.getByText('Uploaded file:')).toBeVisible();
   });
 });

@@ -20,9 +20,11 @@ import { HOUR_MS, SECOND_MS } from '@gbd/core';
 import type {
   AnalysisAttemptStatus,
   AnalysisFailureReason,
+  CountsBasis,
   Database,
   OrganizationId,
   ReportId,
+  UnitSystem,
   UserId,
 } from '@gbd/db';
 import { MAX_ANALYSIS_ATTEMPTS, withTransaction } from '@gbd/db';
@@ -60,15 +62,23 @@ export type ReportState =
  *
  * `siteName` and `createdByUserId` default to null, the shape most states don't care about: no
  * site, and the heading's "a deleted user" branch. `buildSucceeded` and `buildFailed` pass one so
- * the heading's other branches get exercised too, without a screenshot dedicated to each.
+ * the heading's other branches get exercised too, without a screenshot dedicated to each. They
+ * likewise split the upload details' units and counts bases between them.
  */
 async function insertReportWithInputFile(
   tx: Transaction<Database>,
   organizationId: OrganizationId,
   name: string,
-  overrides: { siteName?: string; createdByUserId?: UserId } = {},
+  overrides: {
+    siteName?: string;
+    createdByUserId?: UserId;
+    unitSystem?: UnitSystem;
+    countsBasis?: CountsBasis;
+    monthlyCounts?: Record<string, number>;
+  } = {},
 ): Promise<ReportId> {
   const report = await insertReport(tx, {
+    ...overrides,
     organizationId,
     name,
     createdAt: ANCHOR,
@@ -118,6 +128,9 @@ async function buildSucceeded(
   const reportId = await insertReportWithInputFile(tx, organizationId, 'Q1 Procurement', {
     siteName: 'Lakeside Grill',
     createdByUserId: creator.id,
+    unitSystem: 'lb',
+    countsBasis: 'people',
+    monthlyCounts: { '2026-01': 4250, '2026-02': 3980, '2026-03': 4410 },
   });
   const finishedMsAgo = 3 * HOUR_MS;
   const attempt = await insertAnalysisAttempt(tx, {
@@ -171,6 +184,9 @@ async function buildFailed(
   const creator = await findOrInsertAppUser(tx, { email: 'jordan@example.test' });
   const reportId = await insertReportWithInputFile(tx, organizationId, 'January Dairy', {
     createdByUserId: creator.id,
+    unitSystem: 'kg',
+    countsBasis: 'meals',
+    monthlyCounts: { '2026-01': 18400 },
   });
   await insertAnalysisAttempt(tx, {
     reportId,

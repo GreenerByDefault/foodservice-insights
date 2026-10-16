@@ -9,6 +9,7 @@ import FailureView from './failure/failure-view.svelte';
 import { pollReport } from './polling/poll-report.ts';
 import ReportHeading from './report-heading.svelte';
 import ResultView from './result-view.svelte';
+import UploadDetails from './upload-details.svelte';
 import { describeProgress } from './waiting/progress.ts';
 import WaitingView from './waiting/waiting-view.svelte';
 
@@ -76,7 +77,6 @@ function screenHeadline(report: ReportPageData): string {
     finishedAt={current.attempt.finishedAt}
     now={current.now}
     files={current.attempt.files}
-    inputFile={current.inputFile}
     organizationSlug={current.organizationSlug}
     reportId={current.report.id}
     reportName={current.report.name}
@@ -100,3 +100,11 @@ function screenHeadline(report: ReportPageData): string {
     reportName={current.report.name}
   />
 {/if}
+
+<UploadDetails
+  inputFile={current.inputFile}
+  unitSystem={current.report.unitSystem}
+  countsBasis={current.report.countsBasis}
+  monthlyCounts={current.report.monthlyCounts}
+  newReportHref={current.newReportHref}
+/>
