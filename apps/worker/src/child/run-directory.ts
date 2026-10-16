@@ -12,6 +12,8 @@ import {
   runPath,
 } from '../contract/layout.ts';
 import {
+  buildCategorizationCache,
+  type CategorizationCache,
   type ChildFailure,
   type ChildResult,
   type Progress,
@@ -36,6 +38,16 @@ export async function createRunDirectory(
 
 export async function writeManifest(runDirectory: string, manifest: RunManifest): Promise<void> {
   await writeFile(runPath(runDirectory, 'manifest'), JSON.stringify(manifest));
+}
+
+export async function writeCategorizationCache(
+  runDirectory: string,
+  rows: CategorizationCache['rows'],
+): Promise<void> {
+  await writeFile(
+    runPath(runDirectory, 'categorizationCache'),
+    JSON.stringify(buildCategorizationCache(rows)),
+  );
 }
 
 export async function writeInputCsv(runDirectory: string, body: Uint8Array): Promise<void> {

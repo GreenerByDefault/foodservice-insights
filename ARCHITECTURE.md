@@ -167,6 +167,7 @@ Parent lifecycle:
 1. Pull an analysis attempt from the queue, if current attempts < 3.
 2. Fetch the input file from the blob store.
 3. Spawn a child process to run `gbd_foodservice_insights`, setting up a folder with the required inputs.
+  - The inputs include the human-verified product categorizations, read fresh on every claim; [`attempt/lifecycle.ts`](apps/worker/src/attempt/lifecycle.ts) says why.
 4. The child runs, writes its results into that folder, and exits.
   - Exit 0 plus a result file the parent can parse is success; exit 1 means the child wrote a failure instead; any other exit means it reached no verdict at all.
   - Throughout, the child keeps `telemetry.json` current: its LLM usage and each finished stage's counts and time.

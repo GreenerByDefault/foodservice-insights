@@ -6,18 +6,23 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import type { Logger } from '@gbd/core/log';
 import { collectingLogger } from '@gbd/core/testing';
 import type { AnalysisAttemptId } from '@gbd/db';
-import { type Breakable, breakableDatabase, readAnalysisAttemptRow } from '@gbd/db/testing';
+import {
+  type Breakable,
+  breakableDatabase,
+  insertProductCategorization,
+  readAnalysisAttemptRow,
+} from '@gbd/db/testing';
 import { deletePrefix, getObject, putObject } from '@gbd/storage';
 import { BLOB_STORE } from '@gbd/storage/env';
 import { breakableBlobStore } from '@gbd/storage/testing';
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { RESULT_FILE_NAMES, resultFilePath, runPath } from '../contract/layout.ts';
-import type { Telemetry } from '../contract/messages.ts';
+import { parseCategorizationCache, type Telemetry } from '../contract/messages.ts';
 import { WORKER_DATABASE } from '../db.ts';
 import type { AttemptFixture } from '../testing/attempt-fixture.ts';
 import { withAttemptFixture } from '../testing/attempt-fixture.ts';
@@ -723,6 +728,72 @@ describe('failure rows', () => {
         expect(existsSync(runDirectory)).toBe(false);
       });
     });
+  });
+});
+
+describe('the categorization cache', () => {
+  test('holds the verified rows and none of the unverified ones', async () => {
+    const workerId = aWorkerId();
+    // Committed, since the worker reads through its own handle; `withAttemptFixture`'s cleanup is
+    // keyed on organizations, so these rows are deleted here.
+    const verified = await insertProductCategorization(WORKER_DATABASE, {
+      category: 'Oat Milk',
+      cleanedName: 'oat milk',
+      isVerified: true,
+    });
+    const unverified = await insertProductCategorization(WORKER_DATABASE);
+    try {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const prepared = await startAttempt(
+          dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]),
+          fixture.attemptId,
+        );
+        await prepared.child.exited;
+
+        const cache = parseCategorizationCache(
+          await readFile(runPath(prepared.runDirectory, 'categorizationCache'), 'utf8'),
+        );
+        // Other committed rows, from a concurrent test or worktree, may be in the document too.
+        const seeded = new Set([verified.product, unverified.product]);
+        expect(cache.rows.filter((row) => seeded.has(row.product))).toEqual([
+          { product: verified.product, category: 'Oat Milk', cleanedName: 'oat milk' },
+        ]);
+      });
+    } finally {
+      await WORKER_DATABASE.deleteFrom('productCategorization')
+        .where('id', 'in', [verified.id, unverified.id])
+        .execute();
+    }
+  });
+
+  test('a database it cannot read fails the attempt as infrastructure without spawning a child', async () => {
+    const workerId = aWorkerId();
+    const breakable = await breakableDatabase();
+    try {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const attemptDependencies = {
+          ...dependencies(fixture, workerId, [{ step: 'exit', code: 0 }]),
+          cacheDb: breakable.service,
+        };
+        breakable.break();
+
+        const start = startAttempt(attemptDependencies, fixture.attemptId);
+        await expect(start).rejects.toThrow();
+        await failClaimedAttempt(
+          attemptDependencies,
+          fixture.attemptId,
+          await start.catch((error) => error),
+        );
+
+        expect(existsSync(`${fixture.runRoot}/${fixture.attemptId}`)).toBe(false);
+        expect(await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).toMatchObject({
+          status: 'failed',
+          failureReason: 'infrastructure',
+        });
+      });
+    } finally {
+      await breakable.close();
+    }
   });
 });
 
