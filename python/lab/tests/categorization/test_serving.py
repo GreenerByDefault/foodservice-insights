@@ -3,10 +3,9 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.testing import KeywordLlmClient
-from gbd_foodservice_insights_lab.categorization import entree_cache, entrees
+from gbd_foodservice_insights_lab.categorization import entree_cache, entrees, product_cache
 from gbd_foodservice_insights_lab.categorization.spreadsheet import categorize_spreadsheet_to_csvs
 
 
@@ -40,7 +39,9 @@ def _run_serving(
         patch.object(entrees, "call_gemini_api", side_effect=fake_call_gemini_api),
         patch.object(entrees, "print_progress", return_value=None),
         patch.object(entrees, "load_prompt", return_value="Prompt"),
-        patch.object(cache, "categorization_cache_path", return_value=tmp_path / "categories.csv"),
+        patch.object(
+            product_cache, "categorization_cache_path", return_value=tmp_path / "categories.csv"
+        ),
         patch.object(
             entree_cache,
             "get_previously_classified_entrees_location",

@@ -10,12 +10,10 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Final
 
 import pandas as pd
 
-from gbd_foodservice_insights import PACKAGE_DIR
 from gbd_foodservice_insights.categories import category_names
 
 logger = logging.getLogger(__name__)
@@ -174,32 +172,3 @@ def _build_cleaned_name_index(products: pd.DataFrame) -> dict[str, str]:
     index = unanimous_index(eligible, key_col="cleaned_item_names", value_col="category")
     logger.info("Built cleaned-name reuse index with %d entries.", len(index))
     return index
-
-
-def categorization_cache_path() -> Path:
-    return PACKAGE_DIR / "data_files" / "previously_categorized_items.csv"
-
-
-def read_categorization_cache_csv() -> pd.DataFrame:
-    """The cache file exactly as written, every cell a `str` (so a product named `NA` stays
-    one); empty, with `CACHE_COLUMNS`, when the file is missing.
-
-    The pipeline wants `load_categorization_cache`. This is for the lab's writers, which must
-    append to the file without discarding the rows `from_frame` drops.
-    """
-    path = categorization_cache_path()
-    if not path.exists():
-        logger.warning(
-            "Historical cache not found at %s (see data_files/README.md); every product will go "
-            "to the LLM.",
-            path,
-        )
-        return pd.DataFrame(columns=list(CACHE_COLUMNS), dtype=str)
-
-    df = pd.read_csv(path, dtype=str, keep_default_na=False)
-    logger.info("Read %d rows from historical cache.", len(df))
-    return df
-
-
-def load_categorization_cache() -> CategorizationCache:
-    return CategorizationCache.from_frame(read_categorization_cache_csv())

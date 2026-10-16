@@ -3,10 +3,9 @@ from unittest.mock import patch
 
 import pandas as pd
 import pytest
-from gbd_foodservice_insights.categorization import cache
 from gbd_foodservice_insights.categorization.pipeline import CategorizedProducts
 from gbd_foodservice_insights.testing import KeywordLlmClient
-from gbd_foodservice_insights_lab.categorization import spreadsheet
+from gbd_foodservice_insights_lab.categorization import product_cache, spreadsheet
 from gbd_foodservice_insights_lab.categorization.spreadsheet import (
     MergeCounts,
     categorize_spreadsheet_to_csvs,
@@ -17,7 +16,7 @@ from gbd_foodservice_insights_lab.categorization.spreadsheet import (
 @pytest.fixture(autouse=True)
 def absent_cache(tmp_path, monkeypatch):
     """Keeps the developer's local copy of GBD's cache out of these tests."""
-    monkeypatch.setattr(cache, "categorization_cache_path", lambda: tmp_path / "absent.csv")
+    monkeypatch.setattr(product_cache, "categorization_cache_path", lambda: tmp_path / "absent.csv")
 
 
 def test_categorize_spreadsheet_to_csvs_raises_for_an_unsupported_file_type(tmp_path):

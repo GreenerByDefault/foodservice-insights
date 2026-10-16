@@ -3,7 +3,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from gbd_foodservice_insights.categories import category_names
-from gbd_foodservice_insights.categorization.cache import load_categorization_cache
+
+from gbd_foodservice_insights_lab.categorization.product_cache import load_categorization_cache
 
 # Functions to allow easy testing of the LLM models in our existing pipelines
 

@@ -1,8 +1,7 @@
 from unittest.mock import patch
 
 import pandas as pd
-from gbd_foodservice_insights.categorization import cache
-from gbd_foodservice_insights_lab.categorization import entree_cache
+from gbd_foodservice_insights_lab.categorization import entree_cache, product_cache
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     backfill_entree_cleaned_names,
     get_previously_classified_entrees,
@@ -107,7 +106,7 @@ def test_backfill_entree_cleaned_names_borrows_from_category_cache(tmp_path):
         patch.object(
             entree_cache, "get_previously_classified_entrees_location", return_value=entree_path
         ),
-        patch.object(cache, "categorization_cache_path", return_value=category_path),
+        patch.object(product_cache, "categorization_cache_path", return_value=category_path),
     ):
         summary = backfill_entree_cleaned_names()
 

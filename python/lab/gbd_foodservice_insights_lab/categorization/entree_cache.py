@@ -12,12 +12,10 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from gbd_foodservice_insights.categorization.cache import (
-    load_categorization_cache,
-    unanimous_index,
-)
+from gbd_foodservice_insights.categorization.cache import unanimous_index
 
 from gbd_foodservice_insights_lab import PACKAGE_DIR
+from gbd_foodservice_insights_lab.categorization.product_cache import load_categorization_cache
 
 logger = logging.getLogger(__name__)
 
