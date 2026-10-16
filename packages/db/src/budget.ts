@@ -30,7 +30,7 @@ export const BUDGET_SHARE = 0.8;
 /** The `instance_count`s in `.do/web.yaml` and `.do/worker.yaml`, which `budget.test.ts` holds to
  * these. */
 export const WEB_INSTANCES = 1;
-export const WORKER_INSTANCES = 2;
+export const WORKER_INSTANCES = 1;
 
 /** Five, not the default ten: the web's queries take milliseconds, and its traffic is polls and
  * page loads. */

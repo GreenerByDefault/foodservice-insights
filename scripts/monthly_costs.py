@@ -7,7 +7,7 @@ Each vendor is the one we chose, on the plan we decided. The script has three pa
 
 1. **Scenarios** — the volume a month carries and how the app is deployed. `PLANNED` sets every
    input; every other scenario is a `replace()` of it naming only what differs. To model
-   something new — one worker, two attempts each, more new clients — add one.
+   something new — two workers, three attempts each, more new clients — add one.
 2. **One section per vendor** — its list price, snapshotted on `PRICES_AS_OF` with the page it
    came from, and the assumptions that turn a scenario into a bill. Prices drift; re-check before
    quoting one. Usage figures are guesses until production has run for a month, and each says
@@ -62,10 +62,10 @@ PLANNED: Final = Scenario(
     # categorizes is only suggested to the cache, so it misses again on every upload until someone
     # verifies it.
     cache_miss_rate=0.1,
-    # What packages/db/src/budget.ts and apps/worker/src/config.ts assume today; not yet tuned.
-    # Fewer is free to model, but more instances than budget.ts holds outgrow Supabase's Small.
+    # What .do/web.yaml and .do/worker.yaml run today; not yet tuned. More instances than
+    # packages/db/src/budget.ts holds need its test to still pass on Supabase's Small.
     web_instances=1,
-    worker_instances=2,
+    worker_instances=1,
     attempts_per_worker=3,
 )
 
@@ -77,10 +77,9 @@ SCENARIOS: Final = (
         users=10,
         new_users_per_month=3,
         new_orgs_per_month=2,
-        worker_instances=1,
     ),
     PLANNED,
-    replace(PLANNED, name="1 worker", worker_instances=1),
+    replace(PLANNED, name="2 workers", worker_instances=2),
     # Every upload from a client whose products the cache has not seen.
     replace(PLANNED, name="New clients", cache_miss_rate=0.3),
     replace(
