@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
-from gbd_foodservice_insights.categorization.cache import load_categorization_cache
 from gbd_foodservice_insights.categorization.llm import LlmClient
 from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
@@ -26,6 +25,7 @@ from gbd_foodservice_insights_lab.categorization.entrees import (
     filter_to_entrees,
     run_entree_detector,
 )
+from gbd_foodservice_insights_lab.categorization.product_cache import load_categorization_cache
 from gbd_foodservice_insights_lab.parsing import (
     clean_weight_column,
     parse_and_validate_date_column,
