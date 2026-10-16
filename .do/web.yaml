@@ -4,7 +4,7 @@ name: foodservice-insights-web
 region: ric
 
 services:
-  - name: web
+  - name: foodservice-insights-web
     image:
       registry_type: GHCR
       registry: greenerbydefault
@@ -68,7 +68,11 @@ services:
 ingress:
   rules:
     - component:
-        name: web
+        name: foodservice-insights-web
       match:
         path:
           prefix: /
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
