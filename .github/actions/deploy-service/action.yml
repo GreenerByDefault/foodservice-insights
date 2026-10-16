@@ -1,7 +1,7 @@
 name: Deploy service
 description: >
-  Resolve one named service's commit-tagged image to a digest, then deploy that digest to whatever
-  the hosting provider turns out to be, returning a real exit code.
+  Resolve one named service's commit-tagged image to a digest, then deploy that digest to the
+  service's App Platform app by submitting its spec in `.do/`.
 
 inputs:
   service:
@@ -40,14 +40,24 @@ runs:
         echo "digest=$digest" >> "$GITHUB_OUTPUT"
         echo "Resolved ${{ inputs.service }}@${{ inputs.sha }} to $digest"
 
-    # ARCHITECTURE.md § Hosting chose DigitalOcean App Platform, but no app exists there yet, so
-    # there is nothing to call here. Warn rather than pretend a deploy happened — but don't fail
-    # the run. This step fires on every push to main, and a red deploy workflow there would mask
-    # real signal (e.g. flakes) from the workflows that actually verify the code.
-    # `.claude/plans/hosting-provider.md` replaces this step with DigitalOcean's deploy-by-digest
-    # call.
+    # The version is pinned because the step below relies on its `--spec -` and `--wait` behavior.
+    - uses: digitalocean/action-doctl@3cb3953159719656269e044e0e24ca16dd2a690f # v2.5.2
+      with:
+        version: 2.0.0
+        no_auth: true # doctl reads DIGITALOCEAN_ACCESS_TOKEN from the env
+
+    # The caller passes the token, the app ID, and every `${NAME}` in the spec as env, since a
+    # composite action can't read secrets. Rendering to a file first means a missing value fails
+    # the step before doctl submits anything. `--wait` exits nonzero when the deployment fails,
+    # including when the new instance never passes its health check and App Platform rolls back.
+    #
+    # *Rejected: digitalocean/app_action.* It finds the app by the spec's `name` and creates one when
+    # none matches, so a rename would start a second app, and it expands an unset variable to "".
     - name: Deploy
       shell: bash
+      env:
+        IMAGE_DIGEST: ${{ steps.resolve.outputs.digest }}
       run: |
-        echo "::warning::No hosting provider is configured yet — see ARCHITECTURE.md § Hosting."
-        echo "Would deploy ${{ steps.image.outputs.name }}@${{ steps.resolve.outputs.digest }}."
+        spec="$RUNNER_TEMP/${{ inputs.service }}.yaml"
+        yq '(.. | select(tag == "!!str")) |= envsubst(nu, ne, ff)' ".do/${{ inputs.service }}.yaml" > "$spec"
+        doctl apps update "$DO_APP_ID" --spec "$spec" --wait

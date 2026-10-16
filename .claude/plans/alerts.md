@@ -34,8 +34,8 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 - **The web app has both probes' routes.**
   [`/health/ready`](../../apps/web/src/routes/health/ready/+server.ts) answers 503 unless the
   database and the bucket are reachable, and `/health/live` touches nothing.
-  [`hosting-provider.md`](hosting-provider.md) points each probe at its route.
-- **Web and worker are separate DigitalOcean apps** (`hosting-provider.md`), with specs in
+  [`.do/web.yaml`](../../.do/web.yaml) points each probe at its route.
+- **Web and worker are separate DigitalOcean apps**, with specs in
   `.do/web.yaml` and `.do/worker.yaml`, so every app-level rule appears twice. Each file is
   canonical, because an update replaces the whole spec. Secrets in a spec are `${NAME}`
   placeholders that the deploy step fills from the `production` Environment.
@@ -204,8 +204,6 @@ secret key, so it can be revoked on its own.
   and until then the `error`-line alert is the same signal.
 
 ## PR 1 — host rules
-
-After `hosting-provider.md` commits the app specs.
 
 - `.do/web.yaml` and `.do/worker.yaml`: the component rules and `DEPLOYMENT_FAILED`. The web's
   spec also gets the p95 rule.

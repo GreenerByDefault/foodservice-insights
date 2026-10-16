@@ -175,7 +175,8 @@ Do these steps in order: because of `p=reject`, the DNS must verify before the f
    console if it is off, then delegate the mailbox to whoever will answer it.
 2. **Postmark account.**
    - Have a GBD staff login own the account, and add Eric as a second user;
-     `hosting-provider.md` already ruled out a shared login.
+     the [hosting analysis](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/hosting-provider.md)
+     already ruled out a shared login.
    - Create the Server and the `auth` stream. Turn open and link tracking off on both streams;
      the stream settings are what govern Supabase's mail.
    - **Request account approval now.** Until Postmark approves the account, it delivers only to

@@ -466,8 +466,9 @@ belongs to a fixed set of values.
 Secrets load as environment variables. Locally they all live in one gitignored file, `.env`,
 templated by `.env.example`. `.env.test` is committed because every value in it is safe in version control and needed for tests.
 
-GitHub Actions also holds the database and blob store credentials, for the migrate step in
-[`deploy.yml`](.github/workflows/deploy.yml) — only in the `production` Environment, which only
+GitHub Actions holds every production secret, for the migrate step in
+[`deploy.yml`](.github/workflows/deploy.yml) and for the running apps, which receive theirs at
+deploy ([`.do/README.md`](.do/README.md)) — only in the `production` Environment, which only
 `main` can deploy from, never as repo secrets.
 
 **Server config is read at runtime, not inlined at build time** — every variable in

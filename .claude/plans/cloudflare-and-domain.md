@@ -10,9 +10,8 @@ Cloudflare's part in the product comes from a few places:
 - [`/csp-report`](../../apps/web/src/routes/csp-report/+server.ts) relies on Cloudflare to absorb
   floods.
 
-This plan follows [`hosting-provider.md`](hosting-provider.md), which serves the web app from its
-App Platform starter domain (`<app>.ondigitalocean.app`). This one moves users to our own domain,
-with Cloudflare in front.
+Today the web app is served from its App Platform starter domain (`<app>.ondigitalocean.app`).
+This plan moves users to our own domain, with Cloudflare in front.
 
 Vendor facts, read 2026-10-14:
 

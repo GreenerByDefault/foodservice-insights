@@ -19,8 +19,8 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   - A child's stderr reaches the log as one record per exit.
   - Nothing names the app that wrote a line except those fields, and pino's `hostname`.
   - Every record fits `MAX_RECORD_BYTES`, the forwarding cap.
-- **App Platform keeps no runtime logs** unless they are forwarded
-  ([`hosting-provider.md`](hosting-provider.md)). Build and deploy logs stay in its dashboard.
+- **App Platform keeps no runtime logs** unless they are forwarded. Build and deploy logs stay in
+  its dashboard.
 - **App Platform forwards to Better Stack natively**, through a `log_destinations` entry of type
   `logtail` that holds a source token. The entry is set per component in the spec
   ([reference](https://docs.digitalocean.com/products/app-platform/reference/app-spec/)). On
@@ -29,7 +29,7 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   our process, so a crashing process's last lines still arrive.
 - **The token is a secret like any other.** DigitalOcean gives `log_destinations` no `SECRET`
   type, but the token is still a `${BETTER_STACK_TOKEN}` placeholder, filled from the `production`
-  Environment at deploy (`hosting-provider.md` § Secrets).
+  Environment at deploy ([`.do/README.md`](../../.do/README.md)).
 - **The free plan keeps 3 GB a month for 3 days. Nano keeps 40 GB for 30 days, at $30 a month**
   ([pricing](https://betterstack.com/pricing)). We write tens of megabytes a month, so retention,
   not volume, is the cost.

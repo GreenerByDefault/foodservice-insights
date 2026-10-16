@@ -2,7 +2,7 @@
 
 > **Status:** a spec. Until production can send sign-in codes, it runs `PUBLIC_AUTH_MODE=placeholder`:
 > every request is one seeded admin, behind a site password
-> ([`hosting-provider.md`](hosting-provider.md)). This plan switches production to Supabase Auth,
+> ([`.do/web.yaml`](../../.do/web.yaml)). This plan switches production to Supabase Auth,
 > then deletes placeholder mode. It starts once two things are true: Supabase sends through
 > Postmark, per [`email-provider.md`](email-provider.md) § Supabase Auth's settings; and Postmark
 > has approved the account. The PR that lands the last step deletes this file.
