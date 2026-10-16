@@ -19,6 +19,37 @@ workers:
     termination:
       grace_period_seconds: 600
 
+    # No liveness probe, and there is no port to give one. A crashed parent exits and is restarted,
+    # which the restart rule sees. A wedged one stops renewing its leases, so other workers reap its
+    # attempts as `abandoned`, or, if it is the only worker, its queue goes unclaimed.
+
+    # Starting thresholds, to tune after the first month of real traffic.
+    #
+    # There is no disk rule, because App Platform has none. Each run directory is deleted when its
+    # attempt settles, and a full disk replaces the container. **Open:** whether the restart rule
+    # counts a replacement. It likely does not, since the new container's count starts at zero, and
+    # then the attempts the old one held are what show it: reaped as `abandoned`, which the data
+    # layer's failures rule counts. Until that layer is built, a full disk goes unalerted.
+    alerts:
+      # Busy for longer than any one attempt takes, so attempts are slowing each other down.
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 90
+        window: THIRTY_MINUTES
+      # Children are close to being killed for memory, which fails their attempts. The kernel
+      # kills the largest process, a child, so the container survives and the restart rule never
+      # sees it. One child climbing to that kill within an attempt is averaged away here too, so
+      # the data layer's failures rule is what catches it. Revisit when the size drops to 1 GB.
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: TEN_MINUTES
+      # The parent exited: a crash, an out-of-memory kill, or a claim Postgres refused.
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 0
+        window: FIVE_MINUTES
+
     envs:
       # Not `live` until the categorization caches are in Supabase
       # (`.claude/plans/caches-to-supabase.md` § Go-live), which also adds `OPENAI_API_KEY`.

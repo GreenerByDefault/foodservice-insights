@@ -19,6 +19,35 @@ services:
     liveness_health_check:
       http_path: /health/live
 
+    # Starting thresholds, to tune after the first month of real traffic.
+    # *Considered, not done: a request-rate rule.* Nothing yet says what rate is wrong, and
+    # Cloudflare absorbs floods.
+    alerts:
+      # Requests are waiting on CPU. Rendering a page is mostly waiting on the database.
+      - rule: CPU_UTILIZATION
+        operator: GREATER_THAN
+        value: 80
+        window: TEN_MINUTES
+      # Leaking. Node caps its heap at 259 MiB on this size, and reaches it, and crashes, with the
+      # container near 57%, so 80% would only ever fire after the restart rule. Idle is ~10%, and
+      # a maximum-size upload's spike lasts under a second, which the window averages away.
+      - rule: MEM_UTILIZATION
+        operator: GREATER_THAN
+        value: 50
+        window: TEN_MINUTES
+      # Any restart: a crash, an out-of-memory kill, or a failed liveness probe.
+      - rule: RESTART_COUNT
+        operator: GREATER_THAN
+        value: 0
+        window: FIVE_MINUTES
+      # A page is a few database round trips, so seconds means the database or the bucket is
+      # slow. A slow upload trips it only when no report page is open, since each one polls every
+      # 10 seconds and those fast requests keep a single slow one above the 95th percentile.
+      - rule: REQUEST_DURATION_P95_MS
+        operator: GREATER_THAN
+        value: 5000
+        window: TEN_MINUTES
+
     envs:
       - key: DB_CONNECTION_STRING
         type: SECRET

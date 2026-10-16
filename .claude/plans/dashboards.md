@@ -132,7 +132,7 @@ Needs `metrics-pipeline.md` PR 5. Independent of PR 1.
 
 Needs PR 2's views.
 
-- `operations`, with its starting panels. If `alerts.md` PR 3 landed first, the dashboard
+- `operations`, with its starting panels. If `alerts.md` PR 2 landed first, the dashboard
   already exists, holding its database-connections panel.
 
 ## PR 4 — the impact dashboard

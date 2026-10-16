@@ -56,8 +56,13 @@ export const MAX_HEADER_SEARCH_LINES = 10;
  * column has been read, since `decideDateOrder` is a column-wide decision. So every row has to
  * be held, and at the peak the raw rows, their resolved forms, and the lines about to be encoded
  * all coexist. That costs roughly 400 bytes of heap per row regardless of how short the row is.
- * At this limit, 500,000 rows, that would be about 200MB for one request — and if 3–5 requests
- * hit that peak at once, it would add up to 600MB–1GB.
+ * At this limit, 500,000 rows, that is about 200MB, against the 259MB heap Node allows on the web's
+ * 512MB instance.
+ *
+ * Only one request is ever at that peak. `normalizeCsv` is synchronous, so no other request runs
+ * until it returns, and by then all it built is garbage except the normalized output. Concurrent
+ * uploads add only what each holds across an `await`, its bytes and that output, each bounded by
+ * `MAX_UPLOAD_FIELD_BYTES`.
  *
  * `MAX_UPLOAD_FIELD_BYTES` binds first in practice, which is why this number isn't lower — a file
  * runs out of upload bytes before it runs out of row headroom. But the two caps aren't far apart: a
