@@ -1,37 +1,7 @@
-/** Nine committed images.
- *
- * `as-admin.png` and `as-member.png` are one roster seen by each of the two viewer roles — both
- * roles among the people listed, and both name shapes a row renders: a display name with the
- * email beneath, and a display name-less row that shows only the email. The pair is what shows
- * the admin-only controls are admin-only: the "Invite someone" button and the per-row "⋯" menus
- * are in the first and gone from the second, and the "Your membership" section holds Step down +
- * Leave for the admin image but Leave alone for the member one. `as-admin.png` also carries the
- * admin-only pending invitations — one live and one expired.
- *
- * `menu.png` is a row's menu open — where that menu lands against the row it belongs to, which a
- * roster image can't show — now with Remove from organization below the role toggle.
- * `remove-confirm.png` continues one step further: the menu's "Remove from organization" item
- * opens `ConfirmAction`'s dialog, not its own trigger, so this is the one place that path — and
- * the member's name interpolated into the dialog's title — renders. The dialog's own chrome
- * (loading, error banner) is generic across every `ConfirmAction` call site and already covered by
- * `step-down-refused.png`, so this image isn't re-proving that. `step-down-refused.png` is the
- * "Your membership" section's refused Step down, the one action that acts on the viewer rather
- * than another row.
- *
- * `invite-refused.png`, `invite-rate-limited.png`, and `invite-email-failed.png` are the invite
- * dialog showing three of its non-happy outcomes — inline "already a member", the 429 alert, and
- * the "sent but not emailed" warning — and between them its whole form. The rate-limit and
- * email-failed cases are routed rather than actually hit (sending real mail 20 times, or breaking
- * the emailer, just to render one alert), the same way a network failure is faked elsewhere in
- * this suite rather than actually cut. `cancel-invite-failed.png` is the pending-invite row's own
- * error banner, the Cancel invite counterpart to `remove-confirm.png`'s dialog chrome — this list
- * has no dialog to reuse that from, since Cancel invite has none.
- *
- * Every person's email is fixed rather than the fixture's default random one: unlike a
+/** Every person's email is fixed rather than the fixture's default random one: unlike a
  * behavioural spec, which only asserts a row exists, these are diffed pixel-for-pixel against
  * what's committed, so the text on screen has to be identical on every run. Every image here owns
- * a separate address prefix, so none depends on identities another is creating alongside it. The
- * viewer's own row is on the roster too, so the viewer is the run's pinned identity.
+ * a separate address prefix, so none depends on identities another is creating alongside it.
  */
 
 import { ensureHydrated } from '@gbd/browser-testing';
@@ -43,6 +13,7 @@ import type { OrganizationAdminSpec, OrganizationMemberSpec } from '../fixtures/
 import { test } from '../fixtures/test.ts';
 import { expectScreenshots } from '../lib/screenshots.ts';
 
+// The viewer's own row is on the roster too, so it has to be the same person on every run.
 test.use({ identity: 'pinned' });
 
 /** The three people both roster images show around the viewer. Which of them is the
@@ -56,6 +27,7 @@ function roster(prefix: string): {
     admin: { displayName: 'Priya Shah', email: `${prefix}-admin@example.test` },
     members: [
       { displayName: 'Ana Ruiz', email: `${prefix}-ana@example.test`, role: 'member' },
+      // No display name, the other shape a row renders: the email alone.
       { email: `${prefix}-noname@example.test`, role: 'member' },
     ],
   };
@@ -159,6 +131,7 @@ test('a member row’s menu, open', async ({ page, organizations }) => {
   // left sitting on the trigger it just clicked.
   await page.getByRole('menuitem', { name: 'Make admin' }).hover();
 
+  // Where the menu lands against its row, which a roster image can't show.
   await expectScreenshots(page, 'menu.png');
 });
 
@@ -173,6 +146,9 @@ test('a member row’s Remove from organization, confirming', async ({ page, org
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
+  // A menu item, not a trigger of its own, opens this `ConfirmAction` — the one place that path
+  // renders. The dialog's loading and error chrome is the same everywhere, and
+  // `step-down-refused.png` already covers it.
   await page.getByRole('button', { name: 'Manage Ana Ruiz' }).click();
   await page.getByRole('menuitem', { name: 'Remove from organization' }).click();
 
@@ -228,6 +204,7 @@ test('inviting an existing member is refused inline', async ({ page, organizatio
 
   await expect(page.getByText('That person is already a member.')).toBeVisible();
 
+  // Between them, the three invite images show the dialog's whole form, so none shows it empty.
   await expectScreenshots(page, 'invite-refused.png');
 });
 
@@ -236,6 +213,7 @@ test('the invite dialog’s rate-limit alert', async ({ page, organizations }) =
     name: 'Members Invite Rate Limited Screenshot Foodservice',
   });
 
+  // Routed: actually hitting the limit would send 20 real emails.
   await page.route(`**${organizationInvitesApiHref(organizationSlug)}`, (route) =>
     route.fulfill({
       status: 429,
@@ -265,6 +243,7 @@ test('an invite that saved but couldn’t be emailed', async ({ page, organizati
     name: 'Members Invite Email Failed Screenshot Foodservice',
   });
 
+  // Routed rather than breaking the emailer.
   await page.route(`**${organizationInvitesApiHref(organizationSlug)}`, (route) =>
     route.fulfill({ status: 201, json: { inviteId: crypto.randomUUID(), emailSent: false } }),
   );
