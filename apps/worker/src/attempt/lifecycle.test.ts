@@ -278,14 +278,22 @@ function errorRecords(records: readonly { level: string; msg?: unknown }[]) {
 }
 
 describe('a successful attempt, end to end', () => {
-  test('uploads every declared file, records the telemetry, and suggests the new categorizations', async () => {
+  test('uploads every declared file, records the findings and telemetry, and suggests the new categorizations', async () => {
     const workerId = aWorkerId();
+    const findings = [
+      {
+        qualityCheck: 'missing_internal_months' as const,
+        status: 'warning' as const,
+        message: 'Found 1 missing internal month between Jan 2025 and Mar 2025: Feb 2025.',
+        sampleValues: ['Feb 2025'],
+      },
+    ];
     await withNewCategorizations(async (newCategorizations) => {
       await withAttemptFixture(workerId, async (fixture) => {
         const steps: FakeChildStep[] = [
           { step: 'progress', sequence: 1 },
           { step: 'telemetry' },
-          { step: 'result', newCategorizations },
+          { step: 'result', newCategorizations, findings },
           { step: 'exit', code: 0 },
         ];
 
@@ -315,6 +323,13 @@ describe('a successful attempt, end to end', () => {
           const body = await getObject(BLOB_STORE, row.storageKey);
           expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileName));
         }
+
+        expect(
+          await WORKER_DATABASE.selectFrom('analysisAttemptFinding')
+            .select(['qualityCheck', 'status', 'message', 'sampleValues'])
+            .where('analysisAttemptId', '=', fixture.attemptId)
+            .execute(),
+        ).toEqual(findings);
 
         expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
 

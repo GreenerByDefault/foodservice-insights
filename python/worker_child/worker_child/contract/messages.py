@@ -12,6 +12,7 @@ from gbd_foodservice_insights.analysis import (
     CachedCategorization,
     CategorizationSummary,
     InputSummary,
+    ListedFinding,
     MonthlyCounts,
     NewCategorization,
     ReportSummary,
@@ -24,6 +25,9 @@ from worker_child.contract.layout import CATEGORIZATION_CACHE, MANIFEST
 from worker_child.contract.names import (
     CHILD_FAILURE_REASONS,
     COUNTS_BASES,
+    CUSTOMER_FINDING_STATUSES,
+    MAX_FINDING_SAMPLE_VALUES,
+    MAX_FINDING_TEXT_BYTES,
     MAX_PRODUCT_BYTES,
     STAGES,
     UNIT_SYSTEMS,
@@ -125,10 +129,40 @@ def progress_payload(sequence: int) -> dict[str, Any]:
     return {"sequence": sequence}
 
 
-def result_payload(*, analysis_attempt_id: str) -> dict[str, Any]:
+def result_payload(
+    *, analysis_attempt_id: str, findings: Sequence[ListedFinding]
+) -> dict[str, Any]:
+    """Refuses any finding the parent would: `contract/fixtures/invalid/result.*` pin each rule."""
     _require(UUID_PATTERN.fullmatch(analysis_attempt_id), "analysisAttemptId is not a uuid")
 
-    return {"analysisAttemptId": analysis_attempt_id}
+    return {
+        "analysisAttemptId": analysis_attempt_id,
+        "findings": [_finding_payload(finding) for finding in findings],
+    }
+
+
+def _finding_payload(finding: ListedFinding) -> dict[str, Any]:
+    _require(
+        finding.status in CUSTOMER_FINDING_STATUSES,
+        f"{finding.quality_check}: the customer is not shown a {finding.status!r} finding",
+    )
+    _require(finding.message, f"{finding.quality_check}: the message is empty")
+    _require(
+        len(finding.sample_values) <= MAX_FINDING_SAMPLE_VALUES,
+        f"{finding.quality_check}: {len(finding.sample_values)} samples, over "
+        f"{MAX_FINDING_SAMPLE_VALUES}",
+    )
+    for text in (finding.message, *finding.sample_values):
+        _require(
+            len(text.encode("utf-8")) <= MAX_FINDING_TEXT_BYTES,
+            f"{finding.quality_check}: {text[:40]!r}... is over {MAX_FINDING_TEXT_BYTES} bytes",
+        )
+    return {
+        "qualityCheck": finding.quality_check,
+        "status": finding.status,
+        "message": finding.message,
+        "sampleValues": list(finding.sample_values),
+    }
 
 
 def failure_payload(

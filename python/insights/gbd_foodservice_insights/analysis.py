@@ -63,6 +63,8 @@ from gbd_foodservice_insights.report.food_report import (
     summarize_report,
 )
 from gbd_foodservice_insights.report.pdf import write_report_pdf
+from gbd_foodservice_insights.report.quality import ListedFinding as ListedFinding
+from gbd_foodservice_insights.report.quality import listed_findings
 from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
 
 CountsBasis = Literal["people", "meals"]
@@ -119,6 +121,8 @@ class AnalysisOutcome:
     xlsx: Path
     # The products the LLM categorized, for the worker to suggest to the cache.
     new_categorizations: tuple[NewCategorization, ...] = ()
+    # The findings the PDF lists, for the report page to show too.
+    findings: tuple[ListedFinding, ...] = ()
 
 
 LB_TO_KG: Final = 0.45359237
@@ -190,7 +194,10 @@ def analyze(
         write_client_workbook(report, xlsx_path)
 
     return AnalysisOutcome(
-        pdf=pdf_path, xlsx=xlsx_path, new_categorizations=categorized.new_categorizations
+        pdf=pdf_path,
+        xlsx=xlsx_path,
+        new_categorizations=categorized.new_categorizations,
+        findings=listed_findings(report.findings, show_successes=False),
     )
 
 

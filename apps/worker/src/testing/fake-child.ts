@@ -25,17 +25,23 @@ import {
   resultFilePath,
   runPath,
 } from '../contract/layout.ts';
-import { type NewCategorizations, parseTelemetry, type Telemetry } from '../contract/messages.ts';
+import {
+  type ChildResult,
+  type NewCategorizations,
+  parseTelemetry,
+  type Telemetry,
+} from '../contract/messages.ts';
 
 export type FakeChildStep =
   | { step: 'progress'; sequence: number }
-  /** Write `new-categorizations.json` (no rows unless given some), then `result.json` and the
-   * files it declares. `withoutFiles` names ones to leave out. */
+  /** Write `new-categorizations.json` (no rows unless given some), then `result.json` (no findings
+   * unless given some) and the files it declares. `withoutFiles` names ones to leave out. */
   | {
       step: 'result';
       withoutFiles?: readonly string[];
       newCategorizations?: NewCategorizations['rows'];
       withoutNewCategorizations?: boolean;
+      findings?: ChildResult['findings'];
     }
   | { step: 'failure'; reason: string; detail: string; traceback?: string | null }
   /** Write `telemetry.json`, `FAKE_TELEMETRY` unless given another. */
@@ -234,7 +240,10 @@ async function writeResult(
     await writeAtomically(resultFilePath(runDirectory, fileName), fakeResultFileContents(fileName));
   }
 
-  await writeAtomically(runPath(runDirectory, 'result'), JSON.stringify({ analysisAttemptId }));
+  await writeAtomically(
+    runPath(runDirectory, 'result'),
+    JSON.stringify({ analysisAttemptId, findings: step.findings ?? [] }),
+  );
 }
 
 /** Stands in for the subprocesses the analysis library spawns, so a test can check the parent's kill

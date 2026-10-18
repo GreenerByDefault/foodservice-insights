@@ -38,6 +38,16 @@ STAGES: Final[tuple[Stage, ...]] = get_args(Stage)
 QUALITY_CHECKS: Final[tuple[QualityCheck, ...]] = get_args(QualityCheck)
 DIAGNOSTIC_STATUSES: Final[tuple[DiagnosticStatus, ...]] = get_args(DiagnosticStatus)
 
+# The statuses the customer's PDF lists, `analysis_attempt_finding_status_is_warning_or_error`.
+CustomerFindingStatus = Literal["warning", "error"]
+CUSTOMER_FINDING_STATUSES: Final[tuple[CustomerFindingStatus, ...]] = get_args(
+    CustomerFindingStatus
+)
+# `analysis_attempt_finding_sample_values_at_most_5`.
+MAX_FINDING_SAMPLE_VALUES: Final = 5
+# `MAX_FINDING_TEXT_BYTES` in `apps/worker`, where the reasoning behind it lives.
+MAX_FINDING_TEXT_BYTES: Final = 4 * MAX_PRODUCT_BYTES
+
 # A strict subset of `analysis_failure_reason`; the rest are verdicts only the parent can reach.
 ChildFailureReason = Literal["contract_violation", "unknown", "upstream_api", "unusable_data"]
 

@@ -4,6 +4,7 @@ and every failure reason `run()` maps get covered case by case."""
 
 import json
 import shutil
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     InputSummary,
     InvalidInputError,
+    ListedFinding,
     MonthlyCounts,
     NewCategorization,
     StageFinished,
@@ -35,8 +37,50 @@ def test_writes_a_result_and_exits_zero_on_a_successful_analysis(run_directory: 
     assert exit_code == names.EXIT_WROTE_RESULT
     assert read_json(run_directory / layout.RESULT) == {
         "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
+        "findings": [],
     }
     assert not (run_directory / layout.FAILURE).exists()
+
+
+MISSING_MONTH = ListedFinding(
+    quality_check="missing_internal_months",
+    status="warning",
+    message="Found 1 missing internal month between Jan 2025 and Mar 2025: Feb 2025.",
+    sample_values=("Feb 2025",),
+)
+
+
+def test_writes_the_analysis_findings_into_the_result(run_directory: Path) -> None:
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        return stub_analysis(request, findings=(MISSING_MONTH,))
+
+    run(run_directory, analyze=analyze)
+
+    assert read_json(run_directory / layout.RESULT) == {
+        "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
+        "findings": [
+            {
+                "qualityCheck": "missing_internal_months",
+                "status": "warning",
+                "message": MISSING_MONTH.message,
+                "sampleValues": ["Feb 2025"],
+            }
+        ],
+    }
+
+
+def test_a_finding_the_parent_would_refuse_is_a_contract_violation_that_leaves_no_result(
+    run_directory: Path,
+) -> None:
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        return stub_analysis(request, findings=(replace(MISSING_MONTH, message=""),))
+
+    exit_code = run(run_directory, analyze=analyze)
+
+    assert exit_code == names.EXIT_WROTE_FAILURE
+    assert read_json(run_directory / layout.FAILURE)["reason"] == "contract_violation"
+    assert not (run_directory / layout.NEW_CATEGORIZATIONS).exists()
+    assert not (run_directory / layout.RESULT).exists()
 
 
 def test_writes_no_new_categorizations_for_an_analysis_that_has_none(run_directory: Path) -> None:

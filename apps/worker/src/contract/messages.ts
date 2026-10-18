@@ -14,8 +14,11 @@ import * as v from 'valibot';
 import {
   CHILD_FAILURE_REASONS,
   COUNTS_BASES,
+  CUSTOMER_FINDING_STATUSES,
   DIAGNOSTIC_STATUSES,
   LLM_OPERATIONS,
+  MAX_FINDING_SAMPLE_VALUES,
+  MAX_FINDING_TEXT_BYTES,
   QUALITY_CHECKS,
   STAGES,
   UNIT_SYSTEMS,
@@ -30,6 +33,7 @@ export class ContractError extends Error {
 
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const UTF8 = new TextEncoder();
 
 const nonEmptyString = v.pipe(v.string(), v.nonEmpty());
 const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(1));
@@ -58,8 +62,25 @@ const ProgressSchema = v.strictObject({
   sequence: v.pipe(v.number(), v.integer(), v.minValue(1)),
 });
 
+const findingText = v.pipe(
+  v.string(),
+  v.check(
+    (text) => UTF8.encode(text).length <= MAX_FINDING_TEXT_BYTES,
+    `needs at most ${MAX_FINDING_TEXT_BYTES} bytes of UTF-8`,
+  ),
+);
+
+// In the order the PDF lists them, which is the order they are stored and shown in.
 const ChildResultSchema = v.strictObject({
   analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),
+  findings: v.array(
+    v.strictObject({
+      qualityCheck: v.picklist(QUALITY_CHECKS),
+      status: v.picklist(CUSTOMER_FINDING_STATUSES),
+      message: v.pipe(findingText, v.nonEmpty()),
+      sampleValues: v.pipe(v.array(findingText), v.maxLength(MAX_FINDING_SAMPLE_VALUES)),
+    }),
+  ),
 });
 
 const ChildFailureSchema = v.strictObject({
@@ -216,7 +237,6 @@ const CategorizationCacheSchema = v.strictObject({
 // failing row would fail its whole chunk. `\s` is close enough to Postgres's `[[:space:]]` and
 // Python's `str.strip` for what the child writes, which it strips itself.
 const UNSTRIPPED_PATTERN = /^\s|\s$/;
-const UTF8 = new TextEncoder();
 
 const stripped = v.pipe(
   nonEmptyString,

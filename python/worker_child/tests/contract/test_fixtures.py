@@ -8,6 +8,7 @@ from gbd_foodservice_insights.analysis import (
     CategorizationSummary,
     FindingCount,
     InputSummary,
+    ListedFinding,
     MonthlyCounts,
     NewCategorization,
     ReportSummary,
@@ -35,7 +36,11 @@ from worker_child.contract.messages import (
     result_payload,
     telemetry_payload,
 )
-from worker_child.contract.names import MAX_PRODUCT_BYTES
+from worker_child.contract.names import (
+    MAX_FINDING_SAMPLE_VALUES,
+    MAX_FINDING_TEXT_BYTES,
+    MAX_PRODUCT_BYTES,
+)
 
 DOCUMENTS = frozenset(
     {
@@ -170,10 +175,82 @@ def test_progress_payload_is_the_fixture() -> None:
     assert progress_payload(7) == load("valid", "progress.json")
 
 
+WEIGHT_BOUNDS = ListedFinding(
+    quality_check="per_product_weight_bounds",
+    status="warning",
+    message=(
+        "Found 2 lines with a weight above zero but under 0.01 kg, or over 2,000 kg, which usually "
+        'means a unit mistake. For example, Oat Milk "Barista" 32oz at 4,500 kg, above the upper '
+        "bound of 2,000 kg."
+    ),
+    sample_values=(
+        'Oat Milk "Barista" 32oz at 4,500 kg, above the upper bound of 2,000 kg.',
+        "Chicken Breast, Boneless 4oz at 0.002 kg, below the lower bound of 0.01 kg.",
+    ),
+)
+MISSING_MONTH = ListedFinding(
+    quality_check="missing_internal_months",
+    status="error",
+    message=(
+        "Found 1 missing internal month between Jan 2025 and Mar 2025: Feb 2025. In a three-month "
+        "report window, that means one-third of the expected period is missing."
+    ),
+    sample_values=(),
+)
+
+
 def test_result_payload_is_the_fixture() -> None:
-    payload = result_payload(analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID)
+    payload = result_payload(
+        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID, findings=[WEIGHT_BOUNDS, MISSING_MONTH]
+    )
 
     assert payload == load("valid", "result.json")
+
+
+def test_result_payload_accepts_a_finding_at_every_bound() -> None:
+    at_the_bound = "é" * (MAX_FINDING_TEXT_BYTES // 2)
+    finding = replace(
+        WEIGHT_BOUNDS,
+        message=at_the_bound,
+        sample_values=(at_the_bound,) * MAX_FINDING_SAMPLE_VALUES,
+    )
+
+    payload = result_payload(analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID, findings=[finding])
+
+    assert payload["findings"] == [
+        {
+            "qualityCheck": "per_product_weight_bounds",
+            "status": "warning",
+            "message": at_the_bound,
+            "sampleValues": [at_the_bound] * MAX_FINDING_SAMPLE_VALUES,
+        }
+    ]
+
+
+# Each mirrors a fixture under `invalid/result.*`, bar the shape violations the type checker catches
+# on this side.
+@pytest.mark.parametrize(
+    "finding",
+    [
+        pytest.param(replace(WEIGHT_BOUNDS, status="success"), id="status-is-success"),
+        pytest.param(replace(WEIGHT_BOUNDS, message=""), id="empty-message"),
+        pytest.param(
+            replace(WEIGHT_BOUNDS, sample_values=("Sample",) * (MAX_FINDING_SAMPLE_VALUES + 1)),
+            id="six-sample-values",
+        ),
+        pytest.param(
+            replace(WEIGHT_BOUNDS, message="é" * (MAX_FINDING_TEXT_BYTES // 2 + 1)),
+            id="message-over-max-bytes",
+        ),
+        pytest.param(
+            replace(WEIGHT_BOUNDS, sample_values=("é" * (MAX_FINDING_TEXT_BYTES // 2 + 1),)),
+            id="sample-value-over-max-bytes",
+        ),
+    ],
+)
+def test_result_payload_refuses_what_the_parent_would(finding: ListedFinding) -> None:
+    with pytest.raises(ContractError):
+        result_payload(analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID, findings=[finding])
 
 
 def test_failure_payload_is_the_fixture() -> None:

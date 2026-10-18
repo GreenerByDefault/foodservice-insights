@@ -237,12 +237,13 @@ export type ResultFileRecord = StoredFile & {
   kind: ResultFileKind;
 };
 
-/** Record a successful attempt and the files it produced. Returns whether we still owned it.
+/** Record a successful attempt, the files it produced and the findings its PDF lists. Returns
+ * whether we still owned it.
  *
  * The guarded update doubles as the retry idempotency key: if the COMMIT lands but its ack is
  * lost to a transient error and `retryOnTransientDbError` calls this again, the retry's UPDATE
  * matches zero rows — the first call already moved `status` off `processing` — and returns
- * `false` before it can insert `result_file` a second time. Under that retry, `false` can
+ * `false` before it can insert its rows a second time. Under that retry, `false` can
  * therefore mean either "another writer reached a verdict first" or "our own first attempt
  * already committed"; the data is correct either way, and a `status, worker_id` read-back would
  * disambiguate the two if a consumer (the deferred email) ever needs to.
@@ -254,8 +255,8 @@ export async function markAttemptSucceeded(
   outcome: { result: ChildResult; resultFiles: readonly ResultFileRecord[] },
 ): Promise<boolean> {
   return await withTransaction(db, async (transaction) => {
-    // The guarded update goes first so that losing the race writes nothing at all: `result_file`
-    // rows for an attempt whose verdict is someone else's would be results nothing points at.
+    // The guarded update goes first so that losing the race writes nothing at all: rows for an
+    // attempt whose verdict is someone else's would be results nothing points at.
     const won = await markIfStillOwned(transaction, attemptId, workerId, {
       status: 'succeeded',
     });
@@ -268,6 +269,18 @@ export async function markAttemptSucceeded(
           outcome.resultFiles.map((file) => ({
             ...file,
             analysisAttemptId: attemptId,
+          })),
+        )
+        .execute();
+    }
+    if (outcome.result.findings.length > 0) {
+      await transaction
+        .insertInto('analysisAttemptFinding')
+        .values(
+          outcome.result.findings.map((finding, position) => ({
+            ...finding,
+            analysisAttemptId: attemptId,
+            position,
           })),
         )
         .execute();

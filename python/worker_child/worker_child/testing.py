@@ -28,6 +28,7 @@ from gbd_foodservice_insights.analysis import (
     FindingCount,
     InputSummary,
     InvalidInputError,
+    ListedFinding,
     LlmCall,
     ReportProgress,
     ReportSummary,
@@ -107,6 +108,20 @@ STUB_TELEMETRY: Final[tuple[Telemetry, ...]] = (
     StageFinished("xlsx", duration_ms=95),
 )
 
+# The warning `STUB_TELEMETRY` counts, worded as the real check words it, so a stubbed report has
+# one for the report page to show.
+STUB_FINDINGS: Final = (
+    ListedFinding(
+        quality_check="missing_internal_months",
+        status="warning",
+        message=(
+            "Found 1 missing internal month between Jan 2026 and Mar 2026: Feb 2026. In a "
+            "three-month report window, that means one-third of the expected period is missing."
+        ),
+        sample_values=("Feb 2026",),
+    ),
+)
+
 USAGE: Final = f"usage: python -m worker_child.testing <{'> <'.join(names.POSITIONAL_ARGUMENTS)}>"
 
 
@@ -155,7 +170,7 @@ def build_analyze(*, sleep: Callable[[float], None] = time.sleep) -> Analyze:
             report_telemetry(_without_per_head(record) if request.counts is None else record)
 
         if scenario.name is None:
-            return stub_analysis(request, report_progress=report_progress)
+            return stub_analysis(request, report_progress=report_progress, findings=STUB_FINDINGS)
         if scenario.name == "slow":
             return _run_slow(request, scenario.argument, report_progress, sleep)
         if scenario.name == "hang":
@@ -195,7 +210,7 @@ def _run_slow(
     for _ in range(ticks):
         report_progress()
         sleep(SLOW_TICK_SECONDS)
-    return stub_analysis(request, progress_calls=0)
+    return stub_analysis(request, progress_calls=0, findings=STUB_FINDINGS)
 
 
 def _parse_slow_duration(argument: str | None) -> int:

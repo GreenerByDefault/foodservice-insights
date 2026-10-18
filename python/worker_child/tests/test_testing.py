@@ -1,5 +1,6 @@
 import math
 import threading
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from worker_child.testing import (
     KNOWN_SCENARIOS,
     SLOW_DEFAULT_SECONDS,
     SLOW_TICK_SECONDS,
+    STUB_FINDINGS,
     STUB_TELEMETRY,
     Scenario,
     build_analyze,
@@ -91,6 +93,20 @@ def test_the_happy_path_reports_progress_twice_and_writes_both_files(tmp_path: P
     assert calls == 2
     assert outcome.pdf.exists()
     assert outcome.xlsx.exists()
+    assert outcome.findings == STUB_FINDINGS
+
+
+def test_the_stub_findings_are_the_warnings_and_errors_its_telemetry_counts() -> None:
+    summary = next(record for record in STUB_TELEMETRY if isinstance(record, ReportSummary))
+    counted = Counter(
+        {
+            (count.quality_check, count.status): count.findings
+            for count in summary.finding_counts
+            if count.status in {"warning", "error"}
+        }
+    )
+
+    assert Counter((f.quality_check, f.status) for f in STUB_FINDINGS) == counted
 
 
 # ----------------------------------------------------------------------------------------------

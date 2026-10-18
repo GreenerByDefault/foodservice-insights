@@ -108,7 +108,33 @@ function renewedSince(attempt: { leaseRenewedAt: Date | null }): number {
 
 const A_RESULT: ChildResult = {
   analysisAttemptId: crypto.randomUUID(),
+  findings: [],
 };
+
+// Out of alphabetical order by every column but `position`, so only `position` can give it back.
+const FINDINGS: ChildResult['findings'] = [
+  {
+    qualityCheck: 'per_product_weight_bounds',
+    status: 'warning',
+    message: 'Found 2 lines with a weight under 0.01 kg, or over 2,000 kg.',
+    sampleValues: ['Oat Milk at 4,500 kg.', 'Beef at 0.002 kg.'],
+  },
+  {
+    qualityCheck: 'missing_internal_months',
+    status: 'error',
+    message: 'Found 1 missing internal month between Jan 2025 and Mar 2025: Feb 2025.',
+    sampleValues: [],
+  },
+];
+
+async function readFindings(transaction: Transaction<Database>, attemptId: AnalysisAttemptId) {
+  return await transaction
+    .selectFrom('analysisAttemptFinding')
+    .select(['position', 'qualityCheck', 'status', 'message', 'sampleValues'])
+    .where('analysisAttemptId', '=', attemptId)
+    .orderBy('position')
+    .execute();
+}
 
 describe('claiming', () => {
   test('takes the oldest pending attempt', async () => {
@@ -512,6 +538,21 @@ describe('finishing', () => {
     );
   });
 
+  test('records the findings of a success in the order the PDF lists them', async () => {
+    const findings = await withRollback(WORKER_DATABASE, async (transaction) => {
+      const workerId = aWorkerId();
+      const attemptId = await claimedAttempt(transaction, workerId);
+
+      await markAttemptSucceeded(transaction, attemptId, workerId, {
+        result: { ...A_RESULT, findings: FINDINGS },
+        resultFiles: [],
+      });
+      return await readFindings(transaction, attemptId);
+    });
+
+    expect(findings).toEqual(FINDINGS.map((finding, position) => ({ position, ...finding })));
+  });
+
   test('records a failure with its reason and detail', async () => {
     const attempt = await withRollback(WORKER_DATABASE, async (transaction) => {
       const workerId = aWorkerId();
@@ -585,6 +626,7 @@ describe('finishing', () => {
       status: string;
       failureReason: string | null;
       resultFiles: unknown[];
+      findings: unknown[];
     }> {
       return await withRollback(WORKER_DATABASE, async (transaction) => {
         const workerId = aWorkerId();
@@ -598,19 +640,25 @@ describe('finishing', () => {
           .selectAll()
           .where('analysisAttemptId', '=', attemptId)
           .execute();
-        return { won, status: row.status, failureReason: row.failureReason, resultFiles };
+        return {
+          won,
+          status: row.status,
+          failureReason: row.failureReason,
+          resultFiles,
+          findings: await readFindings(transaction, attemptId),
+        };
       });
     }
 
     // Losing has to be a zero-row update rather than an exception, so that the ordinary end of an
     // attempt the reaper already ended is not itself an error the worker has to handle. A lost
-    // success must also leave no result files behind, since those are only meaningful alongside
-    // the verdict that produced them.
-    test('a success returns false, leaves the other verdict standing, and records no result files', async () => {
+    // success must also leave no result files or findings behind, since those are only meaningful
+    // alongside the verdict that produced them.
+    test('a success returns false, leaves the other verdict standing, and records no result files or findings', async () => {
       const outcome = await afterBeingReaped(
         async (transaction, attemptId, workerId) =>
           await markAttemptSucceeded(transaction, attemptId, workerId, {
-            result: A_RESULT,
+            result: { ...A_RESULT, findings: FINDINGS },
             resultFiles: [aResultFile()],
           }),
       );
@@ -620,6 +668,7 @@ describe('finishing', () => {
         status: 'failed',
         failureReason: 'abandoned',
         resultFiles: [],
+        findings: [],
       });
     });
 
@@ -637,6 +686,7 @@ describe('finishing', () => {
         status: 'failed',
         failureReason: 'abandoned',
         resultFiles: [],
+        findings: [],
       });
     });
 
@@ -648,6 +698,7 @@ describe('finishing', () => {
         status: 'failed',
         failureReason: 'abandoned',
         resultFiles: [],
+        findings: [],
       });
     });
   });
