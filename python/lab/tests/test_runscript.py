@@ -37,19 +37,28 @@ def _summary(output_file: str) -> dict:
     }
 
 
-def test_categorize_runscript_passes_its_arguments_straight_through(monkeypatch, tmp_path):
+def test_categorize_runscript_pulls_then_passes_its_arguments_straight_through(
+    monkeypatch, tmp_path
+):
     module = _load_categorize_runscript_module()
     input_path = tmp_path / "input.csv"
     gemini_client = object()
 
     called = {}
+    steps = []
+
+    def _fake_setup_api_clients(**_):
+        steps.append("setup_api_clients")
+        return {"gemini_client": gemini_client}
 
     def _fake_categorize(**kwargs):
+        steps.append("categorize")
         called.update(kwargs)
         return pd.DataFrame(), _summary(str(input_path))
 
+    monkeypatch.setattr(module, "pull_caches_if_configured", lambda: steps.append("pull"))
     monkeypatch.setattr(module, "categorize_spreadsheet_to_csvs", _fake_categorize)
-    monkeypatch.setattr(module, "setup_api_clients", lambda **_: {"gemini_client": gemini_client})
+    monkeypatch.setattr(module, "setup_api_clients", _fake_setup_api_clients)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(module, "load_dotenv", lambda **_: None)
     monkeypatch.setattr(module, "update_metadata_with_categorization_stats", lambda _: None)
@@ -69,6 +78,7 @@ def test_categorize_runscript_passes_its_arguments_straight_through(monkeypatch,
 
     module.main()
 
+    assert steps == ["pull", "setup_api_clients", "categorize"]
     llm = called.pop("llm")
     assert isinstance(llm, module.OpenAiLlmClient)
     assert called == {

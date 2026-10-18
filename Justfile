@@ -34,3 +34,7 @@ test:
 # Test the lab, which ships nothing.
 test-lab:
     uv run pytest -n auto python/lab
+
+# Overwrite the lab's cache files with the verified rows from CACHE_DB_CONNECTION_STRING.
+pull-caches:
+    uv run python -m gbd_foodservice_insights_lab.cache_sync

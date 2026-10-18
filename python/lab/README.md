@@ -38,11 +38,16 @@ editing lab code, restart the kernel, or run `%load_ext autoreload` and `%autore
 The lab reads three keys from `.env`: `OPENAI_API_KEY`, `GEMINI_API_KEY`, and
 `LLM_WHISPERER_API_KEY` (PDF extraction only). See [`.env.example`](../../.env.example).
 
-The categorization, entree and weight caches are handed out privately; ask GBD for them. Each
-`data_files/README.md` names the ones that belong in that package —
-[product](../insights/gbd_foodservice_insights/data_files/README.md),
-[lab](gbd_foodservice_insights_lab/data_files/README.md). Without them everything still runs,
-with every item going to the LLM.
+The categorization, entree and weight caches live in the database. Ask GBD for the
+`cache_client` connection string, and put it in `.env` as `CACHE_DB_CONNECTION_STRING`, in the
+form [`.env.example`](../../.env.example) shows, with an absolute path to the CA. Step 1 then pulls
+the verified rows into the
+[lab's cache files](gbd_foodservice_insights_lab/data_files/README.md) before it calls any LLM,
+and stops if it cannot; `just pull-caches` pulls on demand. **A pull overwrites the three files,
+hand edits included.**
+
+Until you hold the string, the files are handed out privately, and each step 1 warns how old they
+are. Without them everything still runs, with every item going to the LLM.
 
 ## Conventions
 

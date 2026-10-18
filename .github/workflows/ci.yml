@@ -262,10 +262,17 @@ jobs:
     if: needs.changes.outputs.python_lab == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      TEST_DB: '1'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-python
       - run: just lint
+      # The cache pull's tests run against the migrated test stack. After lint, so that it still
+      # fails fast.
+      - uses: ./.github/actions/setup-node
+      - uses: ./.github/actions/setup-supabase
+      - run: pnpm migrate
       - run: just test-lab
 
   # Runs both services as the Docker images they deploy as.

@@ -6,10 +6,15 @@ This file contains fixtures that are available to all tests in the test suite.
 
 import os
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import psycopg
 import pytest
+from dotenv import dotenv_values
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # Keep matplotlib out of the user home directory during tests so imports do not
 # spend time trying to build caches in an unwritable location.
@@ -54,3 +59,25 @@ def mock_whisper_client():
     """Mock Whisper client for PDF extraction testing."""
     mock_client = MagicMock()
     return mock_client
+
+
+# ----------------------------------------------------------------------
+# The test database
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def test_database() -> Iterator[psycopg.Connection]:
+    """`postgres` on the migrated test stack, inside a transaction that always rolls back: the
+    counterpart of `withRollback` (root README.md § Tests and the database)."""
+    if not os.environ.get("TEST_DB"):
+        pytest.skip("Needs the running, migrated test stack and TEST_DB=1; see python/README.md.")
+    # From `.env.test` alone, never the environment: there, `CACHE_DB_CONNECTION_STRING` may point
+    # at production, where nothing a test inserted could be deleted.
+    conninfo = dotenv_values(REPO_ROOT / ".env.test")["DB_CONNECTION_STRING"]
+    assert conninfo, ".env.test has no DB_CONNECTION_STRING"
+    with (
+        psycopg.connect(conninfo, autocommit=True) as connection,
+        connection.transaction(force_rollback=True),
+    ):
+        yield connection

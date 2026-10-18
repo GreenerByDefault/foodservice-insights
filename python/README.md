@@ -50,6 +50,10 @@ single failure.
 
 Mark a test `@pytest.mark.slow` or `@pytest.mark.llm` if it's expensive or calls a real LLM.
 
+The lab's database tests skip unless `TEST_DB=1` is set, and then need the test stack running and
+migrated ([root README § The two databases](../README.md#the-two-databases)):
+`TEST_DB=1 just test-lab`.
+
 ## Occasional tasks
 
 ### Add a dependency

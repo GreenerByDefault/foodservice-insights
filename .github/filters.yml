@@ -31,10 +31,10 @@ docs_and_agent_files: &docs_and_agent_files
   - '!*.md'
   - '!**/README.md'
 
-# Paths that exist only for the TS workspace; Python has no use for them.
+# Paths that exist only for the TS workspace; Python has no use for them. `packages/` is
+# excluded per filter instead, since the lab's tests run against the migrations.
 ts_workspace: &ts_workspace
   - '!apps/**'
-  - '!packages/**'
   - '!tests/e2e/**'
   - '!supabase-dev/**'
   - '!supabase-test/**'
@@ -67,15 +67,26 @@ ts:
 python:
   - '**'
   - '!python/lab/**'
+  - '!packages/**'
   - *ts_workspace
   - *docker_files
   - *non_code
 
 # gbd_foodservice_insights_lab depends on gbd_foodservice_insights, so a core change reaches it;
 # nothing depends on the lab, so it reaches nothing else. Same as `python` minus the lab
-# exclusion.
+# exclusion, and minus `packages/db/migrations/`: the lab's cache pull runs against the migrated
+# test stack. Git's globs have no extglob, so every other path in `packages/` is listed instead,
+# and a new package runs this job until someone excludes it.
 python_lab:
   - '**'
+  - '!packages/browser-testing/**'
+  - '!packages/core/**'
+  - '!packages/email/**'
+  - '!packages/storage/**'
+  - '!packages/db/*'
+  - '!packages/db/scripts/**'
+  - '!packages/db/src/**'
+  - '!packages/db/tests/**'
   - *ts_workspace
   - *docker_files
   - *non_code
