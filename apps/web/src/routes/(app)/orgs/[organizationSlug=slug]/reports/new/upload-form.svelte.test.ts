@@ -422,6 +422,69 @@ describe('UploadForm', () => {
     });
   });
 
+  describe('no counts', () => {
+    const NOTE =
+      "Your report will show totals only. Totals grow with the number of people a site serves, so they can't be compared directly with other sites.";
+
+    async function chooseCountBasis(screen: Awaited<ReturnType<typeof render>>, name: string) {
+      await screen
+        .getByRole('radiogroup', { name: 'Count by' })
+        .getByRole('radio', { name })
+        .click();
+    }
+
+    test('replaces the months with a note that describes the choice', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+
+      await chooseCountBasis(screen, 'No counts');
+
+      await expect
+        .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
+        .not.toBeInTheDocument();
+      await expect
+        .element(screen.getByRole('radiogroup', { name: 'Count by' }))
+        .toHaveAccessibleDescription(NOTE);
+    });
+
+    test('switching back to a basis restores the counts already typed', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+      await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
+
+      await chooseCountBasis(screen, 'No counts');
+      await chooseCountBasis(screen, 'Diners');
+
+      await expect
+        .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
+        .toHaveValue(100);
+      await expect
+        .element(screen.getByRole('radiogroup', { name: 'Count by' }))
+        .not.toHaveAccessibleDescription(NOTE);
+    });
+
+    test('submits the none basis and no monthly counts, even with a month left blank', async () => {
+      const fetchMock = stubFetch(
+        new Response(JSON.stringify({ reportId: 'report-1' }), {
+          status: 201,
+          headers: { location: '/orgs/org-1/reports/report-1' },
+        }),
+      );
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Report name').fill('Q1 procurement');
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+      await screen.getByRole('radio', { name: 'Pounds (lb)' }).click();
+
+      await chooseCountBasis(screen, 'No counts');
+      await screen.getByRole('button', { name: 'Upload report' }).click();
+
+      await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+      const body = lastFetchCall(fetchMock)[1].body as FormData;
+      expect(body.get('counts-basis')).toBe('none');
+      expect(body.has('monthly-counts')).toBe(false);
+    });
+  });
+
   describe('back from the rejection view', () => {
     test('a file rejected before upload returns focus to the file input', async () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });

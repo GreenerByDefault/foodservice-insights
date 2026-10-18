@@ -31,6 +31,7 @@ async function uploadReport(
   organizationSlug: string,
   reportName: string,
   csv: string,
+  { withCounts = true }: { withCounts?: boolean } = {},
 ): Promise<void> {
   await page.goto(`/orgs/${organizationSlug}/reports/new`);
   await ensureHydrated(page);
@@ -41,7 +42,8 @@ async function uploadReport(
     mimeType: 'text/csv',
     buffer: Buffer.from(csv),
   });
-  await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
+  if (withCounts) await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
+  else await page.getByRole('radio', { name: 'No counts' }).click();
   await page.getByRole('radio', { name: 'Pounds (lb)' }).click();
   await page.getByRole('button', { name: 'Upload report' }).click();
 
@@ -141,7 +143,11 @@ test('a failure the child declares reaches the report page with its own copy', a
   page,
   org,
 }) => {
-  await uploadReport(page, org.slug, 'Unrecognized procurement', UNRECOGNIZED_CSV);
+  // Without counts, so the real child is also handed a manifest with `counts: null`. The happy path
+  // above keeps the counted path covered.
+  await uploadReport(page, org.slug, 'Unrecognized procurement', UNRECOGNIZED_CSV, {
+    withCounts: false,
+  });
 
   // Written by the real child as a `failure.json` and parsed by the real parent, rather than a
   // status this test wrote into the database itself.

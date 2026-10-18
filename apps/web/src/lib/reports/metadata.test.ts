@@ -22,15 +22,11 @@ describe('ReportMetadataSchema', () => {
   test('accepts a well-formed submission', () => {
     const result = parse();
 
-    expect(result).toMatchObject({
-      success: true,
-      output: {
-        name: 'Q1 procurement',
-        siteName: 'Main dining hall',
-        countsBasis: 'people',
-        unitSystem: 'lb',
-        monthlyCounts: { '2026-01': 120 },
-      },
+    expect(result.output).toEqual({
+      name: 'Q1 procurement',
+      siteName: 'Main dining hall',
+      unitSystem: 'lb',
+      counts: { basis: 'people', monthly: { '2026-01': 120 } },
     });
   });
 
@@ -77,8 +73,30 @@ describe('ReportMetadataSchema', () => {
   });
 
   describe('counts basis', () => {
+    test('carries meals through as the basis', () => {
+      const result = parse({ countsBasis: 'meals' });
+
+      expect(result.output).toMatchObject({
+        counts: { basis: 'meals', monthly: { '2026-01': 120 } },
+      });
+    });
+
     test.for([null, 'guesses'])('rejects %o', (countsBasis) => {
       expect(parse({ countsBasis }).success).toBe(false);
+    });
+  });
+
+  describe('no counts', () => {
+    test('is accepted without monthly counts, as null counts', () => {
+      const result = parse({ countsBasis: 'none', monthlyCounts: null });
+
+      expect(result).toMatchObject({ success: true, output: { counts: null } });
+    });
+
+    test('is rejected with monthly counts, naming that field', () => {
+      const result = parse({ countsBasis: 'none' });
+
+      expect(result.issues?.map((issue) => v.getDotPath(issue))).toEqual(['monthlyCounts']);
     });
   });
 

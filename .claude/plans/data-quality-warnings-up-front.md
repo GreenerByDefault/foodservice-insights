@@ -136,12 +136,11 @@ severity split, not in hiding the notice.
 
 The sample is still small, so this informs the decision but does not block it.
 
-### Overlap with in-flight plans
+### Reports without counts
 
-- **`optional-diner-and-meal-counts`:**
-  - Its PR 1 skips the counts check when there are no counts. That needs no change here.
-  - It deliberately does not report "no counts" as a finding, so no-counts reports will not show
-    this notice.
+The upload form offers "No counts". The library skips the counts check for those reports, and
+deliberately does not report "no counts" as a finding, so they will not show this notice. That
+needs no change here.
 
 ## PR 1 — the child reports its findings and the worker stores them
 

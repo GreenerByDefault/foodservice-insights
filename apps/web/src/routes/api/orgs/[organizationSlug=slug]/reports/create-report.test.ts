@@ -140,6 +140,27 @@ describe('_createReport', () => {
       );
     });
 
+    test('stores a report without counts as null in both counts columns', async () => {
+      await withOrganizationFixtures(
+        async ({ transaction, store, organizationId, organizationSlug, adminUserId }) => {
+          const response = await _createReport(
+            transaction,
+            store,
+            { organizationId, organizationSlug, userId: adminUserId },
+            createUploadRequest({ countsBasis: 'none', monthlyCounts: null }),
+          );
+          const { reportId } = (await response.json()) as { reportId: ReportId };
+
+          const report = await transaction
+            .selectFrom('report')
+            .select(['countsBasis', 'monthlyCounts'])
+            .where('id', '=', reportId)
+            .executeTakeFirstOrThrow();
+          expect(report).toEqual({ countsBasis: null, monthlyCounts: null });
+        },
+      );
+    });
+
     test('stores the bytes where the row says they are', async () => {
       await withOrganizationFixtures(
         async ({ transaction, store, organizationId, organizationSlug, adminUserId }) => {

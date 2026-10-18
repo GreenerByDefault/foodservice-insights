@@ -41,6 +41,26 @@ test('uploading a good CSV creates a report and lands on its page, which reads b
   await expect(details.getByText('1,250')).toBeVisible();
 });
 
+test('uploading with no counts creates a report whose details say none were provided', async ({
+  page,
+  org,
+}) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
+  await ensureHydrated(page);
+
+  await page.getByLabel('Report name').fill('Q1 procurement');
+  await chooseCsv(page, 'procurement.csv', GOOD_CSV);
+  await page.getByRole('radio', { name: 'No counts' }).click();
+  await page.getByRole('radio', { name: 'Pounds (lb)' }).click();
+
+  await page.getByRole('button', { name: 'Upload report' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/orgs/${org.slug}/reports/[0-9a-f-]+$`));
+  const details = page.getByRole('region', { name: 'Upload details' });
+  await expect(details.getByText('Diners or meals served')).toBeVisible();
+  await expect(details.getByText('Not provided')).toBeVisible();
+});
+
 test('the file field works from the keyboard alone', async ({ page, org }) => {
   await page.goto(`/orgs/${org.slug}/reports/new`);
   await ensureHydrated(page);

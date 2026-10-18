@@ -1,6 +1,7 @@
 <script lang="ts">
 import { XLSX_CONTENT_TYPE } from '@gbd/core';
-import type { CountsBasis, UnitSystem } from '@gbd/db';
+import type { UnitSystem } from '@gbd/db';
+import InfoIcon from '@lucide/svelte/icons/info';
 import { tick } from 'svelte';
 import { goto } from '$app/navigation';
 import { Alert, AlertDescription } from '#lib/components/ui/alert/index.js';
@@ -19,9 +20,12 @@ import {
   MAX_UPLOAD_FIELD_MEGABYTES,
 } from '#lib/reports/limits.js';
 import {
-  COUNTS_BASES,
+  COUNTS_BASIS_CHOICES,
+  COUNTS_BASIS_LABELS,
+  type CountsBasisChoice,
   FIELD,
   FIELD_LABELS,
+  NO_COUNTS,
   UNIT_NAMES,
   UNIT_SYSTEMS,
 } from '#lib/reports/metadata.js';
@@ -47,7 +51,9 @@ let fileWeightUnit: UnitSystem | undefined = $state();
 let counts: CountDraft = $state({});
 let name = $state('');
 let siteName = $state('');
-let countsBasis: CountsBasis = $state('people');
+// Stays Diners by default, so leaving counts out is a deliberate choice. Choosing "No counts" keeps
+// `counts`, so switching back restores what was typed.
+let countsBasis: CountsBasisChoice = $state('people');
 let unitSystem: UnitSystem | undefined = $state();
 
 type FormState =
@@ -83,6 +89,7 @@ const unitSystemTitleId = `${id}-unit-system-title`;
 const countsMeaningId = `${id}-counts-meaning`;
 const countsScopeId = `${id}-counts-scope`;
 const countsBasisTitleId = `${id}-counts-basis-title`;
+const noCountsNoteId = `${id}-no-counts-note`;
 
 const UNIT_WORDS: Record<UnitSystem, string> = { lb: 'pounds', kg: 'kilograms' };
 
@@ -167,10 +174,10 @@ async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElemen
     return;
   }
 
-  // Unreachable in practice — every month input carries `required`, so native validation blocks
-  // the submit event before this runs. `serializeCounts` returning `null` is the caller's cue not
-  // to submit, kept as a safety net rather than an `as string` cast on its result.
-  const serialized = serializeCounts(counts, months ?? []);
+  // Null is unreachable in practice — every month input carries `required`, so native validation
+  // blocks the submit event before this runs. `serializeCounts` returning `null` is the caller's
+  // cue not to submit, kept as a safety net rather than an `as string` cast on its result.
+  const serialized = countsBasis === NO_COUNTS ? undefined : serializeCounts(counts, months ?? []);
   if (serialized === null) return;
 
   const formData = new FormData(form);
@@ -178,7 +185,7 @@ async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElemen
   // The original, for the server to store without ever opening it.
   if (chosenUpload.workbook) formData.set(FIELD.workbook, chosenUpload.workbook);
   formData.set(FIELD.unitSystem, weightUnit);
-  formData.set(FIELD.monthlyCounts, serialized);
+  if (serialized) formData.set(FIELD.monthlyCounts, serialized);
 
   formState = { status: 'submitting' };
   const outcome = await uploadReport(organizationSlug, formData);
@@ -383,20 +390,31 @@ async function backToForm() {
         <Field.Title id={countsBasisTitleId}>{FIELD_LABELS.countsBasis}</Field.Title>
         <RadioGroup
           aria-labelledby={countsBasisTitleId}
+          aria-describedby={countsBasis === NO_COUNTS ? noCountsNoteId : undefined}
           name={FIELD.countsBasis}
           value={countsBasis}
-          onValueChange={(value) => (countsBasis = value as CountsBasis)}
+          onValueChange={(value) => (countsBasis = value as CountsBasisChoice)}
         >
-          {#each COUNTS_BASES as basis (basis)}
+          {#each COUNTS_BASIS_CHOICES as basis (basis)}
             <Field.Label>
               <RadioGroupItem value={basis} />
-              {basis === 'people' ? 'Diners' : 'Meals'}
+              {COUNTS_BASIS_LABELS[basis]}
             </Field.Label>
           {/each}
         </RadioGroup>
       </Field.Field>
 
-      {#if months}
+      {#if countsBasis === NO_COUNTS}
+        <!-- Not an `Alert`: its `role="alert"` would interrupt a screen reader on every change of
+             radio. The radio group's description carries it instead. -->
+        <div class="flex gap-3 rounded-md border bg-muted/40 p-3">
+          <InfoIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <Field.Description id={noCountsNoteId} class="text-foreground">
+            Your report will show totals only. Totals grow with the number of people a site serves,
+            so they can't be compared directly with other sites.
+          </Field.Description>
+        </div>
+      {:else if months}
         <MonthlyCounts {months} basis={countsBasis} bind:counts />
       {:else}
         <Field.Description

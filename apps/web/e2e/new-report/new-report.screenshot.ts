@@ -66,6 +66,25 @@ test('the new report form, with the weight unit taken from the header', async ({
   });
 });
 
+test('the new report form, with no counts chosen', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
+  await ensureHydrated(page);
+
+  // A header that names the unit keeps the weight question, which `unit-asked.png` covers, out of
+  // the shot.
+  await chooseCsv(
+    page,
+    'procurement.csv',
+    ['Product,Date,Weight (lb)', 'beef,2026-01-05,12'].join('\n'),
+  );
+  await page.getByRole('radio', { name: 'No counts' }).click();
+
+  await expect(
+    page.getByText('Your report will show totals only.', { exact: false }),
+  ).toBeVisible();
+  await expectScreenshots(page, 'no-counts.png');
+});
+
 // Every column at once, one distinct fault per row plus two rows whose dates prove opposite
 // orders, so the rejection view renders its worst realistic case: MAX_PROBLEMS_REPORTED row
 // problems, a date-order problem above them, and the "Showing N of M" truncation note. The

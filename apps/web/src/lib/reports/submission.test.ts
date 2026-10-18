@@ -27,14 +27,35 @@ describe('validateSubmission', () => {
 
     expect(outcome).toMatchObject({
       ok: true,
-      metadata: {
-        name: 'Q1 procurement',
-        siteName: 'Main dining hall',
-        countsBasis: 'people',
-        unitSystem: 'lb',
-        monthlyCounts: { '2026-01': 120, '2026-02': 135 },
-      },
       file: { originalFilename: 'procurement.csv', byteSize: CSV.length },
+    });
+    expect(outcome.ok && outcome.metadata).toEqual({
+      name: 'Q1 procurement',
+      siteName: 'Main dining hall',
+      unitSystem: 'lb',
+      counts: { basis: 'people', monthly: { '2026-01': 120, '2026-02': 135 } },
+    });
+  });
+
+  describe('without counts', () => {
+    test('accepts a file with orders in months it has no count for', async () => {
+      const outcome = await validateSubmission(
+        aSubmission({ countsBasis: 'none', monthlyCounts: null }),
+      );
+
+      expect(outcome).toMatchObject({ ok: true, metadata: { counts: null } });
+    });
+
+    test('rejects monthly counts sent anyway, naming their field', async () => {
+      const outcome = await validateSubmission(aSubmission({ countsBasis: 'none' }));
+
+      expect(outcome).toMatchObject({
+        ok: false,
+        rejection: {
+          reason: 'invalid_metadata',
+          summary: 'Check these fields: Diners or meals per month.',
+        },
+      });
     });
   });
 
@@ -135,7 +156,7 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason: 'invalid_metadata',
-          summary: 'Check these fields: Count by, Weight unit.',
+          summary: 'Check these fields: Weight unit, Count by.',
         },
       });
     });
