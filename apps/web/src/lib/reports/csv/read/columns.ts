@@ -6,11 +6,10 @@ export type RequiredColumn = 'product' | 'date' | 'weight';
 
 export const REQUIRED_COLUMNS: readonly RequiredColumn[] = ['product', 'date', 'weight'];
 
-/** What each required column may be called, written in normalized form. A weight header may also
- * name its unit — see `WEIGHT_WITH_UNIT`.
+/** What each required column may be called, written in normalized form.
  *
- * Deliberately tiny, and every alias names the same thing as the column it maps to. `quantity` and `qty` are excluded because they count cases, not weight;
- * `total`, `cost` and `sales` because they are spend; and `amount` because it is generic enough to
+ * Deliberately tiny, and every alias names the same thing as the column it maps to. `quantity` and
+ * `qty` are excluded because they count cases, not weight; `total`, `cost` and `sales` because they are spend; and `amount` because it is generic enough to
  * mean either — mapping any of them onto weight produces a confident wrong report, and nothing
  * downstream can tell. A header we do not recognize is a visible rejection the user can fix; a
  * header we recognize wrongly is not.
@@ -29,9 +28,10 @@ const ALIASES = {
   weight: ['weight', 'product weight'],
 } as const satisfies Record<RequiredColumn, readonly string[]>;
 
-/** `Weight (lbs)`, `Weight lbs`, `weight_kg`, `Product Weight (in pounds)`, once normalized. A word
- * after "weight" that is not a unit — `weight class` — matches here but is no weight column. */
-const WEIGHT_WITH_UNIT =
+/** Captures the unit word of `Weight (lbs)`, `weight_kg` or `Product Weight (in pounds)`. It
+ * captures any word, `class` from `weight class` too: only `UNITS` and `UNSUPPORTED_UNITS` decide
+ * whether that word is a unit. */
+const WEIGHT_UNIT_WORD =
   /^(?:product )?weight(?: ?\((?:in )?(?<parenthesized>[a-z]+)\.?\)| (?:in )?(?<bare>[a-z]+)\.?)$/;
 
 const UNITS: ReadonlyMap<string, UnitSystem> = new Map([
@@ -45,11 +45,13 @@ const UNITS: ReadonlyMap<string, UnitSystem> = new Map([
   ['kilos', 'kg'],
   ['kilogram', 'kg'],
   ['kilograms', 'kg'],
+  ['kilogramme', 'kg'],
+  ['kilogrammes', 'kg'],
 ]);
 
 /** A unit food is weighed in that a report cannot be in. Naming it back to the user beats calling
  * their weight column missing. */
-export type UnsupportedUnit = 'ounces' | 'grams' | 'tons';
+export type UnsupportedUnit = 'ounces' | 'grams' | 'tons' | 'tonnes';
 
 const UNSUPPORTED_UNITS: ReadonlyMap<string, UnsupportedUnit> = new Map([
   ['oz', 'ounces'],
@@ -58,8 +60,13 @@ const UNSUPPORTED_UNITS: ReadonlyMap<string, UnsupportedUnit> = new Map([
   ['g', 'grams'],
   ['gram', 'grams'],
   ['grams', 'grams'],
+  ['gramme', 'grams'],
+  ['grammes', 'grams'],
   ['ton', 'tons'],
   ['tons', 'tons'],
+  ['t', 'tonnes'],
+  ['tonne', 'tonnes'],
+  ['tonnes', 'tonnes'],
 ]);
 
 export type ColumnIndexes = Record<RequiredColumn, number>;
@@ -143,7 +150,7 @@ function readHeaderName(normalized: string): HeaderReading | undefined {
   );
   if (column) return { kind: 'column', column };
 
-  const groups = WEIGHT_WITH_UNIT.exec(normalized)?.groups;
+  const groups = WEIGHT_UNIT_WORD.exec(normalized)?.groups;
   const word = groups?.parenthesized ?? groups?.bare;
   if (word === undefined) return undefined;
   const weightUnit = UNITS.get(word);

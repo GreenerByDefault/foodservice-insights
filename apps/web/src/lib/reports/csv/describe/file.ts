@@ -12,7 +12,7 @@ import type {
   LayoutFault,
   RequiredColumn,
 } from '../read/index.ts';
-import { groupDigits, listOf } from './text.ts';
+import { groupDigits, listOf, quote } from './text.ts';
 
 export type UnreadableFile =
   | { kind: 'too-large'; byteSize: number }
@@ -117,10 +117,10 @@ function describeHeaderFault(fault: HeaderFault): string {
       return `Your file needs a column for ${listOf(fault.columns.map(headerLabel))}.`;
     case 'ambiguous':
       return `Two columns could be the ${headerLabel(fault.column)}: ${listOf(
-        fault.headers.map((header) => `"${header}"`),
+        fault.headers.map(quote),
       )}. Remove or rename one.`;
     case 'unsupported-unit':
-      return `Your weight column "${fault.header}" is in ${fault.unit}. Convert the weights to lb or kg, and name the column "Weight".`;
+      return `Your weight column ${quote(fault.header)} is in ${fault.unit}. Convert the weights to lb or kg, and name the column "Weight".`;
   }
 }
 

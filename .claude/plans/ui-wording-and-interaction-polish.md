@@ -17,8 +17,8 @@ The upload form rests on two findings from exploring the code:
 - **A weight header may now name its unit.** The CSV reader accepts `Weight (lbs)`, `weight_kg`,
   `Weight (in pounds)` and the like, plus `Product description` and `Item description` as product
   aliases. `FileInspection.weightUnit` (from `lib/reports/inspect-file.ts`) carries the unit when
-  the header names one and is absent otherwise. A header in ounces, grams or tons is rejected by
-  name rather than as a missing column.
+  the header names one and is absent otherwise. A header in ounces, grams, tons or tonnes is
+  rejected by name rather than as a missing column, even below a title row.
 
 The server is already authoritative about the unit: `lib/reports/submission.ts` rejects a form
 whose Weight unit disagrees with the header, with `invalid_metadata` and *"Your file's weight

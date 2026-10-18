@@ -41,6 +41,7 @@ describe('resolveHeader', () => {
       ['Weight KGS', 'kg'],
       ['Weight (in kilograms)', 'kg'],
       ['Weight kilo', 'kg'],
+      ['weight kilogrammes', 'kg'],
       ['product-weight-kilos', 'kg'],
     ] as const)('reads "%s" as the weight, in %s', ([header, weightUnit]) => {
       expect(resolveHeader(['product', 'date', header])).toEqual({
@@ -69,6 +70,9 @@ describe('resolveHeader', () => {
       ['Weight (g)', 'grams'],
       ['Weight grams', 'grams'],
       ['Weight (tons)', 'tons'],
+      ['Weight (t)', 'tonnes'],
+      ['weight_tonnes', 'tonnes'],
+      ['Weight (grammes)', 'grams'],
     ] as const)('names "%s" as a weight in %s, rather than missing', ([header, unit]) => {
       expect(resolveHeader(['product', 'date', header])).toEqual({
         ok: false,
@@ -144,9 +148,9 @@ describe('resolveHeader', () => {
   });
 
   test('treats an identical header twice as the same ambiguity', () => {
-    expect(resolveHeader(['product', 'product', 'date', 'weight'])).toMatchObject({
+    expect(resolveHeader(['product', 'product', 'date', 'weight'])).toEqual({
       ok: false,
-      fault: { kind: 'ambiguous', column: 'product' },
+      fault: { kind: 'ambiguous', column: 'product', headers: ['product', 'product'] },
     });
   });
 });

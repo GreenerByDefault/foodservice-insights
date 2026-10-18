@@ -43,8 +43,8 @@ import {
 } from './rules/index.ts';
 import { encodeNormalizedCsv, type NormalizedRow } from './write.ts';
 
-/** `weightUnit` is present only when the file's weight header names one, as `Weight (lbs)` does.
- * The normalized CSV never carries it: its header is always plain `weight`. */
+/** `weightUnit` is the only record of a unit the file's header named: the normalized CSV's header is
+ * always plain `weight`. */
 export type CsvNormalization =
   | { ok: true; normalized: Uint8Array; months: MonthsFromFile; weightUnit?: UnitSystem }
   | { ok: false; rejection: RejectedUploadRecord };

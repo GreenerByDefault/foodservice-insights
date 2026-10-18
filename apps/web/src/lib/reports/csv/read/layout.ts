@@ -20,7 +20,6 @@ export type Layout = {
    * records starts after this line rather than after line 1.
    */
   headerLine: number;
-  /** Present only when the weight header names a unit, as `Weight (lbs)` does. */
   weightUnit?: UnitSystem;
 };
 
@@ -105,6 +104,12 @@ function headerCandidates(probe: Probe): Candidate[] {
 }
 
 function noHeaderFault(probes: readonly Probe[]): LayoutFault {
+  // A row that names all three columns, but one of them twice or the weight in a unit we cannot
+  // use, is the header the user meant. Line 1 may be a title above it, or split on the wrong
+  // delimiter, and describing that would call every column missing.
+  const [misnamed] = probes.flatMap(({ records }) => records.flatMap(misnamedHeader));
+  if (misnamed) return misnamed;
+
   // Fall back to describing the comma reading, since that is the format we ask for.
   const [comma] = probes;
   if (comma?.error) return { kind: 'parse-error', error: comma.error };
@@ -118,6 +123,12 @@ function noHeaderFault(probes: readonly Probe[]): LayoutFault {
     fields: first.fields,
     fault: resolution.ok ? undefined : resolution.fault,
   };
+}
+
+function misnamedHeader(record: CsvRecord): LayoutFault[] {
+  const resolution = resolveHeader(record.fields);
+  if (resolution.ok || resolution.fault.kind === 'missing') return [];
+  return [{ kind: 'bad-header', fields: record.fields, fault: resolution.fault }];
 }
 
 function takeRecords(text: string, delimiter: CsvDelimiter, limit: number): CsvRecord[] {

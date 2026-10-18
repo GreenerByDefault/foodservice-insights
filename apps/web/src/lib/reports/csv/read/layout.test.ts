@@ -111,6 +111,27 @@ describe('readLayout', () => {
         },
       });
     });
+    describe('naming all three columns, but not usably', () => {
+      const OUNCES = {
+        kind: 'bad-header',
+        fields: ['product', 'date', 'Weight (oz)'],
+        fault: { kind: 'unsupported-unit', header: 'Weight (oz)', unit: 'ounces' },
+      };
+
+      test('reports that row rather than the title above it', () => {
+        const text = ['Procurement export', 'product,date,Weight (oz)', 'beef,2026-01-05,1'].join(
+          '\n',
+        );
+
+        expect(readLayout(text)).toEqual({ ok: false, fault: OUNCES });
+      });
+
+      test('reports that row on whichever delimiter splits it', () => {
+        const text = 'product;date;Weight (oz)\nbeef;2026-01-05;1\n';
+
+        expect(readLayout(text)).toEqual({ ok: false, fault: OUNCES });
+      });
+    });
   });
 
   describe('a file that cannot be parsed at all', () => {

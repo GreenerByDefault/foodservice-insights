@@ -126,6 +126,19 @@ const LAYOUT_CASES: [string, LayoutFault, RejectedUploadRecord][] = [
     },
   ],
   [
+    'a weight column whose name is too long to repeat in full',
+    {
+      kind: 'bad-header',
+      fields: ['product', 'date', `Weight${' '.repeat(40)}(oz)`],
+      fault: { kind: 'unsupported-unit', header: `Weight${' '.repeat(40)}(oz)`, unit: 'ounces' },
+    },
+    {
+      reason: 'bad_columns',
+      summary: `Your weight column "Weight${' '.repeat(34)}…" is in ounces. Convert the weights to lb or kg, and name the column "Weight".`,
+      rejectionDetail: `unsupported weight unit: ounces (Weight${' '.repeat(40)}(oz))`,
+    },
+  ],
+  [
     'an empty layout',
     { kind: 'empty' },
     { reason: 'empty', summary: 'That file has no rows in it.' },
