@@ -21,9 +21,9 @@ design:
   `GROUP BY` over rows that already exist, so a time series needs no sampling. Even the queue
   depth at a past moment *t* can be computed: `created_at <= t`, and `claimed_at` null or later.
 - **But rows do leave.** Deleting an organization cascades to its reports, their attempts and its
-  rejected uploads. Deleting an account will remove the `auth.users` row, once
-  [`account-self-service.md`](account-self-service.md) lands. So a count over live rows falls,
-  after the fact, for every week the deleted rows touched. Deleting a report is soft and keeps
+  rejected uploads. Deleting an account removes the `auth.users` row
+  ([`_deleteAccount`](../../apps/web/src/routes/api/account/+server.ts)). So a count over live
+  rows falls, after the fact, for every week the deleted rows touched. Deleting a report is soft and keeps
   everything (`REQUIREMENTS.md` § Data deletion), so these two hard deletes are the only leaks.
   `audit_event` already keeps raw ids with no FK, so it outlives what it names.
 - **Cascades fire row triggers on every child, in order.** When an organization is deleted,
@@ -104,7 +104,7 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
   - What a customer asked us to remove is removed. A tombstone holds only what the
     no-free-text rule below already allows: ids, timestamps, enums and numbers. The one id that
     names a person is a deleted user's raw id, the same call as "the raw user ID stays in the
-    audit log". A hard delete on request, GBD's TBD script, deletes the tombstones too.
+    audit log".
   - The trigger functions are `SECURITY DEFINER`, owned by `postgres`, with `search_path = ''`.
     So a delete made through Supabase Auth's role can still write a tombstone, and the only
     thing they write is a tombstone. Tombstones live in `metrics`, so `metrics_reader` reads
@@ -427,10 +427,8 @@ All in `packages/db`.
     `metrics_reader` can read them.
 - `packages/db/README.md` gains the rule from Decisions: a view over a hard-deletable table gets
   its tombstone in the same migration. `REQUIREMENTS.md` § Data deletion gets one line:
-  metric tombstones (ids, timestamps and enums) outlive a deleted organization or account, and a
-  requested hard delete removes them.
-- By hand, after `account-self-service.md` lands: delete an account through the app, and the
-  user still counts in `metrics.app_user`.
+  metric tombstones (ids, timestamps and enums) outlive a deleted organization or account.
+- By hand: delete an account through the app, and the user still counts in `metrics.app_user`.
 
 ## PR 3 — synthetic history
 
