@@ -8,9 +8,9 @@ let { data }: PageProps = $props();
 </script>
 
 <svelte:head>
-  <title>{pageTitle('Invitations')}</title>
+  <title>{pageTitle('Your invitations')}</title>
 </svelte:head>
 
-<PageHeading>Invitations</PageHeading>
+<PageHeading>Your invitations</PageHeading>
 
 <InviteOffers invites={data.invites} />

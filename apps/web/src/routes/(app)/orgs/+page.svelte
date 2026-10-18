@@ -9,11 +9,11 @@ let { data }: PageProps = $props();
 </script>
 
 <svelte:head>
-  <title>{pageTitle('Organizations')}</title>
+  <title>{pageTitle('Your organizations')}</title>
 </svelte:head>
 
 <PageHeading>
-  Organizations
+  Your organizations
   {#snippet actions()}
     <Button href="/orgs/new">New organization</Button>
   {/snippet}

@@ -139,4 +139,29 @@ describe('OrganizationNameForm', () => {
       .element(screen.getByRole('group', { name: 'Rename organization' }))
       .toBeInTheDocument();
   });
+
+  describe('with a description', () => {
+    const description = "Usually your company's name.";
+
+    test('describes the field', async () => {
+      const screen = await render(OrganizationNameForm, { ...props(vi.fn()), description });
+
+      await expect
+        .element(screen.getByLabelText('Organization name'))
+        .toHaveAccessibleDescription(description);
+    });
+
+    test('a failure adds its error to the description', async () => {
+      const onSubmit = vi.fn().mockResolvedValue('name-taken');
+      const screen = await render(OrganizationNameForm, { ...props(onSubmit), description });
+
+      await screen.getByRole('button', { name: 'Save' }).click();
+
+      await expect
+        .element(screen.getByLabelText('Organization name'))
+        .toHaveAccessibleDescription(
+          `${description} An organization with that name already exists.`,
+        );
+    });
+  });
 });

@@ -1,4 +1,5 @@
 <script lang="ts">
+import { APP_NAME } from '@gbd/core';
 import { refreshAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
 import { authMode } from '#lib/auth/mode.js';
@@ -18,7 +19,9 @@ let { status, code }: Props = $props();
 
 const presentation = $derived(describeError(status));
 // Not a failure to explain, so it has no `describeError` copy.
-const title = $derived(code === 'onboarding_required' ? 'Welcome' : presentation.title);
+const title = $derived(
+  code === 'onboarding_required' ? `Welcome to ${APP_NAME}` : presentation.title,
+);
 </script>
 
 <svelte:head>

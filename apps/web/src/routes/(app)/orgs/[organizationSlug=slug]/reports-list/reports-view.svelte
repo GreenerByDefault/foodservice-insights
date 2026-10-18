@@ -62,5 +62,5 @@ function settledAnnouncement(previous: ReportListRow[], next: ReportListRow[]): 
   <ReconnectingAlert subject="reports" />
 {/if}
 
-<ReportsList reports={current.reports} />
+<ReportsList reports={current.reports} newReportHref={current.newReportHref} />
 <ReportsPagination olderHref={current.olderHref} newerHref={current.newerHref} />

@@ -16,7 +16,7 @@ test.describe('signed in with no name', () => {
     await page.getByLabel('Your name').fill('Alex Baker');
     await page.getByRole('button', { name: 'Continue' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
     await expect(page).toHaveURL('/account');
     await expect(page.getByLabel('Your name')).toHaveValue('Alex Baker');
   });
@@ -39,12 +39,14 @@ test.describe('signed out', () => {
     await page.getByRole('button', { name: 'Send code' }).click();
     await page.getByLabel('Sign-in code').fill(await waitForSignInCode(person.signInEmail));
 
-    await expect(page.getByRole('heading', { name: 'Welcome' })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Welcome to Foodservice Insights' }),
+    ).toBeVisible();
     await expect(page.getByLabel('Your name')).toBeEmpty();
     await page.getByLabel('Your name').fill('Alex Baker');
     await page.getByRole('button', { name: 'Continue' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your account' })).toBeVisible();
     await expect(page).toHaveURL('/account');
   });
 });

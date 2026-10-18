@@ -10,10 +10,10 @@ let { data }: PageProps = $props();
 </script>
 
 <svelte:head>
-  <title>{pageTitle('Settings', data.organization.name)}</title>
+  <title>{pageTitle('Organization settings', data.organization.name)}</title>
 </svelte:head>
 
-<PageHeading>Settings</PageHeading>
+<PageHeading>Organization settings</PageHeading>
 
 <div class="flex w-full max-w-md flex-col gap-8">
   <RenameForm organizationSlug={data.organization.slug} initialName={data.organization.name} />

@@ -20,10 +20,10 @@ async function nameSaved(name: string) {
 </script>
 
 <svelte:head>
-  <title>{pageTitle('Account')}</title>
+  <title>{pageTitle('Your account')}</title>
 </svelte:head>
 
-<PageHeading>Account</PageHeading>
+<PageHeading>Your account</PageHeading>
 
 <!-- `placeholder` mode has no session to change or end, and deleting its one user breaks every
      request. -->

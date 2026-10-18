@@ -5,11 +5,13 @@ The site works end to end. This pass makes it easier for non-technical foodservi
 through clearer wording and simpler interactions, without adding long explanations. Visual styling is
 out of scope; a later session will align the site with GBD's design.
 
-Three findings from exploring the code shaped the plan:
-- **A brand-new user's first page is `/orgs/new`.** `_organizationsPageRedirect` in
-  `routes/(app)/orgs/+page.server.ts` sends anyone with no organization there. Today that page
-  explains nothing, and someone waiting for a colleague's invite could create a duplicate
-  organization.
+The account, invitations and organizations pages already use this voice. Pages that belong to
+the user say so ("Your account", "Your invitations", "Your organizations"). An organization's own
+pages name it ("Organization settings"), while their tabs keep the short label ("Settings"). An
+empty list gets a card with one sentence and the next action, as in `invites/invite-offers.svelte`
+and `reports-list/reports-list.svelte`.
+
+Two findings from exploring the code shaped the upload form:
 - **"Leave the weight off" is taken to mean leave the *unit* off the weight.** The weight column is
   required at every layer.
 - **GBD's own sample distributor export is rejected today.**
@@ -17,72 +19,20 @@ Three findings from exploring the code shaped the plan:
   `Product Description`, and neither is recognized. As decided, the reader will accept both and take
   the weight unit from the header.
 
-The work is split into three independent PRs off `main`. Each touches its own files and regenerates
+The work is split into two independent PRs off `main`. Each touches its own files and regenerates
 only its own screenshots.
 
 ---
 
-## PR 1: Account, invitations and organizations wording
-
-Paths below are relative to `apps/web/src/routes/(app)/` unless they start with `lib/`.
-
-**Make "yours" explicit**
-
-| Where | Now | New |
-|---|---|---|
-| `shell/user-menu.svelte` items | Account / Invitations | **Your account** / **Your invitations** |
-| `account/+page.svelte` H1 + `pageTitle` | Account | **Your account** |
-| `invites/+page.svelte` H1 + `pageTitle` | Invitations | **Your invitations** |
-| `lib/components/error-page.svelte` onboarding H1 | Welcome | **Welcome to Foodservice Insights** (uses `APP_NAME`) |
-| `orgs/+page.svelte` H1 + `pageTitle` | Organizations | **Your organizations** (matches the existing "Go to your organizations" link) |
-
-**Explain organizations on `/orgs/new`.** This is the first page a new user sees.
-- Keep the H1 "New organization".
-- Add an intro under it: *"An organization is your company or team. Everyone you add to it can see
-  and upload its reports."*
-- Add a muted note: *"Joining a colleague's organization? Ask one of its admins to invite
-  {data.user.email}."* The `(app)` layout already loads `user.email`.
-- Add a field hint: *"Usually your company's name. You can change it later."*
-  - This needs a new optional `description` prop on `lib/components/orgs/organization-name-form.svelte`,
-    wired to `aria-describedby`. The Settings rename form doesn't pass it.
-
-**Organization settings.**
-- `orgs/[organizationSlug=slug]/settings/+page.svelte`: H1 and `pageTitle` become **"Organization
-  settings"**.
-- The tab label stays "Settings".
-
-**Empty reports list.** This is what a new organization's creator sees first.
-- In `reports-list/reports-list.svelte`, replace "No reports yet." with:
-  - **"No reports yet."**
-  - *"Upload a file of your food purchases to see its climate impact."*
-  - **[New report]**
-- Follow the empty-state markup in `invites/invite-offers.svelte`.
-- Both roles can upload, so the button always shows.
-
-**Tests to update:**
-- `user-menu.svelte.test.ts` (lines 80, 88)
-- `error-page.svelte.test.ts:87`
-- `organizations-list`, `create-organization-form`, `organization-name-form`
-- `reports-list` component tests
-- `e2e/account/account-menu.screenshot.ts:18,21`
-- `e2e/auth/onboarding.e2e.ts:19,47`
-- `e2e/reports-list/reports-list.screenshot.ts:53`
-
-**Screenshots:**
-- `account/*`
-- `invites/*`
-- `auth/onboarding`
-- `organizations/{new,list,list-empty,settings-admin,delete-organization}`
-- `reports-list/empty`
-
-## PR 2: Members page, with the invite form in a modal
+## PR 1: Members page, with the invite form in a modal
 
 **Add the dialog component.** Run `pnpm dlx shadcn-svelte@latest add dialog` in `apps/web`. It
 lands in `lib/components/ui/dialog/`, the same way `alert-dialog` was added. The bits-ui patch only
 touches pin-input, so it doesn't affect dialogs.
 
 **`members/+page.svelte`**
-- H1 and `pageTitle` become **"Organization members"**.
+- H1 and `pageTitle` become **"Organization members"**, like "Organization settings". The tab
+  label stays "Members".
 - Admins get an **"Invite someone"** button in `PageHeading`'s `actions` snippet, the way Reports
   has "New report".
 - The inline "Invite someone" section is removed.
@@ -134,7 +84,7 @@ touches pin-input, so it doesn't affect dialogs.
 
 **Screenshots:** `organizations/members-*`.
 
-## PR 3: Upload form, with clear instructions and friendlier file checks
+## PR 2: Upload form, with clear instructions and friendlier file checks
 
 ### Form wording (`reports/new/upload-form.svelte`)
 Weight unit moves out of "Report details" and into a reorganized **"Purchasing data"** fieldset,
@@ -270,11 +220,11 @@ The Python worker is unaffected, because `write.ts` always writes the header `pr
 4. Run the gate in the background: `pnpm lint && pnpm check && pnpm test`. Report flaky tests
    rather than chasing them.
 5. Check by hand in the running app (`/run` or Playwright MCP):
-   - **PR 2:**
+   - **PR 1:**
      - open the dialog, invite someone, and confirm it closes with a toast
      - invite an existing member and confirm the inline error stays in the dialog
      - press Escape and confirm the form resets and focus returns to "Invite someone"
-   - **PR 3:**
+   - **PR 2:**
      - upload a copy of the lab sample CSV and confirm Weight unit locks to lb
      - upload `Weight (oz)` and read the rejection
      - upload `apps/web/sample-reports/valid.csv` and confirm both radios stay open
