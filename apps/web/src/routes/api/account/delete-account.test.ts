@@ -3,7 +3,7 @@ import {
   insertAppUserWithEmail,
   insertOrganization,
   insertOrganizationMember,
-  insertReport,
+  insertReportWithAttempt,
   withRollback,
 } from '@gbd/db/testing';
 import type { Transaction } from 'kysely';
@@ -40,9 +40,11 @@ describe('_deleteAccount', () => {
         organizationId: organization.id,
         userId: user.id,
       });
-      const report = await insertReport(transaction, {
+      const { report, attempt } = await insertReportWithAttempt(transaction, {
         organizationId: organization.id,
         createdByUserId: user.id,
+        requestedByUserId: user.id,
+        status: 'succeeded',
       });
 
       const response = await _deleteAccount(transaction, { user });
@@ -61,6 +63,12 @@ describe('_deleteAccount', () => {
         .where('id', '=', report.id)
         .executeTakeFirst();
       expect(kept).toEqual({ createdByUserId: null });
+      const keptAttempt = await transaction
+        .selectFrom('analysisAttempt')
+        .select('requestedByUserId')
+        .where('id', '=', attempt.id)
+        .executeTakeFirst();
+      expect(keptAttempt).toEqual({ requestedByUserId: null });
     });
   });
 

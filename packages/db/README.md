@@ -165,7 +165,9 @@ column to the terminal-immutability trigger, not one of its excluded columns.
 `notification_attempts` — which the terminal-immutability trigger masks out of its comparison
 rather than freezing. That exemption is why
 [`sweeps/notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) can claim and stamp a
-`succeeded` row at all.
+`succeeded` row at all. `requested_by_user_id` is the one other exception, and it may only become
+null: that is what deleting the requesting user's account does, and reassigning a finished attempt
+to someone else is still refused.
 
 This package owns the invariants; who claims an attempt and when is the worker's policy. The claim
 itself is documented at [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-queue), and every terminal
