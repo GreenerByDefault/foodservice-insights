@@ -1,4 +1,4 @@
-/** Write `public-schema.sql` and `auth-schema.sql` from the running stack.
+/** Write `public-schema.sql`, `metrics-schema.sql` and `auth-schema.sql` from the running stack.
  *
  * `public-schema.sql` is the current shape of the `public` schema, constraints and all.
  * Migrations are history, and `src/generated/` carries shape but no constraints; this is the file
@@ -40,6 +40,9 @@ function writeSchema(schema: string, contents: string): void {
 }
 
 writeSchema('public', dumpSchema('public'));
+
+// Kanel never reads `metrics` (see `kanel.config.cjs`), so this is the views' only typed record.
+writeSchema('metrics', dumpSchema('metrics'));
 
 // `pg_dump --schema auth` groups a trigger with the table it's defined on, not with the schema
 // that owns the function it calls. That means it also picks up `on_auth_user_created`, which is

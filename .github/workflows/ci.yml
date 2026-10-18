@@ -133,11 +133,11 @@ jobs:
           TEST_DB: '1'
         run: |
           pnpm db:gen-types
-          if ! git diff --exit-code --quiet packages/db/src/generated packages/db/public-schema.sql packages/db/auth-schema.sql; then
-            echo '::error::packages/db/src/generated, packages/db/public-schema.sql, or packages/db/auth-schema.sql is stale. Run `pnpm migrate && pnpm db:gen-types` and commit the result.'
+          if ! git diff --exit-code --quiet packages/db/src/generated packages/db/public-schema.sql packages/db/metrics-schema.sql packages/db/auth-schema.sql; then
+            echo '::error::packages/db/src/generated or one of the packages/db/*-schema.sql dumps is stale. Run `pnpm migrate && pnpm db:gen-types` and commit the result.'
             echo '::notice::If this PR edits a migration already on the base branch, CI applied the base branch'"'"'s version, as the hosted database already has. Put the change in a new migration instead.'
             echo '::notice::If you ran that locally and still see a diff, your local Supabase CLI version probably differs from the one pinned in .github/actions/setup-supabase/action.yml. Run `brew upgrade supabase`, then bump the pinned `version:` in that file to match `supabase --version`, and regenerate. auth-schema.sql is especially sensitive to this: its contents come from the GoTrue version the pinned CLI ships, not from our own migrations.'
-            git diff packages/db/src/generated packages/db/public-schema.sql packages/db/auth-schema.sql
+            git diff packages/db/src/generated packages/db/public-schema.sql packages/db/metrics-schema.sql packages/db/auth-schema.sql
             exit 1
           fi
 

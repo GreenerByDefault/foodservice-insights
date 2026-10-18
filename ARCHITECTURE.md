@@ -498,6 +498,13 @@ when another's inputs fail.
 *Rejected: one system evaluating everything.* Each consolidation copies data out of its home, and
 each copy is one more thing that can break silently.
 
+### Metrics
+
+Product metrics are views in the database's `metrics` schema, one row per event, read only by the
+`metrics_reader` role, which can read nothing else. Dashboards and alerts query those views rather
+than the base tables, so each metric has one tested definition. The reasoning is in
+[`packages/db/migrations/009_metrics.ts`](packages/db/migrations/009_metrics.ts).
+
 ## Failure modes
 
 A design contract, not a description of the code — each row is a failure we have committed to
