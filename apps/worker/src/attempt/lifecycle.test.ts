@@ -178,14 +178,7 @@ function fullTelemetryRows(fixture: AttemptFixture) {
       },
     ],
     qualityChecks: [
-      { analysisAttemptId, qualityCheck: 'date_distribution', status: 'success', findings: 1 },
-      {
-        analysisAttemptId,
-        qualityCheck: 'missing_internal_months',
-        status: 'success',
-        findings: 1,
-      },
-      { analysisAttemptId, qualityCheck: 'outlier_line_items', status: 'info', findings: 2 },
+      { analysisAttemptId, qualityCheck: 'date_distribution', status: 'warning', findings: 1 },
       { analysisAttemptId, qualityCheck: 'outlier_line_items', status: 'warning', findings: 3 },
       {
         analysisAttemptId,

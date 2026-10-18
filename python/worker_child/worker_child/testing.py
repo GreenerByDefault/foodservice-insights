@@ -94,10 +94,7 @@ STUB_TELEMETRY: Final[tuple[Telemetry, ...]] = (
     ),
     ReportSummary(
         quality_status="warning",
-        finding_counts=(
-            FindingCount("date_distribution", "success", 1),
-            FindingCount("missing_internal_months", "warning", 1),
-        ),
+        finding_counts=(FindingCount("missing_internal_months", "warning", 1),),
         total_co2e_kg=1_024.5,
         co2e_kg_per_diner_or_meal=0.25,
         plant_pct_by_weight=18.4,

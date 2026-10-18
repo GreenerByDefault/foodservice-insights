@@ -48,7 +48,8 @@ export const DIAGNOSTIC_STATUSES = [
   'error',
 ] as const satisfies readonly DiagnosticStatus[];
 
-/** The statuses the customer's PDF lists, `analysis_attempt_finding_status_is_warning_or_error`. */
+/** The statuses the customer's PDF lists, `analysis_attempt_finding_status_is_warning_or_error`,
+ * and the only ones telemetry counts. */
 export const CUSTOMER_FINDING_STATUSES = [
   'warning',
   'error',

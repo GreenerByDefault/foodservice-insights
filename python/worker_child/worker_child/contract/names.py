@@ -38,7 +38,8 @@ STAGES: Final[tuple[Stage, ...]] = get_args(Stage)
 QUALITY_CHECKS: Final[tuple[QualityCheck, ...]] = get_args(QualityCheck)
 DIAGNOSTIC_STATUSES: Final[tuple[DiagnosticStatus, ...]] = get_args(DiagnosticStatus)
 
-# The statuses the customer's PDF lists, `analysis_attempt_finding_status_is_warning_or_error`.
+# The statuses the customer's PDF lists, `analysis_attempt_finding_status_is_warning_or_error`,
+# and the only ones telemetry counts.
 CustomerFindingStatus = Literal["warning", "error"]
 CUSTOMER_FINDING_STATUSES: Final[tuple[CustomerFindingStatus, ...]] = get_args(
     CustomerFindingStatus

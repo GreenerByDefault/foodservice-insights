@@ -398,9 +398,7 @@ CATEGORIZATION = CategorizationSummary(
 REPORT = ReportSummary(
     quality_status="invalid",
     finding_counts=(
-        FindingCount("date_distribution", "success", 1),
-        FindingCount("missing_internal_months", "success", 1),
-        FindingCount("outlier_line_items", "info", 2),
+        FindingCount("date_distribution", "warning", 1),
         FindingCount("outlier_line_items", "warning", 3),
         FindingCount("per_product_weight_bounds", "error", 1),
     ),
@@ -512,10 +510,19 @@ def _usage(**changes: object) -> TelemetryState:
             replace(
                 FINISHED,
                 report=replace(
-                    REPORT, finding_counts=(FindingCount("date_distribution", "success", 0),)
+                    REPORT, finding_counts=(FindingCount("date_distribution", "warning", 0),)
                 ),
             ),
             id="zero-findings",
+        ),
+        pytest.param(
+            replace(
+                FINISHED,
+                report=replace(
+                    REPORT, finding_counts=(FindingCount("date_distribution", "success", 1),)
+                ),
+            ),
+            id="status-is-success",
         ),
         pytest.param(
             replace(

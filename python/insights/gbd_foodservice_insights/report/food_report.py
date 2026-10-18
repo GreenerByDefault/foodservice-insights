@@ -86,7 +86,8 @@ class ReportSummary:
     """The report's headline numbers, for recording how the analysis went."""
 
     quality_status: QualityStatus
-    # Only the pairs that occurred, sorted by check and then status.
+    # Only the warning and error pairs that occurred, sorted by check and then status. Nearly every
+    # report passes most checks, so success and info counts would only bury what fired.
     finding_counts: tuple[FindingCount, ...]
     total_co2e_kg: float
     # `None` without headcounts.
@@ -193,7 +194,11 @@ def co2e_kg_per_diner_or_meal(report: FoodReport) -> float | None:
 
 
 def summarize_report(report: FoodReport) -> ReportSummary:
-    counts = Counter((finding["category"], finding["status"]) for finding in report.findings)
+    counts = Counter(
+        (finding["category"], finding["status"])
+        for finding in report.findings
+        if finding["status"] in {"warning", "error"}
+    )
     return ReportSummary(
         quality_status=quality_status_from_findings(report.findings),
         finding_counts=tuple(

@@ -375,6 +375,11 @@ def _report_payload(summary: ReportSummary) -> dict[str, Any]:
     _require_percentage("report.plantPctByWeight", summary.plant_pct_by_weight)
     if summary.plant_protein_pct_by_weight is not None:
         _require_percentage("report.plantProteinPctByWeight", summary.plant_protein_pct_by_weight)
+    for count in summary.finding_counts:
+        _require(
+            count.status in CUSTOMER_FINDING_STATUSES,
+            f"report: {count.quality_check} counts {count.status!r} findings, which go unrecorded",
+        )
     pairs = [(count.quality_check, count.status) for count in summary.finding_counts]
     _require(len(set(pairs)) == len(pairs), "report: each quality check and status at most once")
     _require_counts(
