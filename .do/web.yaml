@@ -21,7 +21,7 @@ services:
 
     # Starting thresholds, to tune after the first month of real traffic.
     # *Considered, not done: a request-rate rule.* Nothing yet says what rate is wrong, and
-    # Cloudflare absorbs floods.
+    # App Platform's edge absorbs floods.
     alerts:
       # Requests are waiting on CPU. Rendering a page is mostly waiting on the database.
       - rule: CPU_UTILIZATION

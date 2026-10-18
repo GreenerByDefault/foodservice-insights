@@ -66,8 +66,8 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   unshipped lines with it, and those are the lines that matter. Also, stdout is the whole
   interface (`log.ts`).
 - *Considered, not done: the edge's request id on the access line.* `hooks.server.ts` leaves room
-  for it "once the host is chosen". But the id a user is shown is Cloudflare's Ray ID, on
-  Cloudflare's own error pages, and those appear when our app did not answer. PR 1 trims that
+  for it "once the host is chosen". But the id a user is shown is a Ray ID from App Platform's
+  edge, on its own error pages, and those appear when our app did not answer. PR 1 trims that
   comment.
 
 ## PR 1 — forward to Better Stack

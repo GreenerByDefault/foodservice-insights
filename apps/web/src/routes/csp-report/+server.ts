@@ -9,7 +9,8 @@ const MAX_BODY_BYTES = 64 * 1024;
  * `report-to` in `kit.csp`. Unauthenticated, as every browser sends it.
  *
  * *Rejected: rate-limiting it.* Every unauthenticated URL already costs an access line, and a
- * report at most doubles that; Cloudflare is the layer for floods (REQUIREMENTS § Abuse limits).
+ * report at most doubles that; the host's edge is the layer for floods (REQUIREMENTS § Abuse
+ * limits).
  * *Rejected: a hosted collector such as report-uri.com,* a new vendor for what a log line does. */
 export async function _reportViolations(request: Request): Promise<Response> {
   // SvelteKit fails a body that runs past its `content-length`, so the header can be trusted.

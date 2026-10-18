@@ -29,7 +29,7 @@ keep settled decisions settled — read them before proposing a change.
 | Queue | Postgres |
 | Unit and component tests | vitest |
 | End-to-end tests | Playwright |
-| Edge / DDoS | Cloudflare |
+| Edge / DDoS | The host's own edge; nothing of ours — [§ Hosting](#hosting) |
 | Registry | GHCR, `ghcr.io/greenerbydefault/foodservice-insights/{web,worker}`, tagged by commit SHA |
 | Hosting | DigitalOcean App Platform — [§ Hosting](#hosting) |
 | Email | Postmark, using HTTP and generated emails — [§ Email](#email) |
@@ -377,6 +377,14 @@ code, a shutdown grace long enough to drain the worker, and CPU and memory alert
 We explicitly do not care about autoscaling. Each service is its own app, configured entirely by
 its spec in [`.do/`](.do/README.md).
 
+**No edge of our own sits in front of App Platform.** Its edge is Cloudflare's network, so
+volumetric DDoS protection comes with the host. It passes none of Cloudflare's headers to the app,
+so nothing here learns a visitor's country from the network. *Rejected: a Cloudflare zone of our
+own.* The free plan runs DNS for a whole zone, so it meant moving GBD's website DNS to Cloudflare
+or registering a second domain, plus a Worker to rewrite `Host` the way App Platform's proxy
+guidance requires, to buy a WAF, geo-restriction and country counts that are not worth a vendor
+([why](https://github.com/GreenerByDefault/foodservice-insights/blob/6af236b7c5dcdf58bcf4d05168aeb5ae883a1772/.claude/plans/cloudflare-and-domain.md)).
+
 *Rejected: Railway and Render.* Railway documents neither a digest deploy nor a long shutdown
 grace; Render caps its grace at five minutes and has no native CPU or memory alerts.
 
@@ -493,7 +501,7 @@ when another's inputs fail.
 | --- | --- | --- | --- |
 | Host | DigitalOcean | Each container's resources and restarts, and failed deploys | Each app's spec in [`.do/`](.do/README.md) |
 | Data | Grafana Cloud | The queue and notifications, as the database's rows record them | **Open:** not built yet |
-| Outside | Better Stack | What a user sees, through Cloudflare and DNS | **Open:** not built yet |
+| Outside | Better Stack | What a user sees, through DNS and the host's edge | **Open:** not built yet |
 
 *Rejected: one system evaluating everything.* Each consolidation copies data out of its home, and
 each copy is one more thing that can break silently.

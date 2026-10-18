@@ -3,12 +3,13 @@
 > **Status:** a spec. GBD chose Postmark on 2026-10-14
 > ([the evaluation](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/email-provider.md)),
 > and [`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Email records the choice. The transport is
-> written; what remains is the account and DNS work in § Before PR 1, then one PR that points
-> production at it. That PR deletes this file, and
-> [`production-sign-in.md`](production-sign-in.md) takes over.
+> written; what remains is the account and DNS work in § Before PR 1, which says which steps are
+> GBD's, then one PR that points production at it. That PR deletes this file, and
+> [`production-sign-in.md`](production-sign-in.md) takes over; its § Order of operations places
+> this plan among the others.
 >
 > Vendor facts were read from Postmark's and Supabase's docs on 2026-10-14, and
-> greenerbydefault.org's DNS with `dig` the same day.
+> greenerbydefault.org's DNS with `dig` the same day and again on 2026-10-18, unchanged.
 
 ## Context
 
@@ -24,9 +25,13 @@ codes itself, over SMTP, from the templates in
 Mailpit.
 
 The goal: every message, ours and Supabase's, comes from `insights@greenerbydefault.org`, a real
-Google Workspace mailbox that people read and reply from.
+Google Workspace mailbox that people read and reply from. It is .org rather than .com because
+.org is where GBD's mail already is; the website domain, greenerbydefault.com, has neither DKIM
+nor DMARC. The app itself is at `insights.greenerbydefault.com`
+([`custom-domain.md`](custom-domain.md)), so the mail records and the site's CNAME live in
+different zones and never meet.
 
-That address lives on GBD's existing domain, whose mail setup this plan must not disturb:
+That address lives on GBD's existing mail domain, whose setup this plan must not disturb:
 
 | | Today | This plan |
 | --- | --- | --- |
@@ -77,16 +82,22 @@ Postmark's `auth` stream shows spam complaints or Blocked bounces.
 
 **insights@ is a Workspace user, not a group or an alias.** Each person who answers it is given
 access through Gmail delegation, so they read and reply as insights@ from their own login and
-nobody shares a password. *Rejected: a Google Group.* Groups refuse posts from outside the
+nobody shares a password. On Google Workspace for Nonprofits a user costs nothing; on a paid
+edition it is one seat. *Rejected: a Google Group.* Groups refuse posts from outside the
 organization by default and hold suspected spam for moderation, so a user's reply could sit
 unseen in a queue. *Rejected: an alias on a staff account.* The address would leave with that
 person.
 
-**Addresses.** `EMAIL_FROM_ADDRESS` and `EMAIL_SUPPORT_ADDRESS` are both insights@, so help
-requests and replies land in one place. `EMAIL_GBD_ADDRESS` is a different address. The GBD
-notices (organization created or deleted, user deleted) are operational rather than support, and
-Gmail can file a message that is From and To the same mailbox as sent rather than received.
-**Open:** which address. GBD names it.
+**One address.** `EMAIL_FROM_ADDRESS`, `EMAIL_SUPPORT_ADDRESS` and `EMAIL_GBD_ADDRESS` are all
+insights@, and so is Supabase Auth's sender: the `auth` stream below keeps Supabase's mail apart
+from ours on Postmark's side, so it needs no address of its own. The three variables stay
+separate because they answer different questions (who mail is from, where a user is told to
+write for help, where the GBD notices go), so any one can move later without a code change. The
+one doubt is the GBD notices (organization created or deleted, user deleted), which are From and
+To the same mailbox. Gmail files a message its user sent to their own address under Sent rather
+than Inbox; whether it treats one Postmark sent the same way is checked in § Verification, and if
+it does, `EMAIL_GBD_ADDRESS` moves to a staff address. *Rejected: a second mailbox or a group for
+the notices up front*, for a filing quirk not yet seen.
 
 ### DKIM and a custom Return-Path; SPF and MX untouched
 
@@ -169,40 +180,47 @@ greenerbydefault.org.
 
 ## Before PR 1: accounts and DNS
 
-Do these steps in order: because of `p=reject`, the DNS must verify before the first send.
+Do these steps in order: because of `p=reject`, the DNS must verify before the first send. Eric
+does all of them except the two marked **GBD**, which need a Workspace admin and the Squarespace
+login. Those two, with step 2's values filled in, are what the handoff doc GBD was sent contains;
+this file stays the source of truth for the records.
 
-1. **Workspace (a GBD admin).** Create insights@ as a user. Turn on Mail delegation in the Admin
-   console if it is off, then delegate the mailbox to whoever will answer it.
-2. **Postmark account.**
-   - Have a GBD staff login own the account, and add Eric as a second user;
-     the [hosting analysis](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/hosting-provider.md)
-     already ruled out a shared login.
-   - Create the Server and the `auth` stream. Turn open and link tracking off on both streams;
-     the stream settings are what govern Supabase's mail.
-   - **Request account approval now.** Until Postmark approves the account, it delivers only to
-     domains verified on the account. That is fine for testing on greenerbydefault.org addresses,
-     and a blocker for launch. Describe the use as transactional only: sign-in codes, report
-     results, and invites, sent to people who signed up or were invited, with no marketing.
-3. **Add greenerbydefault.org** under Postmark's Sender Signatures → Domains. Postmark lists two
-   records.
-4. **Squarespace DNS (whoever holds GBD's domain login).** Add exactly those two records as Custom
+1. **Postmark account (Eric).** Create it, with one Server, "Foodservice Insights", holding the
+   default `outbound` stream and a second transactional stream, `auth`. Turn open and link
+   tracking off on both streams; the stream settings are what govern Supabase's mail. Invite a
+   GBD staff login as an Admin and, once they have accepted, transfer ownership to them (Users →
+   your profile → Transfer ownership; the owner is the one billing contact). Eric stays an Admin;
+   the [hosting analysis](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/hosting-provider.md)
+   already ruled out a shared login.
+   **Request account approval now.** Until Postmark approves the account, it delivers only to
+   domains verified on the account. That is fine for testing on greenerbydefault.org addresses,
+   and a blocker for launch; review takes under a day on weekdays. Describe the use as
+   transactional only: sign-in codes, report results, and invites, sent to people who signed up
+   or were invited, with no marketing.
+2. **Add greenerbydefault.org (Eric)** under Postmark's Sender Signatures → Domains. Postmark
+   lists the two records of step 4; copy them into the handoff doc, then send it.
+3. **Workspace (GBD).** Create insights@ as a user named Foodservice Insights. Turn on Mail
+   delegation in the Admin console (Apps → Google Workspace → Gmail → User settings) if it is
+   off, then, signed in as insights@, grant access to whoever will answer it.
+4. **Squarespace DNS (GBD).** On greenerbydefault.org, add exactly those two records as Custom
    Records:
-   - a TXT record at the DKIM host Postmark shows (it ends in `._domainkey`), with the value copied
-     whole;
+   - a TXT record at the DKIM host Postmark shows (it ends in `pm._domainkey`), with the value
+     copied whole;
    - a CNAME record, `pm-bounces` → `pm.mtasv.net`.
 
    Squarespace appends the domain to each host, so enter the host without `.greenerbydefault.org`.
    Change nothing else: MX, SPF, DMARC, and the Google and HubSpot DKIM records stay as they are.
-5. **Confirm, then verify.** `dig +short TXT <host>.greenerbydefault.org` should return Postmark's
-   value, and `dig +short CNAME pm-bounces.greenerbydefault.org` should return `pm.mtasv.net.`.
-   Then press Verify on both records in Postmark.
-6. **Optional: DMARC reports.** greenerbydefault.org has `p=reject` but no `rua`, so nobody sees
-   what receivers reject on its behalf. Postmark's free DMARC digest supplies a reporting address;
-   **edit** the existing `_dmarc` TXT record to `v=DMARC1; p=reject; rua=mailto:<that address>`.
-   Never add a second `_dmarc` record: two DMARC records are invalid, receivers then ignore both,
-   and the domain loses its spoofing protection. The record covers all of GBD's mail, so this is
-   GBD's call; the plan works without it.
-7. **Make a first send** with the Server API token, to a greenerbydefault.org address:
+   [`custom-domain.md`](custom-domain.md)'s CNAME goes on greenerbydefault.com in the same sitting.
+5. **Confirm, then verify (Eric).** `dig +short TXT <host>.greenerbydefault.org` should return
+   Postmark's value, and `dig +short CNAME pm-bounces.greenerbydefault.org` should return
+   `pm.mtasv.net.`. Then press Verify on both records in Postmark.
+6. **Optional: DMARC reports (GBD's call).** greenerbydefault.org has `p=reject` but no `rua`,
+   so nobody sees what receivers reject on its behalf. Postmark's free DMARC digest supplies a
+   reporting address; **edit** the existing `_dmarc` TXT record to
+   `v=DMARC1; p=reject; rua=mailto:<that address>`. Never add a second `_dmarc` record: two DMARC
+   records are invalid, receivers then ignore both, and the domain loses its spoofing protection.
+   The record covers all of GBD's mail, so it is GBD's call; the plan works without it.
+7. **Make a first send (Eric)** with the Server API token, to a greenerbydefault.org address:
 
    ```sh
    curl https://api.postmarkapp.com/email \
@@ -219,7 +237,8 @@ Do these steps in order: because of `p=reject`, the DNS must verify before the f
 
 ### Supabase Auth's settings
 
-After step 7, in the production project's dashboard:
+After step 7, in the production project's dashboard (Authentication → Emails holds SMTP and the
+templates; Authentication → Rate Limits, the limit):
 
 - **SMTP:** host `smtp.postmarkapp.com`, port 587. The username and password are the access key
   and secret key of the `auth` stream's SMTP token. The sender is `insights@greenerbydefault.org`,
@@ -245,14 +264,13 @@ GitHub Environment before merging: an unset `${NAME}` fails the deploy
 
 - **Both app specs, `.do/web.yaml` and `.do/worker.yaml`:**
   - `EMAIL_TRANSPORT=postmark`, replacing `provider`;
-  - `POSTMARK_SERVER_TOKEN` as a `type: SECRET` entry with value `${POSTMARK_SERVER_TOKEN}`;
-  - `EMAIL_GBD_ADDRESS` set to the address GBD names, replacing the insights@ stand-in.
+  - `POSTMARK_SERVER_TOKEN` as a `type: SECRET` entry with value `${POSTMARK_SERVER_TOKEN}`.
 
-  `EMAIL_FROM_ADDRESS` and `EMAIL_SUPPORT_ADDRESS` are already insights@. The worker needs the
-  token too, because `@gbd/email/env` builds the same transport.
+  The three addresses are already insights@. The worker needs the token too, because
+  `@gbd/email/env` builds the same transport.
 - **Delete the stub:** `provider.ts`, its test, its export, its `TransportName` member and the
   `provider` cases in `transports/index.ts` and `index.test.ts`, and the `.do/README.md` bullet
-  that explains it.
+  that explains it and calls `EMAIL_GBD_ADDRESS` a stand-in.
 - **Both local `config.toml`s gain `[auth.email.template.confirmation]` → `sign-in-code.html`.** It
   goes unused while local confirmation is off, but this way the repo names every template
   production uses. Beside the template stanzas, add one comment: production's copies are pasted
@@ -269,6 +287,8 @@ GitHub Environment before merging: an unset `${NAME}` fails the deploy
 - A reply to each lands in insights@. A delegate's message sent as insights@ reaches an outside
   address and passes DMARC through Google's own signing, which proves Workspace still uses the
   address fully.
+- The first GBD notice (create an organization) shows in insights@'s Inbox, not only in All Mail.
+  If Gmail filed it as sent, point `EMAIL_GBD_ADDRESS` at a staff address (§ Decisions).
 - After approval, an outside Gmail address and an Outlook.com address each receive both kinds of
   email in the inbox, not in spam.
 - Postmark's activity shows app mail on `outbound`, tagged by kind, and codes on `auth`.

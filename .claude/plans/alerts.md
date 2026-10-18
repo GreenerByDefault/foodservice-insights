@@ -65,7 +65,7 @@ two layers left to build:
 | Outside | Better Stack | The public `/health/ready`; any `error` log line | Its UI |
 
 The data alerts fire when the host is healthy but the queue is not. The monitor is the one alert
-that sees what a user sees, so it fires when Cloudflare, DNS or TLS is what broke.
+that sees what a user sees, so it fires when the host's edge, DNS or TLS is what broke.
 
 ### Docs land with each PR
 
@@ -154,10 +154,9 @@ secret key, so it can be revoked on its own.
 
 ### Outside: Better Stack
 
-- **One monitor on the public `/health/ready`**, through the same Cloudflare and DNS a user goes
+- **One monitor on the public `/health/ready`**, through the same DNS and edge a user goes
   through, every 3 minutes on the free plan. It watches the starter domain until
-  [`cloudflare-and-domain.md`](cloudflare-and-domain.md) moves users to our domain, and then
-  moves with them. Three minutes is slow for a page, but the host's readiness probe and the data
+  [`custom-domain.md`](custom-domain.md) moves users to our domain, and then moves with them. Three minutes is slow for a page, but the host's readiness probe and the data
   rules see most outages sooner. *Considered, not done: paying for 30-second checks.* Buy them if
   an outage is ever reported to us before the monitor fires.
 - **An alert on any `error` line** from either app. `error` is already kept for things a person
@@ -173,10 +172,10 @@ secret key, so it can be revoked on its own.
   is alive" during a quiet hour. Every failure mode is caught without it: a dead fleet shows up as
   queue wait once there is demand, and a crash loop as `RESTART_COUNT`. Add one if that
   quiet-hour notice is ever missed.
-- *Considered, not done: a scheduled check that submits a form.* A wrong `HOST_HEADER` fails every
-  mutating request while every GET passes. But `cloudflare-and-domain.md` checks that by hand,
-  and it changes only with configuration. A mutating request every few minutes in production
-  would also write rows into the very metrics these rules count.
+- *Considered, not done: a scheduled check that submits a form.* A wrong `PROTOCOL_HEADER` fails
+  every mutating request while every GET passes. But [`custom-domain.md`](custom-domain.md)
+  checks that by hand, and it changes only with configuration. A mutating request every few
+  minutes in production would also write rows into the very metrics these rules count.
 - *Rejected: an error tracker (Sentry, or Better Stack's own).* It means an SDK in both processes,
   and what it buys is grouping. That matters only once errors are too frequent to read one by one,
   and until then the `error`-line alert is the same signal.
