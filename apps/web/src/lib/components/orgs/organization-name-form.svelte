@@ -14,16 +14,24 @@ interface Props {
   initialName: string;
   /** A `Field.Legend` above the field, for a form embedded in a page with other content (the
    * rename form, next to delete). Omitted, the field's own visible label is enough (the
-   * create-organization page has nothing else on it). */
+   * create-organization page, where it is the only field). */
   legend?: string;
+  description?: string;
   submitLabel: string;
   submittingLabel: string;
   unknownNotice: Snippet;
   onSubmit: (name: string) => Promise<'done' | OrganizationNameFailure>;
 }
 
-let { initialName, legend, submitLabel, submittingLabel, unknownNotice, onSubmit }: Props =
-  $props();
+let {
+  initialName,
+  legend,
+  description,
+  submitLabel,
+  submittingLabel,
+  unknownNotice,
+  onSubmit,
+}: Props = $props();
 
 // Seeded once and never re-synced to `initialName`. Reassigning a destructured prop directly is
 // Svelte's documented pattern for unsaved, ephemeral state, but the override only survives until
@@ -53,6 +61,14 @@ let formState: FormState = $state({ status: 'idle' });
 let nameInputElement: HTMLInputElement | null = $state(null);
 const id = $props.id();
 const nameErrorId = `${id}-name-error`;
+const nameDescriptionId = `${id}-name-description`;
+
+const describedBy = $derived.by(
+  () =>
+    [description && nameDescriptionId, formState.status === 'failed' && nameErrorId]
+      .filter(Boolean)
+      .join(' ') || undefined,
+);
 
 async function handleSubmit(event: SubmitEvent) {
   event.preventDefault();
@@ -90,9 +106,12 @@ async function handleSubmit(event: SubmitEvent) {
       required
       autocomplete="off"
       aria-invalid={formState.status === 'failed' || undefined}
-      aria-describedby={formState.status === 'failed' ? nameErrorId : undefined}
+      aria-describedby={describedBy}
       bind:value={name}
     />
+    {#if description}
+      <Field.Description id={nameDescriptionId}>{description}</Field.Description>
+    {/if}
     {#if formState.status === 'failed'}
       <Field.Error id={nameErrorId}>{FAILURE_MESSAGES[formState.failure]}</Field.Error>
     {/if}

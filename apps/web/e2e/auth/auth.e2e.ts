@@ -132,6 +132,6 @@ test.describe('signed out', () => {
     // They belong to no organization, so `/orgs` sends them on to make one.
     await expect(page).toHaveURL('/orgs/new');
     await page.getByRole('button', { name: 'Account menu' }).click();
-    await expect(page.getByText(person.email)).toBeVisible();
+    await expect(page.getByRole('menu').getByText(person.email)).toBeVisible();
   });
 });

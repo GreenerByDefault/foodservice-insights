@@ -19,7 +19,8 @@ test('uploading a good CSV creates a report and lands on its page, which reads b
 }) => {
   await page.goto(`/orgs/${org.slug}`);
   await ensureHydrated(page);
-  await page.getByRole('link', { name: 'New report' }).click();
+  // The heading's; the empty reports list offers a second.
+  await page.getByRole('link', { name: 'New report' }).first().click();
 
   await page.getByLabel('Report name').fill('Q1 procurement');
   await chooseCsv(page, 'procurement.csv', GOOD_CSV);

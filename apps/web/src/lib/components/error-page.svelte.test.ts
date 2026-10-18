@@ -84,7 +84,9 @@ describe('ErrorPage', () => {
     stubFetch(new Response(null, { status: 204 }));
     const screen = await render(ErrorPage, { status: 403, code: 'onboarding_required' });
 
-    await expect.element(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome');
+    await expect
+      .element(screen.getByRole('heading', { level: 1 }))
+      .toHaveTextContent('Welcome to Foodservice Insights');
     expect(screen.getByText("You don't have access").elements()).toHaveLength(0);
     await screen.getByLabelText('Your name').fill('Ada Lovelace');
     await screen.getByRole('button', { name: 'Continue' }).click();

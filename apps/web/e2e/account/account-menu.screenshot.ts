@@ -15,10 +15,10 @@ test('the account menu, open', async ({ page, organizations }) => {
   await ensureHydrated(page);
 
   await page.getByRole('button', { name: 'Account menu' }).click();
-  await expect(page.getByRole('menuitem', { name: 'Account' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Your account' })).toBeVisible();
 
   // Hover it so the committed image also shows the hover affordance.
-  await page.getByRole('menuitem', { name: 'Account' }).hover();
+  await page.getByRole('menuitem', { name: 'Your account' }).hover();
 
   await expectScreenshots(page, 'menu.png');
 });

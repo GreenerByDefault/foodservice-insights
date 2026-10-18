@@ -81,7 +81,7 @@ async function signOut() {
       })}
         <a {...props} href="/account" class={cnChildProps(props, 'flex items-center gap-2')}>
           <UserIcon class="size-4 shrink-0" />
-          Account
+          Your account
         </a>
       {/snippet}
     </DropdownMenu.Item>
@@ -92,7 +92,7 @@ async function signOut() {
       })}
         <a {...props} href="/invites" class={cnChildProps(props, 'flex items-center gap-2')}>
           <MailIcon class="size-4 shrink-0" />
-          Invitations
+          Your invitations
         </a>
       {/snippet}
     </DropdownMenu.Item>

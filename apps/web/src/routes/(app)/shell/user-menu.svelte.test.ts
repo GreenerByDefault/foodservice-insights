@@ -77,7 +77,7 @@ describe('UserMenu', () => {
     const screen = await opened({ email: 'ana@example.test', displayName: 'Ana Ruiz' });
 
     await expect
-      .element(screen.getByRole('menuitem', { name: 'Account' }))
+      .element(screen.getByRole('menuitem', { name: 'Your account' }))
       .toHaveAttribute('href', '/account');
   });
 
@@ -85,7 +85,7 @@ describe('UserMenu', () => {
     const screen = await opened({ email: 'ana@example.test', displayName: 'Ana Ruiz' });
 
     await expect
-      .element(screen.getByRole('menuitem', { name: 'Invitations' }))
+      .element(screen.getByRole('menuitem', { name: 'Your invitations' }))
       .toHaveAttribute('href', '/invites');
   });
 
