@@ -10,6 +10,7 @@ import type { DatabaseExecutor } from '@gbd/db';
 import {
   type AnalysisAttemptId,
   type CountsBasis,
+  insertSuggestedProductCategorizations,
   listVerifiedProductCategorizations,
   newResultFileId,
   type OrganizationId,
@@ -20,6 +21,7 @@ import { type BlobStore, getObject, isBlobStoreError, putResultFile } from '@gbd
 import {
   createRunDirectory,
   readFailure,
+  readNewCategorizations,
   readResult,
   readResultFiles,
   readTelemetry,
@@ -31,7 +33,7 @@ import {
 import { type ChildOutcome, type RunningChild, spawnChild } from '../child/spawn.ts';
 import type { WorkerConfig } from '../config.ts';
 import { RESULT_FILE_NAMES } from '../contract/layout.ts';
-import { buildRunManifest, type Telemetry } from '../contract/messages.ts';
+import { buildRunManifest, type NewCategorizations, type Telemetry } from '../contract/messages.ts';
 import { classifyAttemptFailure } from '../failures.ts';
 import { retryOnTransientDbError } from '../retry.ts';
 import {
@@ -236,9 +238,15 @@ export async function readChildEnding(
         prepared.runDirectory,
         declaredResultFiles().map((file) => file.fileName),
       );
+      const newCategorizations = await readNewCategorizations(prepared.runDirectory);
       return {
         ...notRead,
-        read: { kind: 'result', result, missingResultFiles: missing },
+        read: {
+          kind: 'result',
+          result,
+          missingResultFiles: missing,
+          newCategorizations: newCategorizations?.rows,
+        },
         resultFileContents: contents,
       };
     }
@@ -435,15 +443,53 @@ export async function deliverVerdict(
       : pending;
   if (stored.stage === 'upload') return { kind: 'parked', pending: stored };
 
+  let won: boolean;
   try {
-    const won = await recordVerdict(dependencies, prepared, stored.verdict);
-    return won ? { kind: 'recorded' } : { kind: 'lost' };
+    won = await recordVerdict(dependencies, prepared, stored.verdict);
   } catch (error) {
     prepared.log.error(
       { verdict: stored.verdict.kind, err: error },
       'Could not record the verdict; parking it for the next direct tick to retry',
     );
     return { kind: 'parked', pending: stored };
+  }
+  if (!won) return { kind: 'lost' };
+
+  if (stored.verdict.kind === 'succeeded') {
+    await harvestSuggestions(dependencies, prepared, stored.verdict.newCategorizations);
+  }
+  return { kind: 'recorded' };
+}
+
+/** Insert what the child's LLM categorized as unverified suggestions. Never throws: the cache must
+ * not decide a finished report's fate, and a lost suggestion costs one LLM call on a later run.
+ * *Rejected: inserting inside `markAttemptSucceeded`'s transaction*, where a failing row would fail
+ * the delivery of a paid-for report.
+ */
+async function harvestSuggestions(
+  dependencies: AttemptDependencies,
+  { attemptId, log }: AttemptLog,
+  rows: NewCategorizations['rows'],
+): Promise<void> {
+  try {
+    await retryOnTransientDbError(
+      () =>
+        insertSuggestedProductCategorizations(dependencies.cacheDb, rows, {
+          // The worker id tells a laptop's run from the fleet's, whose attempt ids are not in the
+          // same database.
+          suggestedBy: `attempt:${attemptId} ${dependencies.workerId}`,
+        }),
+      {
+        action: 'suggest the new product categorizations',
+        log,
+        waitsMs: dependencies.transientRetryWaitsMs,
+      },
+    );
+  } catch (error) {
+    log.error(
+      { err: error, suggestions: rows.length },
+      'Could not suggest the new product categorizations; dropping them',
+    );
   }
 }
 

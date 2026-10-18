@@ -81,6 +81,23 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
       llmUsageRows: 0,
     });
 
+  // The real child's `new-categorizations.json`, harvested by the real parent after the verdict.
+  await expect
+    .poll(
+      async () =>
+        await db
+          .selectFrom('productCategorization')
+          .select(['category', 'isVerified', 'suggestedBy'])
+          .where('product', '=', 'beef')
+          .executeTakeFirst(),
+      { timeout: LIFECYCLE_TIMEOUT_MS },
+    )
+    .toEqual({
+      category: 'Beef and Buffalo Meat',
+      isVerified: false,
+      suggestedBy: expect.stringMatching(/^attempt:[0-9a-f-]{36} \S+$/),
+    });
+
   // Set at claim from the image's `GIT_SHA` build arg, which only a real image build exercises.
   const attempt = await db
     .selectFrom('analysisAttempt')

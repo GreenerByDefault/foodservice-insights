@@ -16,8 +16,10 @@ import {
   type CategorizationCache,
   type ChildFailure,
   type ChildResult,
+  type NewCategorizations,
   type Progress,
   parseFailure,
+  parseNewCategorizations,
   parseProgress,
   parseResult,
   parseTelemetry,
@@ -68,6 +70,12 @@ export async function readFailure(runDirectory: string): Promise<ChildFailure | 
 
 export async function readTelemetry(runDirectory: string): Promise<Telemetry | undefined> {
   return await readDocument(runDirectory, 'telemetry', parseTelemetry);
+}
+
+export async function readNewCategorizations(
+  runDirectory: string,
+): Promise<NewCategorizations | undefined> {
+  return await readDocument(runDirectory, 'newCategorizations', parseNewCategorizations);
 }
 
 /** Does not mind the tree being gone already, so it is safe in the `finally` that always calls it. */

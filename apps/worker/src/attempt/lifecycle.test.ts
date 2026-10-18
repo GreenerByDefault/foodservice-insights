@@ -22,7 +22,11 @@ import { breakableBlobStore } from '@gbd/storage/testing';
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { RESULT_FILE_NAMES, resultFilePath, runPath } from '../contract/layout.ts';
-import { parseCategorizationCache, type Telemetry } from '../contract/messages.ts';
+import {
+  type NewCategorizations,
+  parseCategorizationCache,
+  type Telemetry,
+} from '../contract/messages.ts';
 import { WORKER_DATABASE } from '../db.ts';
 import type { AttemptFixture } from '../testing/attempt-fixture.ts';
 import { withAttemptFixture } from '../testing/attempt-fixture.ts';
@@ -238,52 +242,142 @@ function partialTelemetryRows(fixture: AttemptFixture) {
   };
 }
 
+/** Hands `run` rows no other test suggests, and deletes them afterwards: the cache table is not
+ * keyed on organizations, so `withAttemptFixture`'s cleanup never reaches it. */
+async function withNewCategorizations(
+  run: (rows: NewCategorizations['rows']) => Promise<void>,
+): Promise<void> {
+  const id = crypto.randomUUID();
+  const rows = [
+    { product: `MYSTERY ${id}`, cleanedName: null, category: 'No Matches Found' },
+    { product: `OAT MLK ${id}`, cleanedName: 'oat milk', category: 'Oat Milk' },
+  ];
+  try {
+    await run(rows);
+  } finally {
+    await WORKER_DATABASE.deleteFrom('productCategorization')
+      .where('product', 'in', productsOf(rows))
+      .execute();
+  }
+}
+
+async function readSuggestions(rows: NewCategorizations['rows']) {
+  return await WORKER_DATABASE.selectFrom('productCategorization')
+    .select(['product', 'cleanedName', 'category', 'isVerified', 'suggestedBy'])
+    .where('product', 'in', productsOf(rows))
+    .orderBy('product')
+    .execute();
+}
+
+function productsOf(rows: NewCategorizations['rows']): string[] {
+  return rows.map(({ product }) => product);
+}
+
 function errorRecords(records: readonly { level: string; msg?: unknown }[]) {
   return records.filter((record) => record.level === 'error');
 }
 
 describe('a successful attempt, end to end', () => {
-  test('uploads every declared file and records the telemetry', async () => {
+  test('uploads every declared file, records the telemetry, and suggests the new categorizations', async () => {
     const workerId = aWorkerId();
-    await withAttemptFixture(workerId, async (fixture) => {
-      const steps: FakeChildStep[] = [
-        { step: 'progress', sequence: 1 },
-        { step: 'telemetry' },
-        { step: 'result' },
-        { step: 'exit', code: 0 },
-      ];
+    await withNewCategorizations(async (newCategorizations) => {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const steps: FakeChildStep[] = [
+          { step: 'progress', sequence: 1 },
+          { step: 'telemetry' },
+          { step: 'result', newCategorizations },
+          { step: 'exit', code: 0 },
+        ];
 
-      const prepared = await startAttempt(
-        dependencies(fixture, workerId, steps),
-        fixture.attemptId,
-      );
-      const outcome = await prepared.child.exited;
-      const ending = await readChildEnding(prepared, outcome);
-      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
+        const prepared = await startAttempt(
+          dependencies(fixture, workerId, steps),
+          fixture.attemptId,
+        );
+        const outcome = await prepared.child.exited;
+        const ending = await readChildEnding(prepared, outcome);
+        const settled = await settleAttempt(
+          dependencies(fixture, workerId, steps),
+          prepared,
+          ending,
+        );
 
-      expect(settled).toEqual({ kind: 'recorded' });
-      expect(existsSync(prepared.runDirectory)).toBe(false);
+        expect(settled).toEqual({ kind: 'recorded' });
+        expect(existsSync(prepared.runDirectory)).toBe(false);
 
-      const attempt = await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId);
-      expect(attempt.status).toBe('succeeded');
-      expect(attempt.finishedAt).toBeInstanceOf(Date);
+        const attempt = await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId);
+        expect(attempt.status).toBe('succeeded');
+        expect(attempt.finishedAt).toBeInstanceOf(Date);
 
-      const resultFiles = await readResultFiles(fixture.attemptId);
-      expect(resultFiles).toHaveLength(2);
-      for (const row of resultFiles) {
-        const fileName = fileNameFor(row);
-        const body = await getObject(BLOB_STORE, row.storageKey);
-        expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileName));
-      }
+        const resultFiles = await readResultFiles(fixture.attemptId);
+        expect(resultFiles).toHaveLength(2);
+        for (const row of resultFiles) {
+          const fileName = fileNameFor(row);
+          const body = await getObject(BLOB_STORE, row.storageKey);
+          expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileName));
+        }
 
-      expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
+        expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
+
+        expect(await readSuggestions(newCategorizations)).toEqual(
+          newCategorizations.map((row) => ({
+            ...row,
+            isVerified: false,
+            suggestedBy: `attempt:${fixture.attemptId} ${workerId}`,
+          })),
+        );
+      });
     });
+  });
+
+  test('a cache database it cannot write to still records the verdict, and logs one error', async () => {
+    const workerId = aWorkerId();
+    const breakable = await breakableDatabase();
+    try {
+      await withNewCategorizations(async (newCategorizations) => {
+        await withAttemptFixture(workerId, async (fixture) => {
+          const steps: FakeChildStep[] = [
+            { step: 'result', newCategorizations },
+            { step: 'exit', code: 0 },
+          ];
+          const { log, records } = collectingLogger();
+          const attemptDependencies = {
+            ...dependencies(fixture, workerId, steps, log),
+            cacheDb: breakable.service,
+          };
+
+          const prepared = await startAttempt(attemptDependencies, fixture.attemptId);
+          const ending = await readChildEnding(prepared, await prepared.child.exited);
+          breakable.break();
+          const settled = await settleAttempt(attemptDependencies, prepared, ending);
+          breakable.restore();
+
+          expect(settled).toEqual({ kind: 'recorded' });
+          expect((await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).status).toBe(
+            'succeeded',
+          );
+          expect(await readSuggestions(newCategorizations)).toEqual([]);
+          expect(errorRecords(records)).toEqual([
+            {
+              level: 'error',
+              msg: 'Could not suggest the new product categorizations; dropping them',
+              attemptId: fixture.attemptId,
+              reportId: fixture.reportId,
+              suggestions: 2,
+              err: expect.anything(),
+            },
+          ]);
+        });
+      });
+    } finally {
+      await breakable.close();
+    }
   });
 });
 
 describe('parks instead of losing the verdict', () => {
   /** The shape shared by every test below, whichever dependency turned out to be unreachable:
-   * break it, settle against it, land on `stage`, restore it, then resume and land on `recorded`.
+   * break it, settle against it, land on `stage`, restore it, then resume and land on `recorded`,
+   * suggesting `newCategorizations` only then.
    *
    * `dependencies` carries the same `breakable.service` throughout — recovery is that one
    * handle coming back, not a second object standing in for it.
@@ -295,6 +389,7 @@ describe('parks instead of losing the verdict', () => {
     prepared: PreparedAttempt,
     ending: ReadEnding,
     stage: PendingVerdict['stage'],
+    newCategorizations: NewCategorizations['rows'],
   ): Promise<void> {
     breakable.break();
     const parked = await settleAttempt(dependencies, prepared, ending);
@@ -309,6 +404,7 @@ describe('parks instead of losing the verdict', () => {
     expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
     // The bytes outlive the run directory, which is what makes the resume below possible.
     expect(existsSync(prepared.runDirectory)).toBe(false);
+    expect(await readSuggestions(newCategorizations)).toEqual([]);
 
     if (parked.kind !== 'parked') throw new Error('expected a parked verdict');
     breakable.restore();
@@ -324,6 +420,9 @@ describe('parks instead of losing the verdict', () => {
       const body = await getObject(BLOB_STORE, row.storageKey);
       expect(new TextDecoder().decode(body)).toBe(fakeResultFileContents(fileNameFor(row)));
     }
+    expect(productsOf(await readSuggestions(newCategorizations))).toEqual(
+      productsOf(newCategorizations),
+    );
   }
 
   describe('a blob store that cannot be reached', () => {
@@ -331,22 +430,28 @@ describe('parks instead of losing the verdict', () => {
       const workerId = aWorkerId();
       const breakable = await breakableBlobStore();
       try {
-        await withAttemptFixture(workerId, async (fixture) => {
-          const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
-          const working = dependencies(fixture, workerId, steps);
-          const withBreakableStore = { ...working, store: breakable.service };
+        await withNewCategorizations(async (newCategorizations) => {
+          await withAttemptFixture(workerId, async (fixture) => {
+            const steps: FakeChildStep[] = [
+              { step: 'result', newCategorizations },
+              { step: 'exit', code: 0 },
+            ];
+            const working = dependencies(fixture, workerId, steps);
+            const withBreakableStore = { ...working, store: breakable.service };
 
-          const prepared = await startAttempt(working, fixture.attemptId);
-          const ending = await readChildEnding(prepared, await prepared.child.exited);
+            const prepared = await startAttempt(working, fixture.attemptId);
+            const ending = await readChildEnding(prepared, await prepared.child.exited);
 
-          await expectParkThenResume(
-            fixture,
-            withBreakableStore,
-            breakable,
-            prepared,
-            ending,
-            'upload',
-          );
+            await expectParkThenResume(
+              fixture,
+              withBreakableStore,
+              breakable,
+              prepared,
+              ending,
+              'upload',
+              newCategorizations,
+            );
+          });
         });
       } finally {
         await breakable.close();
@@ -387,24 +492,30 @@ describe('parks instead of losing the verdict', () => {
       const workerId = aWorkerId();
       const breakable = await breakableDatabase();
       try {
-        await withAttemptFixture(workerId, async (fixture) => {
-          const steps: FakeChildStep[] = [{ step: 'result' }, { step: 'exit', code: 0 }];
-          const working = dependencies(fixture, workerId, steps);
-          const withBreakableDb = { ...working, db: breakable.service };
+        await withNewCategorizations(async (newCategorizations) => {
+          await withAttemptFixture(workerId, async (fixture) => {
+            const steps: FakeChildStep[] = [
+              { step: 'result', newCategorizations },
+              { step: 'exit', code: 0 },
+            ];
+            const working = dependencies(fixture, workerId, steps);
+            const withBreakableDb = { ...working, db: breakable.service };
 
-          const prepared = await startAttempt(working, fixture.attemptId);
-          const ending = await readChildEnding(prepared, await prepared.child.exited);
+            const prepared = await startAttempt(working, fixture.attemptId);
+            const ending = await readChildEnding(prepared, await prepared.child.exited);
 
-          // The store is fine, so the upload stage clears; only the guarded write is left, and
-          // that's what breaking the database parks.
-          await expectParkThenResume(
-            fixture,
-            withBreakableDb,
-            breakable,
-            prepared,
-            ending,
-            'record',
-          );
+            // The store is fine, so the upload stage clears; only the guarded write is left, and
+            // that's what breaking the database parks.
+            await expectParkThenResume(
+              fixture,
+              withBreakableDb,
+              breakable,
+              prepared,
+              ending,
+              'record',
+              newCategorizations,
+            );
+          });
         });
       } finally {
         await breakable.close();
@@ -487,21 +598,65 @@ describe('failure rows', () => {
       };
     }
 
-    test('a declared file missing writes no result_file rows and no objects', async () => {
+    test('a declared file missing writes no result_file rows, no objects, and no suggestions', async () => {
+      const workerId = aWorkerId();
+      await withNewCategorizations(async (newCategorizations) => {
+        await withAttemptFixture(workerId, async (fixture) => {
+          const steps: FakeChildStep[] = [
+            { step: 'result', withoutFiles: ['report.xlsx'], newCategorizations },
+            { step: 'exit', code: 0 },
+          ];
+
+          const { prepared, settled } = await runAndSettle(fixture, workerId, steps);
+
+          expect(settled).toEqual({ kind: 'recorded' });
+          expect(existsSync(prepared.runDirectory)).toBe(false);
+          const attempt = await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId);
+          expect(attempt).toMatchObject({ status: 'failed', failureReason: 'contract_violation' });
+          expect(attempt.failureDetail).toContain('report.xlsx');
+          expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+          expect(await readSuggestions(newCategorizations)).toEqual([]);
+        });
+      });
+    });
+
+    test('exit 0 without new-categorizations.json', async () => {
       const workerId = aWorkerId();
       await withAttemptFixture(workerId, async (fixture) => {
         const steps: FakeChildStep[] = [
-          { step: 'result', withoutFiles: ['report.xlsx'] },
+          { step: 'result', withoutNewCategorizations: true },
           { step: 'exit', code: 0 },
         ];
 
-        const { prepared, settled } = await runAndSettle(fixture, workerId, steps);
+        const { settled } = await runAndSettle(fixture, workerId, steps);
 
         expect(settled).toEqual({ kind: 'recorded' });
-        expect(existsSync(prepared.runDirectory)).toBe(false);
-        const attempt = await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId);
-        expect(attempt).toMatchObject({ status: 'failed', failureReason: 'contract_violation' });
-        expect(attempt.failureDetail).toContain('report.xlsx');
+        expect(await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).toMatchObject({
+          status: 'failed',
+          failureReason: 'contract_violation',
+          failureDetail: 'exited 0 without writing new-categorizations.json',
+        });
+        expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+      });
+    });
+
+    test('a malformed new-categorizations.json', async () => {
+      const workerId = aWorkerId();
+      await withAttemptFixture(workerId, async (fixture) => {
+        const steps: FakeChildStep[] = [
+          { step: 'writeRaw', entry: 'newCategorizations', contents: 'not json' },
+          { step: 'result', withoutNewCategorizations: true },
+          { step: 'exit', code: 0 },
+        ];
+
+        const { settled } = await runAndSettle(fixture, workerId, steps);
+
+        expect(settled).toEqual({ kind: 'recorded' });
+        expect(await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).toMatchObject({
+          status: 'failed',
+          failureReason: 'contract_violation',
+          failureDetail: 'new-categorizations.json: not valid JSON',
+        });
         expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
       });
     });
@@ -868,44 +1023,51 @@ describe('kills', () => {
 describe('losing the race to record a verdict', () => {
   test('a writer that finished the attempt first leaves settleAttempt lost, not recorded', async () => {
     const workerId = aWorkerId();
-    await withAttemptFixture(workerId, async (fixture) => {
-      const steps: FakeChildStep[] = [
-        { step: 'telemetry' },
-        { step: 'result' },
-        { step: 'exit', code: 0 },
-      ];
+    await withNewCategorizations(async (newCategorizations) => {
+      await withAttemptFixture(workerId, async (fixture) => {
+        const steps: FakeChildStep[] = [
+          { step: 'telemetry' },
+          { step: 'result', newCategorizations },
+          { step: 'exit', code: 0 },
+        ];
 
-      const prepared = await startAttempt(
-        dependencies(fixture, workerId, steps),
-        fixture.attemptId,
-      );
-      const outcome = await prepared.child.exited;
-      const ending = await readChildEnding(prepared, outcome);
+        const prepared = await startAttempt(
+          dependencies(fixture, workerId, steps),
+          fixture.attemptId,
+        );
+        const outcome = await prepared.child.exited;
+        const ending = await readChildEnding(prepared, outcome);
 
-      // Stand in for the reaper (or a retried call that already committed): the attempt is no
-      // longer `processing`, so classifyVerdict's `succeeded` verdict can no longer be written —
-      // exactly the case `kills`' fenced/lost tests don't reach, since those short-circuit to
-      // `unowned` before settleAttempt ever tries a write.
-      await markAttemptFailed(WORKER_DATABASE, fixture.attemptId, workerId, {
-        reason: 'hard_timeout',
-        detail: 'reaped before this settle ran',
+        // Stand in for the reaper (or a retried call that already committed): the attempt is no
+        // longer `processing`, so classifyVerdict's `succeeded` verdict can no longer be written —
+        // exactly the case `kills`' fenced/lost tests don't reach, since those short-circuit to
+        // `unowned` before settleAttempt ever tries a write.
+        await markAttemptFailed(WORKER_DATABASE, fixture.attemptId, workerId, {
+          reason: 'hard_timeout',
+          detail: 'reaped before this settle ran',
+        });
+
+        const settled = await settleAttempt(
+          dependencies(fixture, workerId, steps),
+          prepared,
+          ending,
+        );
+
+        expect(settled).toEqual({ kind: 'lost' });
+        expect(existsSync(prepared.runDirectory)).toBe(false);
+        // The reaper's write stands: settleAttempt did not overwrite it with the `succeeded` verdict
+        // it computed.
+        expect(await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).toMatchObject({
+          status: 'failed',
+          failureReason: 'hard_timeout',
+        });
+        // The guarded insert never ran, so no result_file rows exist even though the objects were
+        // already uploaded.
+        expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
+        // The verdict is not ours, but what the child spent is.
+        expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
+        expect(await readSuggestions(newCategorizations)).toEqual([]);
       });
-
-      const settled = await settleAttempt(dependencies(fixture, workerId, steps), prepared, ending);
-
-      expect(settled).toEqual({ kind: 'lost' });
-      expect(existsSync(prepared.runDirectory)).toBe(false);
-      // The reaper's write stands: settleAttempt did not overwrite it with the `succeeded` verdict
-      // it computed.
-      expect(await readAnalysisAttemptRow(WORKER_DATABASE, fixture.attemptId)).toMatchObject({
-        status: 'failed',
-        failureReason: 'hard_timeout',
-      });
-      // The guarded insert never ran, so no result_file rows exist even though the objects were
-      // already uploaded.
-      expect(await readResultFiles(fixture.attemptId)).toHaveLength(0);
-      // The verdict is not ours, but what the child spent is.
-      expect(await readTelemetryRows(fixture.attemptId)).toEqual(fullTelemetryRows(fixture));
     });
   });
 });

@@ -11,6 +11,17 @@ const A_RESULT: Extract<DocumentRead, { kind: 'result' }>['result'] = {
   analysisAttemptId: '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f',
 };
 
+const NEW_CATEGORIZATIONS = [
+  { product: 'OAT MLK 1/2 GAL', cleanedName: 'oat milk', category: 'Oat Milk' },
+];
+
+const A_COMPLETE_RESULT: DocumentRead = {
+  kind: 'result',
+  result: A_RESULT,
+  missingResultFiles: [],
+  newCategorizations: NEW_CATEGORIZATIONS,
+};
+
 const A_FAILURE: Extract<DocumentRead, { kind: 'failure' }>['failure'] = {
   reason: 'upstream_api',
   detail: 'the AI provider returned a 503',
@@ -31,7 +42,7 @@ describe('classifyVerdict', () => {
 
       test(`${reason} outranks a child that finished with a good result`, () => {
         const kill: Kill = { reason };
-        const read: DocumentRead = { kind: 'result', result: A_RESULT, missingResultFiles: [] };
+        const read = A_COMPLETE_RESULT;
         expect(classifyVerdict(anEnding({ kill, outcome: EXITED_0, read }))).toEqual({
           kind: 'unowned',
         });
@@ -47,7 +58,7 @@ describe('classifyVerdict', () => {
     });
 
     test('outranks a child that finished with a good result', () => {
-      const read: DocumentRead = { kind: 'result', result: A_RESULT, missingResultFiles: [] };
+      const read = A_COMPLETE_RESULT;
       expect(
         classifyVerdict(anEnding({ kill: { reason: 'canceled' }, outcome: EXITED_0, read })),
       ).toEqual({ kind: 'canceled' });
@@ -65,10 +76,11 @@ describe('classifyVerdict', () => {
 
   describe("the child's own verdict", () => {
     test('exit 0 with a complete result succeeds', () => {
-      const read: DocumentRead = { kind: 'result', result: A_RESULT, missingResultFiles: [] };
+      const read = A_COMPLETE_RESULT;
       expect(classifyVerdict(anEnding({ outcome: EXITED_0, read }))).toEqual({
         kind: 'succeeded',
         result: A_RESULT,
+        newCategorizations: NEW_CATEGORIZATIONS,
       });
     });
 
@@ -133,11 +145,12 @@ describe('classifyVerdict', () => {
         { reason: 'shutting-down' },
         { reason: 'contract-violation', detail: 'progress.json was not valid JSON' },
       ];
-      const read: DocumentRead = { kind: 'result', result: A_RESULT, missingResultFiles: [] };
+      const read = A_COMPLETE_RESULT;
       for (const kill of kills) {
         expect(classifyVerdict(anEnding({ kill, outcome: EXITED_0, read }))).toEqual({
           kind: 'succeeded',
           result: A_RESULT,
+          newCategorizations: NEW_CATEGORIZATIONS,
         });
       }
     });
@@ -235,8 +248,7 @@ describe('classifyVerdict', () => {
   describe('an exit that never produced its document', () => {
     test('exit 0, a result that parsed, but a declared file missing', () => {
       const read: DocumentRead = {
-        kind: 'result',
-        result: A_RESULT,
+        ...A_COMPLETE_RESULT,
         missingResultFiles: ['report.pdf', 'report.xlsx'],
       };
       const verdict = classifyVerdict(anEnding({ outcome: EXITED_0, read }));
@@ -244,6 +256,15 @@ describe('classifyVerdict', () => {
         kind: 'failed',
         reason: 'contract_violation',
         detail: 'result.json declared file(s) never written: report.pdf, report.xlsx',
+      });
+    });
+
+    test('exit 0, a complete result, but no new-categorizations.json', () => {
+      const read: DocumentRead = { ...A_COMPLETE_RESULT, newCategorizations: undefined };
+      expect(classifyVerdict(anEnding({ outcome: EXITED_0, read }))).toEqual({
+        kind: 'failed',
+        reason: 'contract_violation',
+        detail: 'exited 0 without writing new-categorizations.json',
       });
     });
 
@@ -273,7 +294,7 @@ describe('classifyVerdict', () => {
     });
 
     test('exit 1 with a result.json instead of a failure.json is still a contract violation', () => {
-      const read: DocumentRead = { kind: 'result', result: A_RESULT, missingResultFiles: [] };
+      const read = A_COMPLETE_RESULT;
       expect(classifyVerdict(anEnding({ outcome: EXITED_1, read }))).toEqual({
         kind: 'failed',
         reason: 'contract_violation',

@@ -87,13 +87,13 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   `output/new-categorizations.json` (child → parent, `{"analysisAttemptId", "rows": [{"product",
   "cleanedName", "category"}]}`), with valid and invalid fixtures for each. The parent has
   `buildCategorizationCache(rows)`, which `writeCategorizationCache` calls, and
-  `parseNewCategorizations`, which nothing calls yet (`apps/worker/src/contract/messages.ts`).
+  `parseNewCategorizations`, which `readNewCategorizations` calls (`apps/worker/src/contract/messages.ts`).
   The child writes the second document: `run.py` builds it with `new_categorizations_payload`
   (`worker_child/contract/messages.py`) before placing any result file, so a row the contract
-  refuses fails the run with no files left behind, then writes it before `result.json`. The parent
-  ignores it until PR 1. `CategorizedProducts.new_categorizations` holds the `match_type == "llm"`
+  refuses fails the run with no files left behind, then writes it before `result.json`.
+  `CategorizedProducts.new_categorizations` holds the `match_type == "llm"`
   products with that frame's cleaned names, and is the one definition of "new" for the worker and
-  the lab's push (PR 4); `analyze()` passes it through as `AnalysisOutcome.new_categorizations`,
+  the lab's push (PR 3); `analyze()` passes it through as `AnalysisOutcome.new_categorizations`,
   default `()`, which `stub_analysis` takes as a keyword. The child test double's scenario
   carries it as `newCategorizations`. The library's row types are `CachedCategorization`
   (`categorization/cache.py`) and `NewCategorization` (`categorization/pipeline.py`), both
@@ -102,6 +102,15 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   `MAX_CACHE_KEY_BYTES` (`contract.json`'s `categorization.maxProductBytes`, pinned to it by
   test), categories stripped and non-empty, each product once — and the child's builder writes
   a blank cleaned name as null, so a harvest insert never fails on a row that parsed.
+- **The parent requires the document and harvests it.** `readChildEnding` reads it with
+  `readNewCategorizations` beside `result.json`, and `classifyVerdict` makes exit 0 without it
+  a `contract_violation`, so the `succeeded` verdict carries the rows. `deliverVerdict` calls
+  `harvestSuggestions` (`attempt/lifecycle.ts`) only once `recordVerdict` returns `won`, so a
+  parked verdict harvests on the resume that lands it; it inserts through `cacheDb` with
+  `suggested_by` `attempt:<uuid> <worker id>`, under the retry, and logs at `error` rather
+  than throw. Every successful run, `mock-llm` included, now suggests its LLM's answers to
+  whichever database `cacheDb` is. The TypeScript fake child's `result` step writes the
+  document, `newCategorizations` defaulting to none, unless `withoutNewCategorizations`.
 - **Hosted Supabase facts, from its docs on 2026-10-11.** A custom role is an ordinary
   `CREATE ROLE … LOGIN PASSWORD` that the SQL editor, running as `postgres`, may issue —
   Supabase's own roles post creates one that way; `postgres` is not a superuser but has the
@@ -131,7 +140,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   `packages/db/scripts/temporary-go-live-cache-import/` and nowhere else, so it never becomes a
   sync tool: until go-live it is how a developer loads the local cache (§ The dress rehearsal),
   § Go-live step 2 runs it once against production, following the directory's `README.md`, and
-  PR 3 deletes it. It loads any of the three CSVs
+  PR 2 deletes it. It loads any of the three CSVs
   as verified rows in one transaction, `import:<file>` in `suggested_by`, cleaning products as
   `from_frame` does and refusing a category outside the YAML's `cool_food_pledge_name`s (what
   `category_names()` returns, not the short `name`) unless it differs only in case. Its upsert
@@ -209,7 +218,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **The child writes `output/new-categorizations.json` before `result.json`**: the products the
   LLM categorized this run, with the LLM's cleaned name and its answer, `No Matches Found`
   included — negative results are most of the cache: the `match_type == "llm"` products, which
-  the lab pushes too (PR 4). *Rejected: harvesting cleaned-name-history hits
+  the lab pushes too (PR 3). *Rejected: harvesting cleaned-name-history hits
   too.* The pipeline already trusts those without review; suggesting them would fill the queue
   with rows nobody needs to look at, at the price of one name-cleaning call per run.
   *Rejected: carrying the rows inside `result.json`.* A table does not belong in a document the
@@ -255,9 +264,9 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   the attempt id, so a reviewer can tell a laptop's run from the fleet's — a laptop's attempt id
   is not in production's `analysis_attempt`.
 - **What an app developer who never opens the lab does**, and what the root `README.md`
-  § Analysis modes says once production holds the cache (PR 3; until then, § The dress
+  § Analysis modes says once production holds the cache (PR 2; until then, § The dress
   rehearsal):
-  1. Ask whoever holds dashboard access (Eric, until § Reviewing in Studio's **Open** is
+  1. Ask whoever holds dashboard access (Eric, until the **Open** on who verifies is
      settled) for the composed `cache_client` string, delivered the way `OPENAI_API_KEY` is,
      never in a chat that an agent or a log can read.
   2. Put it in the repo root's `.env` as `CACHE_DB_CONNECTION_STRING`, beside
@@ -279,7 +288,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **A developer changing the categorization prompt or model unsets the variable first.** An
   experiment's answers would otherwise become the first suggestion for every product they
   touch and block the real model's suggestion until a reviewer deletes them, which is the lab's
-  `push_suggestions=False` case (PR 4) on the worker side. With the variable unset, the
+  `push_suggestions=False` case (PR 3) on the worker side. With the variable unset, the
   experiment's cache is the local database. The README says this beside step 2.
 - **The string is one shared password.** Everyone who holds `cache_client` holds the same one,
   so revoking a single person means `ALTER ROLE cache_client PASSWORD` and handing the new string
@@ -294,7 +303,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   writes lands unverified with the table's own id and timestamps, and a writer that names any
   other column gets `42501`. It has a statement timeout and an idle-in-transaction timeout, the
   latter so an abandoned transaction holding an uncommitted suggestion cannot block every other
-  insert of that key, a production harvest's included; so the lab's `connect()` (PR 2) uses
+  insert of that key, a production harvest's included; so the lab's `connect()` (PR 1) uses
   autocommit or short transactions. The role's settings are a floor for clients that send none:
   the worker's cache handle sends `DEFAULT_LIMITS` as startup parameters, the same values
   today, and those override them; only the lab's psycopg relies on the role's.
@@ -312,7 +321,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   someone has a few notebooks open. The idle-session timeout keeps a forgotten kernel from holding
   a slot indefinitely, which is what would otherwise exhaust any limit over a week. So every
   client of the role opens connections briefly: the worker's cache pool keeps none open while
-  idle, and the lab connects per command (PR 2). Raising the limit is a one-line
+  idle, and the lab connects per command (PR 1). Raising the limit is a one-line
   `ALTER ROLE` migration, if the team grows.
   *Rejected: a limit of 3–5, about one per person.* One person routinely holds several
   connections at once.
@@ -371,8 +380,8 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 
 ### The dress rehearsal: local first, production at go-live
 
-The code is ready before GBD's final CSVs are, so PRs 1–2 land first and every process runs
-against the local database; § Go-live, then PRs 3 and 4, follow once the files arrive.
+The code is ready before GBD's final CSVs are, so PR 1 lands first and every process runs
+against the local database; § Go-live, then PRs 2 and 3, follow once the files arrive.
 
 - **Until go-live, the CSV is the human copy and the local database is loaded from it.** A
   developer keeps GBD's three files and runs the import with `--mirror --write`; the product no
@@ -406,17 +415,17 @@ against the local database; § Go-live, then PRs 3 and 4, follow once the files 
   LLM, and nothing breaks.
 - **Docs say only what works today.** The root README gives the import command, and names it in
   the after-a-reset line. § Local development's four developer steps, which hand out a
-  production string, wait for PR 3; the lab README's hosted string waits for PR 4.
+  production string, wait for PR 2; the lab README's hosted string waits for PR 3.
 - **`pull` overwrites the lab's CSV paths.** A developer rehearsing the lab keeps GBD's
   originals elsewhere, which is where the import reads them from: a pulled file holds the
   database's rows, without the skipped and refused ones.
-- **PR 4 waits for go-live step 4.** It ends the lab's automatic entree-file append, and until
+- **PR 3 waits for go-live step 4.** It ends the lab's automatic entree-file append, and until
   a data scientist has a database to push to, that is only a loss: a repeat serving run re-asks
   Gemini for every product the file would have gained, and can label it differently than last
-  time. PR 2 is safe now, since with the variable unset the lab is unchanged.
+  time. PR 1 is safe now, since with the variable unset the lab is unchanged.
 - **A production worker deployed during the rehearsal is no worse off than today.** A CI-built
   image has had no cache since the CSV was gitignored; it now reads an empty production table
-  instead, and from PR 1 it suggests into it, which the import later promotes.
+  instead, and suggests into it, which the import later promotes.
 
 ### Open-source contributors
 
@@ -432,69 +441,22 @@ for the product's cache anyway, so it would leave two mechanisms where one does.
 
 ### Reviewing in Studio
 
-Not an app feature; recorded here so the table comments and READMEs say the same thing. Filter a
-table on `is_verified = false`, order by `created_at`, read `suggested_by` for where a row came
-from, fix `category` (or the label, or the weight) in place, tick `is_verified`. The next worker
-claim, and the next lab pull, see it.
+Not an app feature. The steps are an entry in [`runbooks.md`](runbooks.md), until that plan
+settles where runbooks live.
 
 ## The PRs
 
-Each PR is either TypeScript or Python, never both. The read path and the harvest path are
-separate chains, both built on the queries `@gbd/db` already exports. The child already writes its
-new-categorizations document and the parent ignores it until PR 1 reads it, so each PR is safe to
-merge alone.
+Each PR is either TypeScript or Python, never both, and each is safe to merge alone.
 
 | PR | Stack | Needs | What a production run does differently |
 | --- | --- | --- | --- |
-| 1 — the parent harvests | `apps/worker` | — | **suggestions land unverified** |
-| 2 — the lab pulls | Python | — | nothing |
-| 3 — go-live for developers | `packages/db`, docs | § Go-live step 2 | nothing |
-| 4 — the lab pushes | Python | 2, § Go-live step 4 | nothing |
+| 1 — the lab pulls | Python | — | nothing |
+| 2 — go-live for developers | `packages/db`, docs | § Go-live step 2 | nothing |
+| 3 — the lab pushes | Python | 1, § Go-live step 4 | nothing |
 
-PRs 1–2 are the dress rehearsal. PRs 3 and 4 are go-live, each merged at its step.
+PR 1 finishes the dress rehearsal. PRs 2 and 3 are go-live, each merged at its step.
 
-## PR 1 — the parent requires the document and harvests
-
-TypeScript only. After this PR, every successful `live` run suggests its new products to the
-table, unverified.
-
-- `child/run-directory.ts`: `readNewCategorizations`, through the existing
-  `parseNewCategorizations`.
-- `verdict.ts`: the `succeeded` verdict carries the rows. `classify` requires the document and
-  otherwise returns `contract_violation`.
-- `lifecycle.ts`:
-  - `readChildEnding` reads the document in the same `try` as `result.json`.
-  - It exports `harvestSuggestions(dependencies, attempt, rows)`:
-    - It calls `insertSuggestedProductCategorizations` through `cacheDb`, with a `suggestedBy`
-      that names the attempt and then the worker id.
-    - It runs under the retry, logs at `error` when retries run out, and never throws.
-  - `deliverVerdict` calls `harvestSuggestions` after `recordVerdict` returns `won`.
-- `testing/fake-child.ts`: the `result` step gains `newCategorizations` (default `[]`) and
-  `withoutNewCategorizations`.
-- Tests:
-  - `verdict.test.ts`: when the result is present but the document is missing, the verdict is
-    `contract_violation`.
-  - `harvestSuggestions`, called directly:
-    - Rows carry a `suggestedBy` that names the attempt and the worker.
-    - A broken database resolves with an `error` log and no throw.
-    - Chunking and leaving verified rows alone are covered by
-      `tests/product-categorization.test.ts`.
-  - `lifecycle.test.ts`:
-    - The end-to-end success asserts that the rows landed.
-    - `withoutNewCategorizations` gives `contract_violation`, no `result_file` and no cache
-      rows.
-    - The lost-race test asserts zero cache rows.
-  - Optionally, add one assertion to `tests/e2e/specs/report-lifecycle.e2e.ts` that `beef`
-    reached the run database unverified. That is the one tier where the real child meets the
-    real parent.
-- Docs:
-  - `ARCHITECTURE.md` step 5 and the caches subsection: the harvest runs after the verdict,
-    the first suggestion wins, and the in-transaction insert was rejected.
-  - `REQUIREMENTS.md` § Product categorization cache: review happens in Studio, and negative
-    results are cached.
-  - `packages/db/README.md`: who writes the table.
-
-## PR 2 — the lab pulls
+## PR 1 — the lab pulls
 
 - `python/lab/pyproject.toml` gains `psycopg[binary]`. Check for its Python 3.14 wheel when
   writing the PR.
@@ -544,12 +506,12 @@ table, unverified.
     the lab too, and gains the dev-stack-as-`postgres` form the lab rehearses with.
   - `python/lab/README.md` gains `just pull-caches`. It says that leaving the variable unset
     keeps today's behaviour and that a pull overwrites the three files. It keeps the "handed out
-    privately" paragraph until PR 4.
+    privately" paragraph until PR 3.
 - Rehearse: point the variable at the dev stack as `postgres` after a `--mirror` import. A pull
   writes three files whose row counts match the import's, and a categorize run on `test_data/`
   reads them.
 
-## PR 3 — go-live for developers: delete the import, hand out the hosted cache
+## PR 2 — go-live for developers: delete the import, hand out the hosted cache
 
 This PR lands as soon as § Go-live step 2's checks pass.
 
@@ -566,7 +528,7 @@ works with an empty cache. A developer who wants real rows points `CACHE_DB_CONN
 at the hosted project. A CSV that turns up later can be loaded by restoring the script from git
 history.
 
-## PR 4 — the lab pushes, and stops writing its files
+## PR 3 — the lab pushes, and stops writing its files
 
 This PR merges at § Go-live step 4, not before (§ The dress rehearsal). Rehearse it beforehand
 against the dev stack as `postgres`.
@@ -654,13 +616,13 @@ that can read and suggest).
 3. Merge a PR that sets `.do/worker.yaml`'s `WORKER_MODE` to `live` and adds `OPENAI_API_KEY` as a
    secret, with the key stored in the `production` Environment first (`.do/README.md`). The
    production worker runs `mock-llm` until then. Dispatch a worker deploy, so the fleet runs the
-   cache PRs against the imported table; any rows an
+   cache code against the imported table; any rows an
    earlier deploy harvested were promoted by step 2's `DO UPDATE … WHERE NOT is_verified` if the
-   CSV knows them. Merge PR 3. From here, every developer's `live` worker runs with
+   CSV knows them. Merge PR 2. From here, every developer's `live` worker runs with
    `CACHE_DB_CONNECTION_STRING` set: hand each app developer the composed string the same way as
    in step 4, and have them follow § Local development's steps. Their local tables keep the
    rehearsal's rows, which `mock-llm` still reads.
-4. Merge PR 4; hand each data scientist the same composed string, checked with `psql`
+4. Merge PR 3; hand each data scientist the same composed string, checked with `psql`
    first — the CA it points at is already in their checkout (if the project ever turns on
    network restrictions, their addresses need allowing);
    they set `CACHE_DB_CONNECTION_STRING`, pull once, and delete
@@ -670,10 +632,9 @@ that can read and suggest).
 ## Verification
 
 Each PR: `pnpm lint && pnpm check && pnpm test` and `just lint && just check && just test`, plus
-`just test-lab` for every Python PR, since the lab imports the library, and
-`pnpm test:system` for 1 and 2, which change what crosses the run directory.
+`just test-lab` for every Python PR, since the lab imports the library.
 
-The rehearsal, by hand, once PRs 1–2 are in: a `--mirror --write` import of every local CSV
+The rehearsal, by hand, once PR 1 is in: a `--mirror --write` import of every local CSV
 reports the 14 refused rows as skipped and loads the rest; a second identical run ends with the
 same row counts; a `live` upload of `apps/web/sample-reports/valid.csv` with the variable unset
 starts from those rows, and its new products land unverified in the dev stack; `just pull-caches`
