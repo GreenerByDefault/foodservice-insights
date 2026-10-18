@@ -286,7 +286,7 @@ export async function insertReport(
     createdByUserId: AppUser['id'] | null;
     name: string;
     siteName: string | null;
-    countsBasis: CountsBasis;
+    countsBasis: CountsBasis | null;
     monthlyCounts: unknown;
     unitSystem: UnitSystem;
     createdAt: Date | RawBuilder<Date>;
@@ -302,8 +302,11 @@ export async function insertReport(
       createdByUserId: overrides.createdByUserId ?? null,
       name: overrides.name ?? 'Q1 procurement',
       siteName: overrides.siteName ?? null,
-      countsBasis: overrides.countsBasis ?? 'people',
-      monthlyCounts: overrides.monthlyCounts ?? { '2026-01': 120, '2026-02': 135 },
+      countsBasis: overrides.countsBasis === undefined ? 'people' : overrides.countsBasis,
+      monthlyCounts:
+        overrides.monthlyCounts === undefined
+          ? { '2026-01': 120, '2026-02': 135 }
+          : overrides.monthlyCounts,
       unitSystem: overrides.unitSystem ?? 'lb',
       ...(overrides.createdAt ? { createdAt: overrides.createdAt } : {}),
     })

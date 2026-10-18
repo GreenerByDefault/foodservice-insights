@@ -4,10 +4,12 @@
     "name": "Q1 2026 dining",
     "siteName": null,
     "organizationName": "Acme Foodservice",
-    "countsBasis": "meals",
     "unitSystem": "lb",
-    "monthlyCounts": {
-      "2025-13": 100
+    "counts": {
+      "basis": "meals",
+      "monthly": {
+        "2025-13": 100
+      }
     }
   }
 }

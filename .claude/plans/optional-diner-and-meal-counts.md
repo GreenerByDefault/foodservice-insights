@@ -8,9 +8,12 @@ GBD asked for a "no diner counts" option on the upload form:
 > that no meal counts were provided; thus the numbers can't be directly compared to other sites
 > due to differences in size.
 
-The analysis library already builds a report without counts: `analyze()` takes
-`AnalysisRequest.counts: MonthlyCounts | None`. Every layer in front of it still requires counts,
-and each enforces that on its own:
+Everything behind the form already handles a report without counts. The database stores it as
+NULL in both `report.counts_basis` and `report.monthly_counts` (`report_counts_all_or_none`
+ties them), the worker hands the child `counts: null` in `run.json`, the analysis library
+builds a totals-only report, telemetry records a NULL basis and no per-diner figure, and the
+report page's Upload details read "Not provided". What still requires counts is the front door,
+and each layer enforces it on its own:
 
 - **The form** puts `required` on an input for every month the file covers
   ([`upload-form.svelte`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/new/upload-form.svelte),
@@ -18,78 +21,30 @@ and each enforces that on its own:
 - **The server** checks for a count in every month that has rows: `ReportMetadataSchema` in
   [`metadata.ts`](../../apps/web/src/lib/reports/metadata.ts), and `monthsWithoutCounts` in
   [`submission.ts`](../../apps/web/src/lib/reports/submission.ts).
-- **The database:** `report.counts_basis` and `report.monthly_counts` are both `NOT NULL`, and
-  so is `analysis_attempt_telemetry.counts_basis`.
-- **Telemetry's all-or-none CHECK:** `analysis_attempt_telemetry_report_all_or_none` requires
-  `co2e_kg_per_diner_or_meal` whenever `total_co2e_kg` is set.
-- **The worker ↔ child contract** requires a non-empty `monthlyCounts` on the way in and
-  `co2eKgPerDinerOrMeal` on the way out, in both
-  [`messages.ts`](../../apps/worker/src/contract/messages.ts) and
-  [`messages.py`](../../python/worker_child/worker_child/contract/messages.py). Until the
-  contract changes, `_report_payload` raises a `ContractError` on a `None` per-diner figure, and
-  [`run.py`](../../python/worker_child/worker_child/run.py) always builds a `MonthlyCounts` from
-  the manifest's two fields.
 
-Per-diner figures appear only in the PDF and the Excel file, and without counts the library
-already leaves them out (see the warning decision below). The web report page lists the counts
-that were entered (`upload-details.svelte`), but shows no metric.
-
-The worker deploys only on dispatch, so it is always the side running behind the schema and the web
-app ([`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-deploys-only-on-demand)). A deployed worker
-that cannot handle a report without counts would fail it at manifest parse. That constraint
-decides the PR order.
+The worker deploys only on dispatch, so it is always the side running behind the web app
+([`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-deploys-only-on-demand)). A deployed worker
+that predates the `counts` manifest shape would fail a report without counts at manifest parse,
+so **the worker that accepts `counts: null` must be live before the form below merges.**
 
 ## Decisions
 
-### "No counts" is NULL in both report columns, tied by a CHECK
+### "No counts" is NULL in the database, and one optional value above it
 
-`report.counts_basis` and `report.monthly_counts` become nullable, with a new constraint
-`report_counts_all_or_none`: `(counts_basis IS NULL) = (monthly_counts IS NULL)`. The existing
-`report_monthly_counts_is_object` passes on NULL and stays as it is. The column comments say that
-NULL means the uploader chose not to give counts.
+The two report columns are NULL together, never one without the other. Every layer above SQL
+parses them into a single optional value — the manifest's `counts: { basis, monthly } | null`,
+Python's `MonthlyCounts | None`, the report page's `counts: ReportCounts | null` — so "a basis
+without counts" is unrepresentable outside SQL. The form's submission follows suit: the server
+writes NULL to both columns or neither.
 
 *Rejected: a `'none'` value on the `counts_basis` enum.* An `ADD VALUE` can't be used in the same
 transaction that adds it, and every pending migration runs in one
-([`packages/db/README.md`](../../packages/db/README.md#writing-a-migration)). The CHECK pairing it
-with a NULL `monthly_counts` would have to dodge that with a `::text` cast. It also reads wrong:
+([`packages/db/README.md`](../../packages/db/README.md#writing-a-migration)). It also reads wrong:
 "no counts" is not a kind of count.
 
-The migration only relaxes constraints, so it is pure expand. An old worker never meets a NULL
-until the form offers the option.
-
-### Telemetry: no basis means no per-diner figure
-
-`analysis_attempt_telemetry.counts_basis` becomes nullable. `…_report_all_or_none` is replaced by
-two constraints:
-
-- `num_nulls(total_co2e_kg, plant_pct_by_weight) IN (0, 2)`
-- `(co2e_kg_per_diner_or_meal IS NULL) = (total_co2e_kg IS NULL OR counts_basis IS NULL)`
-
-So the per-diner figure is present exactly when there was a report and there were counts. That
-keeps telemetry able to tell "no counts" apart from "the report never got that far".
-
-### Above the database, counts are one optional value, never two nullables
-
-The DB row carries two nullable columns, but every layer above parses them into a single optional
-value. That makes "a basis without counts" unrepresentable outside SQL.
-
-**The worker ↔ child manifest** replaces `countsBasis` and `monthlyCounts` with
-`counts: { basis, monthly } | null`. The parent and the child ship in one image, so this contract
-can change shape freely; only the database → parent seam has to tolerate an old worker. Going the
-other way, `co2eKgPerDinerOrMeal` becomes `v.nullable(quantity)` on the TS side, the way
-`plantProteinPctByWeight` already is. The Python side validates it only when it is not `None`,
-copying the pattern `_report_payload` already uses for that field.
-
-**Python** already has this shape. `AnalysisRequest.counts` is a `MonthlyCounts(basis, monthly)`
-or `None`, which `analyze()` turns into `FoodReport.headcounts: Headcounts | None` (`schema.py`:
-`diner_or_meal` and `by_month`). `ReportSummary.co2e_kg_per_diner_or_meal` is `float | None`.
-Partial counts, with some months missing, stay an error: Python's "fail loudly on bad data" rule
-applies to a bad mapping, and `None` is the explicit, typed absence of one.
-
-**Web:**
-- The report page loader returns `counts: { basis, monthly: MonthlyCount[] } | null`.
-- The form's `counts-basis` field takes `'people' | 'meals' | 'none'`. The `'none'` token lives
-  only in the form; the server stores NULLs.
+**In the form,** the `counts-basis` field takes `'people' | 'meals' | 'none'`. The `'none'` token
+lives only there; the server stores NULLs. Partial counts, with some months missing, stay an
+error: `None` is the explicit, typed absence of counts, not a licence for a bad mapping.
 
 ### The form: a third "Count by" choice
 
@@ -124,58 +79,26 @@ some of the time.
 GBD's warning is about comparing figures, and the figures are in the PDF, so that is where the
 warning goes. The library already does this. The executive summary says the figures are totals
 and can't be compared directly with other sites, How to Read says the same, About drops its
-per-diner line, the diner chart is left out, and the two trend pages keep only their total panel. The counts check is
-skipped rather than reported. *Rejected: reporting "no counts" as a quality finding.* It is the
-client's choice, not a data problem, and a warning finding would flip `quality_status` and count
-as a fired check in telemetry.
+per-diner line, the diner chart is left out, and the two trend pages keep only their total panel.
+The counts check is skipped rather than reported. *Rejected: reporting "no counts" as a quality
+finding.* It is the client's choice, not a data problem, and a warning finding would flip
+`quality_status` and count as a fired check in telemetry.
 
-**The web report page** reads "Not provided" in place of the month table. It shows no figures, so
-a comparability warning there would have nothing to qualify.
+**The web report page** reads "Not provided" under "Diners or meals served" in place of the
+month table. It shows no figures, so a comparability warning there would have nothing to
+qualify.
 
 The Excel workbook drops the counts sheet and the per-head columns, and carries no warning.
 
-## PR 1 — the database and the worker accept a report without counts
+## PR 1 — the form offers "No counts"
 
-- **Schema:**
-  - `packages/db/migrations/004_optional_counts.ts`, with the constraints above.
-  - Regenerate `public-schema.sql` and `src/generated/`.
-  - `fixtures.ts` accepts null counts.
-- **Contract:**
-  - The manifest `counts` shape and nullable `co2eKgPerDinerOrMeal`, in both `messages.ts` and
-    `messages.py` (plus `fields.py`, `run.py` and `testing.py`). `_report_payload` drops its
-    interim `ContractError` on `None`, and `run.py` passes the manifest's `counts` straight
-    through as `MonthlyCounts | None`.
-  - `contract.json`.
-  - Move the existing invalid-count fixtures under `counts`.
-- **Worker:** `attempt/queue.ts` builds `counts` from the two columns, and `attempt/telemetry.ts`
-  writes a NULL basis.
-- **Web:** the report page loader and `upload-details.svelte` handle `counts: null`, showing "Not
-  provided". The generated types force this now; the form still can't produce one.
-
-Tests:
-- **DB (`withRollback`):**
-  - `report` accepts both counts columns NULL and rejects exactly one NULL.
-  - Telemetry accepts a NULL per-diner value with a NULL basis.
-  - Telemetry rejects a NULL per-diner value with a basis set, and a per-diner value with no
-    basis.
-- **Contract fixtures:**
-  - Valid: `run` with `counts: null`, and `telemetry` with a null per-diner value. The latter
-    replaces `test_telemetry_payload_refuses_a_report_without_a_per_head_figure` in
-    `test_fixtures.py`.
-  - Invalid: `counts: {}`, a basis with no monthly counts, and an unknown basis.
-- **Web:** `load-report.test.ts` returns `counts: null`, and `upload-details.svelte.test.ts` shows
-  "Not provided".
-- **`pnpm test:system`** locally, because this changes the web ↔ worker ↔ child seam.
-
-**After merging, dispatch a worker deploy.** PR 2 must not merge until it is live.
-
-## PR 2 — the form offers "No counts"
+Merge only once a worker deploy carrying the `counts` manifest shape is live.
 
 - **`metadata.ts`:** `ReportMetadataSchema` becomes a `v.variant` on `countsBasis`.
   - `'none'` requires `monthly-counts` to be absent.
   - The other two bases keep today's rules.
 - **`submission.ts`:** run `monthsWithoutCounts` only when there are counts.
-- **`+server.ts`:** `insertReport` writes NULLs.
+- **`+server.ts`:** `insertReport` writes NULL to both `countsBasis` and `monthlyCounts`.
 - **`upload-form.svelte`:** the third radio, the note, and leaving `monthly-counts` out on
   submit.
 - **`REQUIREMENTS.md` § File upload:** "a map of each month to the number of diners or meals,
@@ -197,13 +120,13 @@ Tests:
 - **`new-report.screenshot.ts`:** a baseline for the "No counts" state, regenerated through
   turbo.
 - **Optional:** point `tests/e2e/specs/report-lifecycle.e2e.ts` at "No counts", so the full stack
-  runs that path once.
+  runs that path once. Nothing has run a no-counts report through the real web → worker → child
+  path yet; until now the shared `contract/fixtures/valid/run.no-counts.json` is the only
+  cross-stack evidence.
 
 ## Verification
 
-- **PR 1:** before dispatching, confirm the deployed worker's manifest parse accepts
-  `counts: null`: the system test covers this.
-- **PR 2:** with `/run`, upload with "No counts" at phone and desktop widths, toggle between bases,
-  and check that typed counts come back. Then let the report finish and open its PDF.
-- **Gates:** `just lint && just check && just test` and `just test-lab` for Python, and
+- With `/run`, upload with "No counts" at phone and desktop widths, toggle between bases, and
+  check that typed counts come back. Then let the report finish and open its PDF.
+- **Gates:** `just lint && just check && just test` for Python, and
   `pnpm lint && pnpm check && pnpm test` for TypeScript.

@@ -40,11 +40,16 @@ const RunManifestSchema = v.strictObject({
     name: v.nullable(nonEmptyString),
     siteName: v.nullable(nonEmptyString),
     organizationName: nonEmptyString,
-    countsBasis: v.picklist(COUNTS_BASES),
     unitSystem: v.picklist(UNIT_SYSTEMS),
-    monthlyCounts: v.pipe(
-      v.record(v.pipe(v.string(), v.regex(MONTH_PATTERN)), wholeNumber),
-      v.check((counts) => Object.keys(counts).length > 0, 'needs at least one month'),
+    // Null when the uploader chose not to give counts.
+    counts: v.nullable(
+      v.strictObject({
+        basis: v.picklist(COUNTS_BASES),
+        monthly: v.pipe(
+          v.record(v.pipe(v.string(), v.regex(MONTH_PATTERN)), wholeNumber),
+          v.check((counts) => Object.keys(counts).length > 0, 'needs at least one month'),
+        ),
+      }),
     ),
   }),
 });
@@ -126,7 +131,7 @@ const CategorizationSummarySchema = v.strictObject({
 const ReportSummarySchema = v.pipe(
   v.strictObject({
     totalCo2eKg: quantity,
-    co2eKgPerDinerOrMeal: quantity,
+    co2eKgPerDinerOrMeal: v.nullable(quantity),
     plantPctByWeight: percentage,
     plantProteinPctByWeight: v.nullable(percentage),
     findingCounts: v.array(
@@ -250,16 +255,15 @@ export type Telemetry = v.InferOutput<typeof TelemetrySchema>;
 export type CategorizationCache = v.InferOutput<typeof CategorizationCacheSchema>;
 export type NewCategorizations = v.InferOutput<typeof NewCategorizationsSchema>;
 
-// `monthlyCounts` is `unknown` because Kysely hands back a `jsonb` column untyped.
+// `monthly` is `unknown` because Kysely hands back a `jsonb` column untyped.
 export type RunManifestInput = {
   analysisAttemptId: AnalysisAttemptId;
   report: {
     name: string | null;
     siteName: string | null;
     organizationName: string;
-    countsBasis: CountsBasis;
     unitSystem: UnitSystem;
-    monthlyCounts: unknown;
+    counts: { basis: CountsBasis; monthly: unknown } | null;
   };
 };
 

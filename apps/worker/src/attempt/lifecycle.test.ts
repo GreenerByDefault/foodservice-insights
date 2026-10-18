@@ -1225,6 +1225,27 @@ describe('recordTelemetry', () => {
     });
   });
 
+  test('a report without counts records no basis and no per-diner figure', async () => {
+    const workerId = aWorkerId();
+    await withAttemptFixture(workerId, async (fixture) => {
+      const attemptDependencies = dependencies(fixture, workerId, []);
+      const report = FAKE_TELEMETRY.report;
+      if (report === null) throw new Error('FAKE_TELEMETRY should have a report');
+
+      await recordTelemetry(
+        attemptDependencies,
+        { ...fixture, countsBasis: null, log: attemptDependencies.log },
+        { ...FAKE_TELEMETRY, report: { ...report, co2eKgPerDinerOrMeal: null } },
+      );
+
+      const expected = fullTelemetryRows(fixture);
+      expect(await readTelemetryRows(fixture.attemptId)).toEqual({
+        ...expected,
+        telemetry: { ...expected.telemetry, countsBasis: null, co2eKgPerDinerOrMeal: null },
+      });
+    });
+  });
+
   test('a database it cannot reach costs the rows, logged, and never throws', async () => {
     const workerId = aWorkerId();
     const breakable = await breakableDatabase();

@@ -68,6 +68,7 @@ describe('the fixture set itself', () => {
       'progress.json',
       'result.json',
       'run.json',
+      'run.no-counts.json',
       'telemetry.json',
       'telemetry.partial.json',
     ]);
@@ -85,20 +86,25 @@ describe('valid fixtures', () => {
     expect(() => PARSERS[document](read('valid', name))).not.toThrow();
   });
 
-  test('run.json is what the parent writes', () => {
+  test.each<[string, RunManifestInput['report']['counts']]>([
+    [
+      'run.json',
+      { basis: 'meals', monthly: { '2025-01': 12040, '2025-02': 11360, '2025-03': 12890 } },
+    ],
+    ['run.no-counts.json', null],
+  ])('%s is what the parent writes', (name, counts) => {
     const input: RunManifestInput = {
       analysisAttemptId: '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f' as AnalysisAttemptId,
       report: {
         name: 'Q1 2026 dining',
         siteName: null,
         organizationName: 'Acme Foodservice',
-        countsBasis: 'meals',
         unitSystem: 'lb',
-        monthlyCounts: { '2025-01': 12040, '2025-02': 11360, '2025-03': 12890 },
+        counts,
       },
     };
 
-    expect(buildRunManifest(input)).toEqual(JSON.parse(read('valid', 'run.json')));
+    expect(buildRunManifest(input)).toEqual(JSON.parse(read('valid', name)));
   });
 
   test('result.json parses into the values the parent writes to the database', () => {
@@ -128,6 +134,8 @@ describe('valid fixtures', () => {
     // An operation whose every call failed has no served model.
     telemetry.llmUsage[0].servedModel = null;
     telemetry.report.plantProteinPctByWeight = 12.5;
+    // A report without counts has no per-diner figure.
+    telemetry.report.co2eKgPerDinerOrMeal = null;
     telemetry.report.findingCounts = [];
 
     expect(parseTelemetry(JSON.stringify(telemetry))).toEqual(telemetry);

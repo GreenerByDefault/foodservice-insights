@@ -186,9 +186,10 @@ export async function loadAttemptInputs(
       name: row.name,
       siteName: row.siteName,
       organizationName: row.organizationName,
-      countsBasis: row.countsBasis,
       unitSystem: row.unitSystem,
-      monthlyCounts: row.monthlyCounts,
+      // `report_counts_all_or_none` sets both columns or neither.
+      counts:
+        row.countsBasis === null ? null : { basis: row.countsBasis, monthly: row.monthlyCounts },
     },
   };
 }

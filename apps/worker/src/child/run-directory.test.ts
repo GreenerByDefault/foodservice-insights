@@ -24,9 +24,8 @@ const MANIFEST = buildRunManifest({
     name: 'Q1 2026 dining',
     siteName: null,
     organizationName: 'Acme Foodservice',
-    countsBasis: 'meals',
     unitSystem: 'lb',
-    monthlyCounts: { '2025-01': 12040 },
+    counts: { basis: 'meals', monthly: { '2025-01': 12040 } },
   },
 });
 

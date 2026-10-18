@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { render } from 'vitest-browser-svelte';
+import type { ReportCounts } from './+page.server.ts';
 import UploadDetails from './upload-details.svelte';
 
 const INPUT_FILE = {
@@ -8,15 +9,17 @@ const INPUT_FILE = {
 };
 const NEW_REPORT_HREF = '/orgs/org-1/reports/new';
 
-function renderDetails(overrides: { unitSystem?: 'lb' | 'kg'; countsBasis?: 'people' | 'meals' }) {
+const MONTHLY = [
+  { month: '2026-01', count: 4250 },
+  { month: '2026-02', count: 135 },
+];
+
+function renderDetails(overrides: { unitSystem?: 'lb' | 'kg'; counts?: ReportCounts | null }) {
   return render(UploadDetails, {
     inputFile: INPUT_FILE,
     unitSystem: overrides.unitSystem ?? 'lb',
-    countsBasis: overrides.countsBasis ?? 'people',
-    monthlyCounts: [
-      { month: '2026-01', count: 4250 },
-      { month: '2026-02', count: 135 },
-    ],
+    counts:
+      overrides.counts === undefined ? { basis: 'people', monthly: MONTHLY } : overrides.counts,
     newReportHref: NEW_REPORT_HREF,
   });
 }
@@ -43,7 +46,7 @@ describe('UploadDetails', () => {
     ['people', 'Diners per month'],
     ['meals', 'Meals per month'],
   ] as const)('labels %s counts as the upload form did', async (countsBasis, expected) => {
-    const screen = await renderDetails({ countsBasis });
+    const screen = await renderDetails({ counts: { basis: countsBasis, monthly: MONTHLY } });
 
     await expect.element(screen.getByText(expected)).toBeVisible();
   });
@@ -55,6 +58,14 @@ describe('UploadDetails', () => {
     await expect.element(screen.getByText('4,250')).toBeVisible();
     await expect.element(screen.getByText('February 2026')).toBeVisible();
     await expect.element(screen.getByText('135')).toBeVisible();
+  });
+
+  test('says the counts were not provided when the upload had none', async () => {
+    const screen = await renderDetails({ counts: null });
+
+    await expect.element(screen.getByText('Diners or meals served')).toBeVisible();
+    await expect.element(screen.getByText('Not provided')).toBeVisible();
+    await expect.element(screen.getByText('January 2026')).not.toBeInTheDocument();
   });
 
   test('points to a new upload for fixing a mistake', async () => {

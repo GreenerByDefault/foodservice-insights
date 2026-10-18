@@ -357,9 +357,8 @@ describe('loadAttemptInputs', () => {
         name: 'Q3 procurement',
         siteName: 'North kitchen',
         organizationName: 'Acme Foodservice',
-        countsBasis: 'people',
         unitSystem: 'lb',
-        monthlyCounts: { '2026-03': 900 },
+        counts: { basis: 'people', monthly: { '2026-03': 900 } },
       },
     });
 
@@ -369,6 +368,31 @@ describe('loadAttemptInputs', () => {
         analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
         report: loaded.inputs.report,
       }),
+    ).not.toThrow();
+  });
+
+  test('returns null counts for a report without them, which the contract accepts', async () => {
+    const report = await withRollback(WORKER_DATABASE, async (transaction) => {
+      const { organization } = await insertOrganization(transaction, { name: 'Acme Foodservice' });
+      const { id: reportId } = await insertReport(transaction, {
+        organizationId: organization.id,
+        countsBasis: null,
+        monthlyCounts: null,
+      });
+      await insertInputFile(transaction, { reportId });
+      const attempt = await insertAnalysisAttempt(transaction, { reportId });
+      return (await loadAttemptInputs(transaction, attempt.id)).report;
+    });
+
+    expect(report).toEqual({
+      name: 'Q1 procurement',
+      siteName: null,
+      organizationName: 'Acme Foodservice',
+      unitSystem: 'lb',
+      counts: null,
+    });
+    expect(() =>
+      buildRunManifest({ analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId, report }),
     ).not.toThrow();
   });
 

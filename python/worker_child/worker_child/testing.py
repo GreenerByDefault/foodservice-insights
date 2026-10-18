@@ -152,7 +152,7 @@ def build_analyze(*, sleep: Callable[[float], None] = time.sleep) -> Analyze:
     ) -> AnalysisOutcome:
         scenario = parse_scenario(request.report_name)
         for record in STUB_TELEMETRY:
-            report_telemetry(record)
+            report_telemetry(_without_per_head(record) if request.counts is None else record)
 
         if scenario.name is None:
             return stub_analysis(request, report_progress=report_progress)
@@ -176,6 +176,12 @@ def build_analyze(*, sleep: Callable[[float], None] = time.sleep) -> Analyze:
         raise AssertionError(f"unreachable: parse_scenario already validated {scenario.name!r}")
 
     return analyze
+
+
+def _without_per_head(record: Telemetry) -> Telemetry:
+    if isinstance(record, ReportSummary):
+        return replace(record, co2e_kg_per_diner_or_meal=None)
+    return record
 
 
 def _run_slow(

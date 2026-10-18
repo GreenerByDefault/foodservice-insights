@@ -1,18 +1,17 @@
 <script lang="ts">
-import type { CountsBasis, UnitSystem } from '@gbd/db';
+import type { UnitSystem } from '@gbd/db';
 import FileSpreadsheetIcon from '@lucide/svelte/icons/file-spreadsheet';
 import { countsHeading, formatMonth } from '#lib/reports/monthly-counts.js';
-import type { MonthlyCount } from './+page.server.ts';
+import type { ReportCounts } from './+page.server.ts';
 
 interface Props {
   inputFile: { href: string; originalFilename: string };
   unitSystem: UnitSystem;
-  countsBasis: CountsBasis;
-  monthlyCounts: MonthlyCount[];
+  counts: ReportCounts | null;
   newReportHref: string;
 }
 
-let { inputFile, unitSystem, countsBasis, monthlyCounts, newReportHref }: Props = $props();
+let { inputFile, unitSystem, counts, newReportHref }: Props = $props();
 
 // Leads with the upload form's own radio label, so it reads back as the thing the user clicked.
 const UNIT_NAMES: Record<UnitSystem, string> = { lb: 'lb (pounds)', kg: 'kg (kilograms)' };
@@ -46,15 +45,20 @@ const ROW_CLASS = 'flex flex-col gap-y-1 sm:col-span-2 sm:grid sm:grid-cols-subg
     </div>
 
     <div class={ROW_CLASS}>
-      <dt class="text-muted-foreground">{countsHeading(countsBasis)}</dt>
-      <dd>
-        <dl class="grid w-fit grid-cols-[auto_auto] gap-x-8 gap-y-1">
-          {#each monthlyCounts as { month, count } (month)}
-            <dt>{formatMonth(month)}</dt>
-            <dd class="text-right tabular-nums">{countFormat.format(count)}</dd>
-          {/each}
-        </dl>
-      </dd>
+      {#if counts === null}
+        <dt class="text-muted-foreground">Diners or meals served</dt>
+        <dd>Not provided</dd>
+      {:else}
+        <dt class="text-muted-foreground">{countsHeading(counts.basis)}</dt>
+        <dd>
+          <dl class="grid w-fit grid-cols-[auto_auto] gap-x-8 gap-y-1">
+            {#each counts.monthly as { month, count } (month)}
+              <dt>{formatMonth(month)}</dt>
+              <dd class="text-right tabular-nums">{countFormat.format(count)}</dd>
+            {/each}
+          </dl>
+        </dd>
+      {/if}
     </div>
   </dl>
 

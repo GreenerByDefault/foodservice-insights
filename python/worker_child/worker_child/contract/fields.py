@@ -47,6 +47,11 @@ class Fields:
     def nested(self, key: str) -> Fields:
         return Fields(f"{self._path}.{key}", self._object(key))
 
+    def nullable_nested(self, key: str) -> Fields | None:
+        if self._take(key) is None:
+            return None
+        return self.nested(key)
+
     def objects(self, key: str) -> list[Fields]:
         value = self._take(key)
         if not isinstance(value, list):

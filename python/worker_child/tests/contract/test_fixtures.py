@@ -8,6 +8,7 @@ from gbd_foodservice_insights.analysis import (
     CategorizationSummary,
     FindingCount,
     InputSummary,
+    MonthlyCounts,
     NewCategorization,
     ReportSummary,
 )
@@ -22,6 +23,8 @@ from support.contract_fixtures import (
 from worker_child.contract import ContractError, layout
 from worker_child.contract.messages import (
     LlmUsage,
+    ReportInputs,
+    RunManifest,
     TelemetryState,
     failure_payload,
     new_categorizations_payload,
@@ -68,6 +71,7 @@ def test_covers_every_document() -> None:
         "progress.json",
         "result.json",
         "run.json",
+        "run.no-counts.json",
         "telemetry.json",
         "telemetry.partial.json",
     ]
@@ -75,20 +79,27 @@ def test_covers_every_document() -> None:
     assert INVALID_CATEGORIZATION_CACHE_FIXTURE_NAMES != []
 
 
-def test_parses_the_run_manifest_the_parent_writes() -> None:
-    manifest = parse_run_manifest(read("valid", "run.json"))
-
-    assert manifest.analysis_attempt_id == VALID_ANALYSIS_ATTEMPT_ID
-    assert manifest.report.name == "Q1 2026 dining"
-    assert manifest.report.site_name is None
-    assert manifest.report.organization_name == "Acme Foodservice"
-    assert manifest.report.counts_basis == "meals"
-    assert manifest.report.unit_system == "lb"
-    assert dict(manifest.report.monthly_counts) == {
-        "2025-01": 12040,
-        "2025-02": 11360,
-        "2025-03": 12890,
-    }
+@pytest.mark.parametrize(
+    ("name", "counts"),
+    [
+        (
+            "run.json",
+            MonthlyCounts("meals", {"2025-01": 12040, "2025-02": 11360, "2025-03": 12890}),
+        ),
+        ("run.no-counts.json", None),
+    ],
+)
+def test_parses_the_run_manifest_the_parent_writes(name: str, counts: MonthlyCounts | None) -> None:
+    assert parse_run_manifest(read("valid", name)) == RunManifest(
+        analysis_attempt_id=VALID_ANALYSIS_ATTEMPT_ID,
+        report=ReportInputs(
+            name="Q1 2026 dining",
+            site_name=None,
+            organization_name="Acme Foodservice",
+            unit_system="lb",
+            counts=counts,
+        ),
+    )
 
 
 @pytest.mark.parametrize("name", INVALID_RUN_FIXTURE_NAMES)
@@ -413,6 +424,10 @@ def _usage(**changes: object) -> TelemetryState:
             replace(FINISHED, report=replace(REPORT, total_co2e_kg=-1.0)), id="negative-co2e"
         ),
         pytest.param(
+            replace(FINISHED, report=replace(REPORT, co2e_kg_per_diner_or_meal=-1.0)),
+            id="negative-co2e-per-diner",
+        ),
+        pytest.param(
             replace(
                 FINISHED,
                 report=replace(
@@ -441,12 +456,14 @@ def test_telemetry_payload_refuses_what_the_parent_would(state: TelemetryState) 
         telemetry_payload(state, peak_memory_kib=412345)
 
 
-# No fixture: the contract still requires the figure, and the next change to it makes null valid.
-def test_telemetry_payload_refuses_a_report_without_a_per_head_figure() -> None:
+def test_telemetry_payload_writes_no_per_head_figure_for_a_report_without_counts() -> None:
     state = replace(FINISHED, report=replace(REPORT, co2e_kg_per_diner_or_meal=None))
+    fixture = load("valid", "telemetry.json")
 
-    with pytest.raises(ContractError, match="co2eKgPerDinerOrMeal"):
-        telemetry_payload(state, peak_memory_kib=412345)
+    assert telemetry_payload(state, peak_memory_kib=412345) == {
+        **fixture,
+        "report": {**fixture["report"], "co2eKgPerDinerOrMeal": None},
+    }
 
 
 def test_telemetry_payload_refuses_zero_peak_memory() -> None:
@@ -462,16 +479,17 @@ def test_telemetry_payload_refuses_zero_peak_memory() -> None:
 def test_accepts_a_whole_number_written_as_a_float() -> None:
     # JavaScript's JSON.parse cannot tell 12040.0 from 12040, so this side has to accept both.
     manifest = json.loads(read("valid", "run.json"))
-    manifest["report"]["monthlyCounts"]["2025-01"] = 12040.0
+    manifest["report"]["counts"]["monthly"]["2025-01"] = 12040.0
 
-    parsed = parse_run_manifest(json.dumps(manifest))
-    assert parsed.report.monthly_counts["2025-01"] == 12040
+    counts = parse_run_manifest(json.dumps(manifest)).report.counts
+    assert counts is not None
+    assert counts.monthly["2025-01"] == 12040
 
 
 def test_rejects_a_boolean_where_a_number_belongs() -> None:
     # `bool` subclasses `int`, so `True` would otherwise arrive as 1.
     manifest = json.loads(read("valid", "run.json"))
-    manifest["report"]["monthlyCounts"]["2025-01"] = True
+    manifest["report"]["counts"]["monthly"]["2025-01"] = True
 
     with pytest.raises(ContractError):
         parse_run_manifest(json.dumps(manifest))
