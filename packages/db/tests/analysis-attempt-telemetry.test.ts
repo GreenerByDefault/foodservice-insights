@@ -462,14 +462,14 @@ describe('analysis_attempt_quality_check', () => {
     const row = await withRollback(DATABASE, (transaction) =>
       insertAttemptQualityCheck(transaction, {
         qualityCheck: 'date_distribution',
-        status: 'success',
+        status: 'error',
       }),
     );
 
     expect(row).toEqual({
       analysisAttemptId: row.analysisAttemptId,
       qualityCheck: 'date_distribution',
-      status: 'success',
+      status: 'error',
       findings: 1,
     });
   });

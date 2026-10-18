@@ -53,22 +53,17 @@
     "findingCounts": [
       {
         "qualityCheck": "date_distribution",
-        "status": "success",
-        "findings": 1
-      },
-      {
-        "qualityCheck": "missing_internal_months",
-        "status": "success",
+        "status": "warning",
         "findings": 1
       },
       {
         "qualityCheck": "outlier_line_items",
-        "status": "info",
+        "status": "warning",
         "findings": 2
       },
       {
         "qualityCheck": "outlier_line_items",
-        "status": "info",
+        "status": "warning",
         "findings": 3
       },
       {

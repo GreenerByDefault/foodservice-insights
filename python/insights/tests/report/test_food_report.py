@@ -89,21 +89,7 @@ def test_summarize_report_holds_the_headline_numbers():
 
     assert asdict(summary) == {
         "quality_status": "pass",
-        "finding_counts": (
-            {
-                "quality_check": "diner_meal_count_reasonableness",
-                "status": "success",
-                "findings": 1,
-            },
-            {"quality_check": "missing_internal_months", "status": "success", "findings": 1},
-            {
-                "quality_check": "month_over_month_total_volatility",
-                "status": "success",
-                "findings": 1,
-            },
-            {"quality_check": "outlier_line_items", "status": "success", "findings": 1},
-            {"quality_check": "per_product_weight_bounds", "status": "success", "findings": 1},
-        ),
+        "finding_counts": (),
         "total_co2e_kg": pytest.approx(970.5),
         "co2e_kg_per_diner_or_meal": pytest.approx(970.5 / 220),
         "plant_pct_by_weight": 63.3,
@@ -114,9 +100,8 @@ def test_summarize_report_holds_the_headline_numbers():
 def test_a_report_without_headcounts_has_no_per_head_figures_or_counts_check():
     report = _build(_rows(), headcounts=None)
 
-    summary = summarize_report(report)
-    assert summary.co2e_kg_per_diner_or_meal is None
-    assert [count.quality_check for count in summary.finding_counts] == [
+    assert summarize_report(report).co2e_kg_per_diner_or_meal is None
+    assert sorted({finding["category"] for finding in report.findings}) == [
         "missing_internal_months",
         "month_over_month_total_volatility",
         "outlier_line_items",
@@ -130,7 +115,7 @@ def test_summarize_report_without_protein_has_no_plant_protein_pct_by_weight():
     assert summarize_report(_build(rows)).plant_protein_pct_by_weight is None
 
 
-def test_summarize_report_counts_findings_per_check_and_status_in_order():
+def test_summarize_report_counts_warnings_and_errors_per_check_and_status_in_order():
     def finding(check: QualityCheck, status: DiagnosticStatus) -> Finding:
         return make_finding(stage="test", category=check, status=status, message="")
 
@@ -149,10 +134,8 @@ def test_summarize_report_counts_findings_per_check_and_status_in_order():
 
     assert summary.quality_status == "invalid"
     assert summary.finding_counts == (
-        FindingCount("date_distribution", "info", 1),
         FindingCount("date_distribution", "warning", 2),
         FindingCount("outlier_line_items", "error", 1),
-        FindingCount("outlier_line_items", "success", 1),
     )
 
 

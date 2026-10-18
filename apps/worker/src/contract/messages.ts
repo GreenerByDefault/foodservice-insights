@@ -15,7 +15,6 @@ import {
   CHILD_FAILURE_REASONS,
   COUNTS_BASES,
   CUSTOMER_FINDING_STATUSES,
-  DIAGNOSTIC_STATUSES,
   LLM_OPERATIONS,
   MAX_FINDING_SAMPLE_VALUES,
   MAX_FINDING_TEXT_BYTES,
@@ -162,7 +161,7 @@ const ReportSummarySchema = v.pipe(
     findingCounts: v.array(
       v.strictObject({
         qualityCheck: v.picklist(QUALITY_CHECKS),
-        status: v.picklist(DIAGNOSTIC_STATUSES),
+        status: v.picklist(CUSTOMER_FINDING_STATUSES),
         findings: v.pipe(count, v.minValue(1)),
       }),
     ),
