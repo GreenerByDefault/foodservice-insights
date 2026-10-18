@@ -17,9 +17,9 @@ Our side of the sending is written and tested.
 API when `EMAIL_TRANSPORT=postmark`, and `parseTransportSettings` refuses that without
 `POSTMARK_SERVER_TOKEN`, so a deploy missing the token fails at startup. Production does not use
 it yet: both app specs in [`.do/`](../../.do) still select
-[`provider.ts`](../../packages/email/src/transports/provider.ts), a stub that rejects every
-send, so a send fails loudly instead of going nowhere until the domain verifies. Supabase Auth sends
-sign-in and email-change codes itself, over SMTP, from the templates in
+[`provider.ts`](../../packages/email/src/transports/provider.ts), a stub that drops every send,
+so nothing goes out before the domain verifies. Supabase Auth sends sign-in and email-change
+codes itself, over SMTP, from the templates in
 [`supabase-dev/supabase/templates/`](../../supabase-dev/supabase/templates). Locally both go to
 Mailpit.
 
