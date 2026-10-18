@@ -151,7 +151,7 @@ describe('the whole record', () => {
         {
           rule: 'The weight has a unit in it',
           advice:
-            'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
+            'Enter plain numbers only, and put the unit in the column name instead: "Weight (lb)" or "Weight (kg)".',
           rows: { ranges: [{ start: 2, end: 2 }], total: 1, everyRow: false },
           examples: ['"5 oz"'],
         },

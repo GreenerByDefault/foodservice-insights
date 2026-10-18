@@ -17,7 +17,7 @@ import {
   MAX_UPLOAD_FIELD_BYTES,
   MAX_UPLOAD_FIELD_MEGABYTES,
 } from './limits.ts';
-import { FIELD, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
+import { FIELD, FIELD_LABELS, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
 import { monthsWithoutCounts } from './monthly-coverage.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
 
@@ -158,7 +158,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
       bytes,
       rejection: {
         reason: 'invalid_metadata',
-        summary: `Check these fields: ${fieldsWithIssues(parsed.issues).join(', ')}.`,
+        summary: `Check these fields: ${fieldsWithIssues(parsed.issues).map(fieldLabel).join(', ')}.`,
         rejectionDetail: describeIssues(parsed.issues),
       },
     };
@@ -197,4 +197,9 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     },
     metadata: parsed.output,
   };
+}
+
+/** `fieldsWithIssues` falls back to "the form" for an issue with no path, which needs no label. */
+function fieldLabel(field: string): string {
+  return Object.hasOwn(FIELD_LABELS, field) ? FIELD_LABELS[field as keyof ReportMetadata] : field;
 }

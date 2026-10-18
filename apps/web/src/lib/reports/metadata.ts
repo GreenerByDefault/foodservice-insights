@@ -21,6 +21,12 @@ export const FIELD = {
 export const COUNTS_BASES = exhaustiveArray<CountsBasis>()(['people', 'meals']);
 export const UNIT_SYSTEMS = exhaustiveArray<UnitSystem>()(['lb', 'kg']);
 
+/** The upload form's radio labels, which the report page echoes back. */
+export const UNIT_NAMES: Record<UnitSystem, string> = {
+  lb: 'Pounds (lb)',
+  kg: 'Kilograms (kg)',
+};
+
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(1, 'needs a count of at least 1'));
@@ -51,3 +57,12 @@ export const ReportMetadataSchema = v.object({
 });
 
 export type ReportMetadata = v.InferOutput<typeof ReportMetadataSchema>;
+
+/** Each field as the upload form labels it, for a rejection to name. */
+export const FIELD_LABELS: Record<keyof ReportMetadata, string> = {
+  name: 'Report name',
+  siteName: 'Site name',
+  countsBasis: 'Count by',
+  unitSystem: 'Weight unit',
+  monthlyCounts: 'Diners or meals per month',
+};

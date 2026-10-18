@@ -57,7 +57,8 @@ export async function expectScreenshots(
     if (label !== 'desktop') await clearHover(page);
     const clip = options.clipBelow && (await clipBelow(options.clipBelow, viewport.width));
     const shot = label === 'desktop' ? [name] : [label, name];
-    await expect(page).toHaveScreenshot(shot, { fullPage: !clip, clip });
+    // `fullPage` even with a clip: without it, a clip reaching below the fold is cut at the viewport.
+    await expect(page).toHaveScreenshot(shot, { fullPage: true, clip });
     // Every width, since a Tailwind breakpoint can swap which markup is visible, and axe skips
     // what is hidden. After the capture, which waits for the page to settle: a scan mid-transition
     // would measure contrast on half-faded colours.

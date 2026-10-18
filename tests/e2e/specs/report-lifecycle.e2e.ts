@@ -42,7 +42,7 @@ async function uploadReport(
     buffer: Buffer.from(csv),
   });
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
-  await page.getByRole('radio', { name: 'lb' }).click();
+  await page.getByRole('radio', { name: 'Pounds (lb)' }).click();
   await page.getByRole('button', { name: 'Upload report' }).click();
 
   await expect(page).toHaveURL(new RegExp(`/orgs/${organizationSlug}/reports/[0-9a-f-]+$`));

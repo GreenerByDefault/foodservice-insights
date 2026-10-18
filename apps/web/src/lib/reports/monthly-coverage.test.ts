@@ -15,7 +15,8 @@ describe('monthsWithoutCounts', () => {
   test('rejects one uncounted month', () => {
     expect(monthsWithoutCounts(['2026-01', '2026-02'], { '2026-01': 120 })).toEqual({
       reason: 'invalid_metadata',
-      summary: 'Your file has orders in 2026-02, but you did not give a count for that month.',
+      summary:
+        'Your file has orders in February 2026, but you did not give a count for that month.',
       rejectionDetail: 'months in the file with no count: 2026-02',
     });
   });
@@ -24,7 +25,7 @@ describe('monthsWithoutCounts', () => {
     expect(monthsWithoutCounts(['2026-01', '2026-02'], { '2026-03': 120 })).toEqual({
       reason: 'invalid_metadata',
       summary:
-        'Your file has orders in 2026-01 and 2026-02, but you did not give a count for those months.',
+        'Your file has orders in January 2026 and February 2026, but you did not give a count for those months.',
       rejectionDetail: 'months in the file with no count: 2026-01, 2026-02',
     });
   });
@@ -33,7 +34,7 @@ describe('monthsWithoutCounts', () => {
     expect(monthsWithoutCounts(['2026-01', '2026-02', '2026-03'], { '2026-04': 120 })).toEqual({
       reason: 'invalid_metadata',
       summary:
-        'Your file has orders in 2026-01, 2026-02, and 2026-03, but you did not give a count for those months.',
+        'Your file has orders in January 2026, February 2026, and March 2026, but you did not give a count for those months.',
       rejectionDetail: 'months in the file with no count: 2026-01, 2026-02, 2026-03',
     });
   });

@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { UnitSystem } from '@gbd/db';
 import FileSpreadsheetIcon from '@lucide/svelte/icons/file-spreadsheet';
+import { UNIT_NAMES } from '#lib/reports/metadata.js';
 import { countsHeading, formatMonth } from '#lib/reports/monthly-counts.js';
 import type { ReportCounts } from './+page.server.ts';
 
@@ -13,8 +14,6 @@ interface Props {
 
 let { inputFile, unitSystem, counts, newReportHref }: Props = $props();
 
-// Leads with the upload form's own radio label, so it reads back as the thing the user clicked.
-const UNIT_NAMES: Record<UnitSystem, string> = { lb: 'lb (pounds)', kg: 'kg (kilograms)' };
 const countFormat = new Intl.NumberFormat('en-US');
 const headingId = $props.id();
 

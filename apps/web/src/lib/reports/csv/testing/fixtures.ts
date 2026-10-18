@@ -71,7 +71,7 @@ function everyRowProblem(): Problem {
   return {
     rule: 'The weight has a unit in it',
     advice:
-      'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
+      'Enter plain numbers only, and put the unit in the column name instead: "Weight (lb)" or "Weight (kg)".',
     rows: { ranges: [{ start: 2, end: 4500 }], total: 4500, everyRow: true },
     examples: [quote('5 oz'), quote('12 lb'), quote('3 kg')],
   };

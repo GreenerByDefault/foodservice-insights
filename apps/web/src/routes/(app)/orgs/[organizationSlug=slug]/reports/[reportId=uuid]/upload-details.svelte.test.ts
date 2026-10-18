@@ -34,8 +34,8 @@ describe('UploadDetails', () => {
   });
 
   test.each([
-    ['lb', 'lb (pounds)'],
-    ['kg', 'kg (kilograms)'],
+    ['lb', 'Pounds (lb)'],
+    ['kg', 'Kilograms (kg)'],
   ] as const)('names the %s weight unit', async (unitSystem, expected) => {
     const screen = await renderDetails({ unitSystem });
 

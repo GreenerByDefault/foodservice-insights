@@ -28,7 +28,7 @@ const triggerState = useFileDropZoneTrigger();
     {@render children()}
   {:else}
     <div
-      class="flex aspect-video w-full flex-col place-items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-6 transition-[color,background-color,border-color] group-aria-disabled/file-drop-zone-trigger:opacity-50 hover:cursor-pointer hover:border-ring hover:bg-accent/30 group-aria-disabled/file-drop-zone-trigger:hover:cursor-not-allowed dark:bg-input/30"
+      class="flex w-full flex-col place-items-center justify-center gap-2 rounded-md border border-dashed border-input bg-background px-3 py-8 transition-[color,background-color,border-color] group-aria-disabled/file-drop-zone-trigger:opacity-50 hover:cursor-pointer hover:border-ring hover:bg-accent/30 group-aria-disabled/file-drop-zone-trigger:hover:cursor-not-allowed dark:bg-input/30"
     >
       <div
         class="flex size-14 place-items-center justify-center rounded-full border border-dashed border-border text-muted-foreground"

@@ -102,7 +102,7 @@ describe('validateSubmission', () => {
       ],
       // Content rules for each metadata field belong to `ReportMetadataSchema`, covered by
       // metadata.test.ts. This one case just proves a metadata rejection is wired through.
-      ['a missing report name', { name: null }, 'invalid_metadata', 'name'],
+      ['a missing report name', { name: null }, 'invalid_metadata', 'Report name'],
     ] as const)('%s', async ([, overrides, reason, field]) => {
       const outcome = await validateSubmission(aSubmission(overrides));
 
@@ -135,7 +135,7 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason: 'invalid_metadata',
-          summary: 'Check these fields: countsBasis, unitSystem.',
+          summary: 'Check these fields: Count by, Weight unit.',
         },
       });
     });
@@ -159,7 +159,8 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason: 'invalid_metadata',
-          summary: 'Your file has orders in 2026-01, but you did not give a count for that month.',
+          summary:
+            'Your file has orders in January 2026, but you did not give a count for that month.',
         },
       });
     });
