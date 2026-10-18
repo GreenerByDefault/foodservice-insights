@@ -12,6 +12,7 @@ import {
 import type { Database } from '../src/schema.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
+  FINISHED_RUN_TELEMETRY,
   insertAnalysisAttempt,
   insertAttemptLlmUsage,
   insertAttemptQualityCheck,
@@ -23,33 +24,6 @@ import { withRollback } from '../src/testing/transactions.ts';
 
 type TelemetryOverrides = Parameters<typeof insertAttemptTelemetry>[1];
 type LlmUsageOverrides = Parameters<typeof insertAttemptLlmUsage>[1];
-
-// The fixture's defaults: a finished run, every group set.
-const FINISHED_RUN = {
-  countsBasis: 'people',
-  inputRows: 1000,
-  inputKilograms: 2500.5,
-  inputUniqueProducts: 120,
-  categorizationCacheEntries: 5000,
-  cacheRawNameProducts: 100,
-  cacheCleanedNameProducts: 5,
-  llmMatchedProducts: 15,
-  cacheNoMatchProducts: 2,
-  llmNoMatchProducts: 3,
-  unrecognizedLlmAnswers: 1,
-  categorizedRows: 980,
-  categorizedKilograms: 2400.25,
-  totalCo2eKg: 9000.5,
-  co2eKgPerDinerOrMeal: 1.75,
-  plantPctByWeight: 42.5,
-  plantProteinPctByWeight: 30,
-  readDurationMs: 800,
-  categorizeDurationMs: 45_000,
-  reportDurationMs: 300,
-  pdfDurationMs: 2000,
-  xlsxDurationMs: 400,
-  peakMemoryKib: 250_000,
-} satisfies TelemetryOverrides;
 
 const NO_INPUT = {
   inputRows: null,
@@ -99,7 +73,7 @@ function storedTelemetry(
     reportId: row.reportId,
     organizationId: row.organizationId,
     recordedAt: expect.any(Date),
-    ...FINISHED_RUN,
+    ...FINISHED_RUN_TELEMETRY,
     ...overrides,
   };
 }

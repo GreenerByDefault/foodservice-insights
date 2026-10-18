@@ -1,4 +1,4 @@
-/** The analysis attempt state machine, and the result files an attempt produces.
+/** The analysis attempt state machine.
  *
  * These constraints are the coordination point between the web app and the workers, and several
  * exist specifically to make the reaping race in `ARCHITECTURE.md` safe.
@@ -8,14 +8,14 @@
  * and the range check can only be reached by taking the legitimate route to a sixth attempt.
  */
 
-import { sql } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { MAX_ANALYSIS_ATTEMPTS } from '../src/constraints.ts';
 import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttempt } from '../src/generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../src/generated/public/AnalysisAttemptStatus.ts';
 import type { Report } from '../src/generated/public/Report.ts';
-import type { DatabaseExecutor } from '../src/schema.ts';
+import type { Database, DatabaseExecutor } from '../src/schema.ts';
 import {
   insertFixtureOrganization,
   sendBlockingStatement,
@@ -31,10 +31,11 @@ import {
 } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
-type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
-
 /** Take an attempt all the way to `failed`, the only status a retry may follow. */
-async function fail(transaction: Transaction, attemptId: AnalysisAttempt['id']): Promise<void> {
+async function fail(
+  transaction: Transaction<Database>,
+  attemptId: AnalysisAttempt['id'],
+): Promise<void> {
   await transaction
     .updateTable('analysisAttempt')
     .set({
@@ -60,8 +61,8 @@ async function softDelete(database: DatabaseExecutor, reportId: Report['id']): P
     .execute();
 }
 
-describe('analysis_attempt column invariants', () => {
-  describe('status and timestamp constraints', () => {
+describe('analysis_attempt', () => {
+  describe('status and timestamps', () => {
     test('rejects a pending attempt that is already claimed', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
         const attempt = await insertAnalysisAttempt(transaction);
@@ -375,408 +376,411 @@ describe('analysis_attempt column invariants', () => {
       );
     });
   });
-});
 
-describe('starting a new attempt', () => {
-  test('numbers the first attempt 1', async () => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      await insertAnalysisAttempt(transaction, { attemptNumber: 2 });
-    });
-
-    await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
-  });
-
-  test.each<AnalysisAttemptStatus>(['pending', 'processing', 'succeeded', 'canceled'])(
-    'refuses a retry while the previous attempt is %s',
-    async (status) => {
+  describe('starting a new attempt', () => {
+    test('numbers the first attempt 1', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
-        const report = await insertReport(transaction);
-        await insertAnalysisAttempt(transaction, { reportId: report.id, status });
-        await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
+        await insertAnalysisAttempt(transaction, { attemptNumber: 2 });
       });
 
       await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
-    },
-  );
-
-  test('allows a retry once the previous attempt failed', async () => {
-    const numbers = await withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
-      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
-      await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
-
-      return await transaction
-        .selectFrom('analysisAttempt')
-        .select('attemptNumber')
-        .where('reportId', '=', report.id)
-        .orderBy('attemptNumber')
-        .execute();
     });
 
-    expect(numbers).toEqual([{ attemptNumber: 1 }, { attemptNumber: 2 }]);
-  });
-
-  test('refuses to leave a hole in the numbering', async () => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
-      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
-      await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 3 });
-    });
-
-    await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
-  });
-
-  test('refuses a retry on a soft-deleted report', async () => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
-      await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
-      await softDelete(transaction, report.id);
-      await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
-    });
-
-    await expectConstraintViolation(insert, 'analysis_attempt_no_attempt_for_deleted_report');
-  });
-
-  test('refuses a retry racing a soft delete', async () => {
-    // The rule above holds between transactions only because of the trigger's report lock; without
-    // it, both of these commit.
-    await withCommittedFixture(
-      DATABASE,
-      async (transaction, trash) => {
-        const { organization } = await insertFixtureOrganization(transaction, trash);
-        const report = await insertReport(transaction, { organizationId: organization.id });
-        await insertInputFile(transaction, { reportId: report.id });
-        await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
-        return report;
-      },
-      async (report) => {
-        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
-          await softDelete(alpha.transaction, report.id);
-
-          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
-            transaction
-              .insertInto('analysisAttempt')
-              .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
-              .execute(),
-          );
-
-          await alpha.transaction.commit().execute();
-
-          await expectConstraintViolation(
-            blocked.result,
-            'analysis_attempt_no_attempt_for_deleted_report',
-          );
+    test.each<AnalysisAttemptStatus>(['pending', 'processing', 'succeeded', 'canceled'])(
+      'refuses a retry while the previous attempt is %s',
+      async (status) => {
+        const insert = withRollback(DATABASE, async (transaction) => {
+          const report = await insertReport(transaction);
+          await insertAnalysisAttempt(transaction, { reportId: report.id, status });
+          await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
         });
 
-        const attempts = await DATABASE.selectFrom('analysisAttempt')
-          .select('attemptNumber')
-          .where('reportId', '=', report.id)
-          .execute();
-        expect(attempts.map((row) => row.attemptNumber)).toEqual([1]);
+        await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
       },
     );
-  });
 
-  test('makes a soft delete wait for a retry that got there first', async () => {
-    // The same lock from the other side, and what lets the delete endpoint stamp
-    // `cancel_requested_at` on an attempt a retry is still inserting.
-    await withCommittedFixture(
-      DATABASE,
-      async (transaction, trash) => {
-        const { organization } = await insertFixtureOrganization(transaction, trash);
-        const report = await insertReport(transaction, { organizationId: organization.id });
-        await insertInputFile(transaction, { reportId: report.id });
+    test('allows a retry once the previous attempt failed', async () => {
+      const numbers = await withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
         await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
-        return report;
-      },
-      async (report) => {
-        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
-          await alpha.transaction
-            .insertInto('analysisAttempt')
-            .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
-            .execute();
+        await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
 
-          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
-            softDelete(transaction, report.id),
-          );
-
-          await alpha.transaction.commit().execute();
-          await blocked.result;
-          await beta.transaction.commit().execute();
-        });
-
-        const attempts = await DATABASE.selectFrom('analysisAttempt')
+        return await transaction
+          .selectFrom('analysisAttempt')
           .select('attemptNumber')
           .where('reportId', '=', report.id)
           .orderBy('attemptNumber')
           .execute();
-        expect(attempts.map((row) => row.attemptNumber)).toEqual([1, 2]);
-      },
-    );
-  });
-
-  test('refuses the second of two concurrent retries', async () => {
-    // REQUIREMENTS.md allows one retry at a time per report. The trigger's report lock serialises
-    // the two, so beta re-reads the latest attempt after alpha commits and rejects on the status
-    // rule — the unique indexes behind it are backstops nothing now reaches.
-    await withCommittedFixture(
-      DATABASE,
-      async (transaction, trash) => {
-        const { organization } = await insertFixtureOrganization(transaction, trash);
-        const report = await insertReport(transaction, { organizationId: organization.id });
-        await insertInputFile(transaction, { reportId: report.id });
-        await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
-        return report;
-      },
-      async (report) => {
-        await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
-          await alpha.transaction
-            .insertInto('analysisAttempt')
-            .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
-            .execute();
-
-          const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
-            transaction
-              .insertInto('analysisAttempt')
-              .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
-              .execute(),
-          );
-
-          await alpha.transaction.commit().execute();
-
-          await expectConstraintViolation(
-            blocked.result,
-            'analysis_attempt_new_attempt_only_after_failure',
-          );
-        });
-
-        const attempts = await DATABASE.selectFrom('analysisAttempt')
-          .select('attemptNumber')
-          .where('reportId', '=', report.id)
-          .orderBy('attemptNumber')
-          .execute();
-        expect(attempts.map((row) => row.attemptNumber)).toEqual([1, 2]);
-      },
-    );
-  });
-
-  // Together, these two tests pin MAX_ANALYSIS_ATTEMPTS to the
-  // `analysis_attempt_attempt_number_range` CHECK constraint it mirrors, in both directions: if
-  // the migration's bound ever moves without the constant moving with it, either the boundary
-  // insert below starts failing (constant now claims one more attempt than the DB allows) or the
-  // one-past-boundary insert in the second test starts succeeding (constant now claims one fewer
-  // than the DB allows).
-
-  test('allows exactly MAX_ANALYSIS_ATTEMPTS attempts', async () => {
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
-      for (let attemptNumber = 1; attemptNumber <= MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
-        const attempt = await insertAnalysisAttempt(transaction, {
-          reportId: report.id,
-          attemptNumber,
-        });
-        if (attemptNumber < MAX_ANALYSIS_ATTEMPTS) await fail(transaction, attempt.id);
-      }
-    });
-
-    await expect(insert).resolves.toBeUndefined();
-  });
-
-  test('stops at MAX_ANALYSIS_ATTEMPTS attempts', async () => {
-    // Reaching the limit is the only way past the insert trigger to the range check, since the
-    // trigger rejects any number that is not latest + 1.
-    const insert = withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
-      for (let attemptNumber = 1; attemptNumber <= MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
-        const attempt = await insertAnalysisAttempt(transaction, {
-          reportId: report.id,
-          attemptNumber,
-        });
-        await fail(transaction, attempt.id);
-      }
-      await insertAnalysisAttempt(transaction, {
-        reportId: report.id,
-        attemptNumber: MAX_ANALYSIS_ATTEMPTS + 1,
       });
+
+      expect(numbers).toEqual([{ attemptNumber: 1 }, { attemptNumber: 2 }]);
     });
 
-    await expectConstraintViolation(insert, 'analysis_attempt_attempt_number_range');
-  });
-});
+    test('refuses to leave a hole in the numbering', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+        await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 3 });
+      });
 
-describe('at most one active attempt per report', () => {
-  // There is no violation left to provoke: the insert trigger rejects every sequential path to a
-  // second active attempt, and since it took a report lock it rejects the concurrent path too.
-  // So the definition is all there is to assert, and the word worth asserting is `UNIQUE` — drop
-  // the partiality and three tests above fail, but demote this to a plain index and nothing else
-  // in the suite notices. The migration says why the index is worth keeping.
-  test('still has its partial unique index', async () => {
-    const definition = await withRollback(DATABASE, async (transaction) => {
-      const { rows } = await sql<{ definition: string | null }>`
+      await expectConstraintViolation(insert, 'analysis_attempt_new_attempt_only_after_failure');
+    });
+
+    test('refuses a retry on a soft-deleted report', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+        await softDelete(transaction, report.id);
+        await insertAnalysisAttempt(transaction, { reportId: report.id, attemptNumber: 2 });
+      });
+
+      await expectConstraintViolation(insert, 'analysis_attempt_no_attempt_for_deleted_report');
+    });
+
+    test('refuses a retry racing a soft delete', async () => {
+      // The rule above holds between transactions only because of the trigger's report lock; without
+      // it, both of these commit.
+      await withCommittedFixture(
+        DATABASE,
+        async (transaction, trash) => {
+          const { organization } = await insertFixtureOrganization(transaction, trash);
+          const report = await insertReport(transaction, { organizationId: organization.id });
+          await insertInputFile(transaction, { reportId: report.id });
+          await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+          return report;
+        },
+        async (report) => {
+          await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+            await softDelete(alpha.transaction, report.id);
+
+            const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+              transaction
+                .insertInto('analysisAttempt')
+                .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+                .execute(),
+            );
+
+            await alpha.transaction.commit().execute();
+
+            await expectConstraintViolation(
+              blocked.result,
+              'analysis_attempt_no_attempt_for_deleted_report',
+            );
+          });
+
+          const attempts = await DATABASE.selectFrom('analysisAttempt')
+            .select('attemptNumber')
+            .where('reportId', '=', report.id)
+            .execute();
+          expect(attempts.map((row) => row.attemptNumber)).toEqual([1]);
+        },
+      );
+    });
+
+    test('makes a soft delete wait for a retry that got there first', async () => {
+      // The same lock from the other side, and what lets the delete endpoint stamp
+      // `cancel_requested_at` on an attempt a retry is still inserting.
+      await withCommittedFixture(
+        DATABASE,
+        async (transaction, trash) => {
+          const { organization } = await insertFixtureOrganization(transaction, trash);
+          const report = await insertReport(transaction, { organizationId: organization.id });
+          await insertInputFile(transaction, { reportId: report.id });
+          await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+          return report;
+        },
+        async (report) => {
+          await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+            await alpha.transaction
+              .insertInto('analysisAttempt')
+              .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+              .execute();
+
+            const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+              softDelete(transaction, report.id),
+            );
+
+            await alpha.transaction.commit().execute();
+            await blocked.result;
+            await beta.transaction.commit().execute();
+          });
+
+          const attempts = await DATABASE.selectFrom('analysisAttempt')
+            .select('attemptNumber')
+            .where('reportId', '=', report.id)
+            .orderBy('attemptNumber')
+            .execute();
+          expect(attempts.map((row) => row.attemptNumber)).toEqual([1, 2]);
+        },
+      );
+    });
+
+    test('refuses the second of two concurrent retries', async () => {
+      // REQUIREMENTS.md allows one retry at a time per report. The trigger's report lock serialises
+      // the two, so beta re-reads the latest attempt after alpha commits and rejects on the status
+      // rule — the unique indexes behind it are backstops nothing now reaches.
+      await withCommittedFixture(
+        DATABASE,
+        async (transaction, trash) => {
+          const { organization } = await insertFixtureOrganization(transaction, trash);
+          const report = await insertReport(transaction, { organizationId: organization.id });
+          await insertInputFile(transaction, { reportId: report.id });
+          await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
+          return report;
+        },
+        async (report) => {
+          await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
+            await alpha.transaction
+              .insertInto('analysisAttempt')
+              .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+              .execute();
+
+            const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
+              transaction
+                .insertInto('analysisAttempt')
+                .values({ reportId: report.id, attemptNumber: 2, status: 'pending' })
+                .execute(),
+            );
+
+            await alpha.transaction.commit().execute();
+
+            await expectConstraintViolation(
+              blocked.result,
+              'analysis_attempt_new_attempt_only_after_failure',
+            );
+          });
+
+          const attempts = await DATABASE.selectFrom('analysisAttempt')
+            .select('attemptNumber')
+            .where('reportId', '=', report.id)
+            .orderBy('attemptNumber')
+            .execute();
+          expect(attempts.map((row) => row.attemptNumber)).toEqual([1, 2]);
+        },
+      );
+    });
+
+    // Together, these two tests pin MAX_ANALYSIS_ATTEMPTS to the
+    // `analysis_attempt_attempt_number_range` CHECK constraint it mirrors, in both directions: if
+    // the migration's bound ever moves without the constant moving with it, either the boundary
+    // insert below starts failing (constant now claims one more attempt than the DB allows) or the
+    // one-past-boundary insert in the second test starts succeeding (constant now claims one fewer
+    // than the DB allows).
+
+    test('allows exactly MAX_ANALYSIS_ATTEMPTS attempts', async () => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        for (let attemptNumber = 1; attemptNumber <= MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
+          const attempt = await insertAnalysisAttempt(transaction, {
+            reportId: report.id,
+            attemptNumber,
+          });
+          if (attemptNumber < MAX_ANALYSIS_ATTEMPTS) await fail(transaction, attempt.id);
+        }
+      });
+
+      await expect(insert).resolves.toBeUndefined();
+    });
+
+    test('stops at MAX_ANALYSIS_ATTEMPTS attempts', async () => {
+      // Reaching the limit is the only way past the insert trigger to the range check, since the
+      // trigger rejects any number that is not latest + 1.
+      const insert = withRollback(DATABASE, async (transaction) => {
+        const report = await insertReport(transaction);
+        for (let attemptNumber = 1; attemptNumber <= MAX_ANALYSIS_ATTEMPTS; attemptNumber++) {
+          const attempt = await insertAnalysisAttempt(transaction, {
+            reportId: report.id,
+            attemptNumber,
+          });
+          await fail(transaction, attempt.id);
+        }
+        await insertAnalysisAttempt(transaction, {
+          reportId: report.id,
+          attemptNumber: MAX_ANALYSIS_ATTEMPTS + 1,
+        });
+      });
+
+      await expectConstraintViolation(insert, 'analysis_attempt_attempt_number_range');
+    });
+  });
+
+  describe('at most one active attempt per report', () => {
+    // There is no violation left to provoke: the insert trigger rejects every sequential path to a
+    // second active attempt, and since it took a report lock it rejects the concurrent path too.
+    // So the definition is all there is to assert, and the word worth asserting is `UNIQUE` — drop
+    // the partiality and three tests above fail, but demote this to a plain index and nothing else
+    // in the suite notices. The migration says why the index is worth keeping.
+    test('still has its partial unique index', async () => {
+      const definition = await withRollback(DATABASE, async (transaction) => {
+        const { rows } = await sql<{ definition: string | null }>`
         SELECT pg_get_indexdef(to_regclass('public.analysis_attempt_one_active_per_report'))
           AS definition
       `.execute(transaction);
-      return rows[0]?.definition ?? 'no such index';
+        return rows[0]?.definition ?? 'no such index';
+      });
+
+      // Deliberately not an exact match: how Postgres renders the predicate is a detail of its
+      // version, and this schema expects to move to 18.
+      expect(definition).toMatch(/^CREATE UNIQUE INDEX .* \(report_id\) WHERE /);
     });
-
-    // Deliberately not an exact match: how Postgres renders the predicate is a detail of its
-    // version, and this schema expects to move to 18.
-    expect(definition).toMatch(/^CREATE UNIQUE INDEX .* \(report_id\) WHERE /);
-  });
-});
-
-describe('a terminal attempt is final', () => {
-  test('rejects reopening it', async () => {
-    // The reaping race: a hung worker must not be able to overwrite the verdict another worker
-    // already reached.
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'failed' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ status: 'pending', finishedAt: null, failureReason: null })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
   });
 
-  test('permits claiming, sending, and stamping the notification together', async () => {
-    // All four notification columns are in the terminal trigger's mask, so a worker can go
-    // straight from unclaimed to sent in one UPDATE.
-    const updated = await withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      return await transaction
-        .updateTable('analysisAttempt')
-        .set({
-          notificationClaimedAt: new Date(),
-          notificationClaimedByWorkerId: 'w1',
-          notificationAttempts: 1,
-          notificationEmailSentAt: new Date(),
-        })
-        .where('id', '=', attempt.id)
-        .returning([
-          'notificationClaimedAt',
-          'notificationClaimedByWorkerId',
-          'notificationAttempts',
-          'notificationEmailSentAt',
-        ])
-        .executeTakeFirstOrThrow();
-    });
-
-    expect(updated.notificationClaimedAt).toBeInstanceOf(Date);
-    expect(updated.notificationClaimedByWorkerId).toBe('w1');
-    expect(updated.notificationAttempts).toBe(1);
-    expect(updated.notificationEmailSentAt).toBeInstanceOf(Date);
-  });
-
-  test('rejects claiming a canceled attempt', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'canceled' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expectConstraintViolation(update, 'analysis_attempt_canceled_is_not_notified');
-  });
-
-  test('rejects smuggling another column alongside the notification timestamp', async () => {
-    // The trigger compares the whole row with that one column masked out. A per-column
-    // implementation would pass the test above and fail here.
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'failed' });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ notificationEmailSentAt: new Date(), failureDetail: 'rewritten after the fact' })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
-  });
-
-  test('rejects smuggling another column alongside the notification attempt count', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'failed' });
-      // The claim itself is permitted on its own; the second UPDATE is what smuggles.
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({
-          notificationClaimedAt: new Date(),
-          notificationClaimedByWorkerId: 'w1',
-          notificationAttempts: 1,
-        })
-        .where('id', '=', attempt.id)
-        .execute();
-
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ notificationAttempts: 2, failureDetail: 'rewritten after the fact' })
-        .where('id', '=', attempt.id)
-        .execute();
-    });
-
-    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
-  });
-
-  test.each(['succeeded', 'failed', 'canceled'] as const)(
-    'deleting the requester of a %s attempt nulls the requester',
-    async (status) => {
-      const requester = await withRollback(DATABASE, async (transaction) => {
-        const user = await insertAppUser(transaction);
-        const attempt = await insertAnalysisAttempt(transaction, {
-          status,
-          requestedByUserId: user.id,
-        });
-        await transaction.deleteFrom('appUser').where('id', '=', user.id).execute();
-        return await transaction
-          .selectFrom('analysisAttempt')
-          .select('requestedByUserId')
+  describe('a terminal attempt is final', () => {
+    test('rejects reopening it', async () => {
+      // The reaping race: a hung worker must not be able to overwrite the verdict another worker
+      // already reached.
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'failed' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ status: 'pending', finishedAt: null, failureReason: null })
           .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
+    });
+
+    test('permits claiming, sending, and stamping the notification together', async () => {
+      // All four notification columns are in the terminal trigger's mask, so a worker can go
+      // straight from unclaimed to sent in one UPDATE.
+      const updated = await withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+        return await transaction
+          .updateTable('analysisAttempt')
+          .set({
+            notificationClaimedAt: new Date(),
+            notificationClaimedByWorkerId: 'w1',
+            notificationAttempts: 1,
+            notificationEmailSentAt: new Date(),
+          })
+          .where('id', '=', attempt.id)
+          .returning([
+            'notificationClaimedAt',
+            'notificationClaimedByWorkerId',
+            'notificationAttempts',
+            'notificationEmailSentAt',
+          ])
           .executeTakeFirstOrThrow();
       });
 
-      expect(requester).toEqual({ requestedByUserId: null });
-    },
-  );
+      expect(updated.notificationClaimedAt).toBeInstanceOf(Date);
+      expect(updated.notificationClaimedByWorkerId).toBe('w1');
+      expect(updated.notificationAttempts).toBe(1);
+      expect(updated.notificationEmailSentAt).toBeInstanceOf(Date);
+    });
 
-  test('rejects reassigning the requester of a finished attempt', async () => {
-    const update = withRollback(DATABASE, async (transaction) => {
-      const [first, second] = [await insertAppUser(transaction), await insertAppUser(transaction)];
-      const attempt = await insertAnalysisAttempt(transaction, {
-        status: 'succeeded',
-        requestedByUserId: first.id,
+    test('rejects claiming a canceled attempt', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'canceled' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ notificationClaimedAt: new Date(), notificationClaimedByWorkerId: 'w1' })
+          .where('id', '=', attempt.id)
+          .execute();
       });
-      await transaction
-        .updateTable('analysisAttempt')
-        .set({ requestedByUserId: second.id })
-        .where('id', '=', attempt.id)
-        .execute();
+
+      await expectConstraintViolation(update, 'analysis_attempt_canceled_is_not_notified');
     });
 
-    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
-  });
+    test('rejects smuggling another column alongside the notification timestamp', async () => {
+      // The trigger compares the whole row with that one column masked out. A per-column
+      // implementation would pass the test above and fail here.
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'failed' });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ notificationEmailSentAt: new Date(), failureDetail: 'rewritten after the fact' })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
 
-  test('permits an update that changes nothing', async () => {
-    const rows = await withRollback(DATABASE, async (transaction) => {
-      const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      const result = await transaction
-        .updateTable('analysisAttempt')
-        .set({ workerId: attempt.workerId })
-        .where('id', '=', attempt.id)
-        .executeTakeFirstOrThrow();
-      return Number(result.numUpdatedRows);
+      await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
     });
 
-    expect(rows).toBe(1);
+    test('rejects smuggling another column alongside the notification attempt count', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'failed' });
+        // The claim itself is permitted on its own; the second UPDATE is what smuggles.
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({
+            notificationClaimedAt: new Date(),
+            notificationClaimedByWorkerId: 'w1',
+            notificationAttempts: 1,
+          })
+          .where('id', '=', attempt.id)
+          .execute();
+
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ notificationAttempts: 2, failureDetail: 'rewritten after the fact' })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
+    });
+
+    test.each(['succeeded', 'failed', 'canceled'] as const)(
+      'deleting the requester of a %s attempt nulls the requester',
+      async (status) => {
+        const requester = await withRollback(DATABASE, async (transaction) => {
+          const user = await insertAppUser(transaction);
+          const attempt = await insertAnalysisAttempt(transaction, {
+            status,
+            requestedByUserId: user.id,
+          });
+          await transaction.deleteFrom('appUser').where('id', '=', user.id).execute();
+          return await transaction
+            .selectFrom('analysisAttempt')
+            .select('requestedByUserId')
+            .where('id', '=', attempt.id)
+            .executeTakeFirstOrThrow();
+        });
+
+        expect(requester).toEqual({ requestedByUserId: null });
+      },
+    );
+
+    test('rejects reassigning the requester of a finished attempt', async () => {
+      const update = withRollback(DATABASE, async (transaction) => {
+        const [first, second] = [
+          await insertAppUser(transaction),
+          await insertAppUser(transaction),
+        ];
+        const attempt = await insertAnalysisAttempt(transaction, {
+          status: 'succeeded',
+          requestedByUserId: first.id,
+        });
+        await transaction
+          .updateTable('analysisAttempt')
+          .set({ requestedByUserId: second.id })
+          .where('id', '=', attempt.id)
+          .execute();
+      });
+
+      await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
+    });
+
+    test('permits an update that changes nothing', async () => {
+      const rows = await withRollback(DATABASE, async (transaction) => {
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+        const result = await transaction
+          .updateTable('analysisAttempt')
+          .set({ workerId: attempt.workerId })
+          .where('id', '=', attempt.id)
+          .executeTakeFirstOrThrow();
+        return Number(result.numUpdatedRows);
+      });
+
+      expect(rows).toBe(1);
+    });
   });
 
-  describe('the reaping race itself', () => {
-    // The tests above only approximate this: they prove an already-terminal row rejects an
-    // update, never that a *blocked* worker re-reads one.
+  describe('the reaping race', () => {
+    // The terminal-attempt tests above only approximate this: they prove an already-terminal row
+    // rejects an update, never that a *blocked* worker re-reads one.
     const ORIGINAL_WORKER = 'worker-a';
     const REAPING_WORKER = 'worker-b';
 
@@ -801,7 +805,10 @@ describe('a terminal attempt is final', () => {
     }
 
     /** Another worker declares the attempt hung, and holds the row. */
-    async function reap(transaction: Transaction, attempt: AnalysisAttempt): Promise<void> {
+    async function reap(
+      transaction: Transaction<Database>,
+      attempt: AnalysisAttempt,
+    ): Promise<void> {
       const reaped = await transaction
         .updateTable('analysisAttempt')
         .set({

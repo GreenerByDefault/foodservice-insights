@@ -19,10 +19,12 @@ function connectionStringFor(name: string): string {
   return url.toString();
 }
 
-test('templateFingerprint is a stable hash across calls', async () => {
-  const [first, second] = await Promise.all([templateFingerprint(), templateFingerprint()]);
-  expect(second).toBe(first);
-  expect(first).toMatch(/^[0-9a-f]{12}$/);
+describe('templateFingerprint', () => {
+  test('is a stable hash across calls', async () => {
+    const [first, second] = await Promise.all([templateFingerprint(), templateFingerprint()]);
+    expect(second).toBe(first);
+    expect(first).toMatch(/^[0-9a-f]{12}$/);
+  });
 });
 
 describe('ensureTemplateDatabase', () => {

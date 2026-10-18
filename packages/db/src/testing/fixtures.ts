@@ -542,6 +542,33 @@ export async function insertUnitWeight(
 // Attempt telemetry
 // ---------------------------------------------------------------------------
 
+/** The columns `insertAttemptTelemetry` defaults to, ids aside. */
+export const FINISHED_RUN_TELEMETRY = {
+  countsBasis: 'people',
+  inputRows: 1000,
+  inputKilograms: 2500.5,
+  inputUniqueProducts: 120,
+  categorizationCacheEntries: 5000,
+  cacheRawNameProducts: 100,
+  cacheCleanedNameProducts: 5,
+  llmMatchedProducts: 15,
+  cacheNoMatchProducts: 2,
+  llmNoMatchProducts: 3,
+  unrecognizedLlmAnswers: 1,
+  categorizedRows: 980,
+  categorizedKilograms: 2400.25,
+  totalCo2eKg: 9000.5,
+  co2eKgPerDinerOrMeal: 1.75,
+  plantPctByWeight: 42.5,
+  plantProteinPctByWeight: 30,
+  readDurationMs: 800,
+  categorizeDurationMs: 45_000,
+  reportDurationMs: 300,
+  pdfDurationMs: 2000,
+  xlsxDurationMs: 400,
+  peakMemoryKib: 250_000,
+} satisfies Partial<NewAnalysisAttemptTelemetry>;
+
 /** A finished run's telemetry, every group set, under fresh ids that name no attempt: the table
  * has no foreign keys, so nothing else needs to exist. Null a group's columns through `overrides`
  * to build a run that stopped earlier. */
@@ -555,29 +582,7 @@ export async function insertAttemptTelemetry(
       analysisAttemptId: crypto.randomUUID() as AnalysisAttemptId,
       reportId: crypto.randomUUID() as ReportId,
       organizationId: crypto.randomUUID() as OrganizationId,
-      countsBasis: 'people',
-      inputRows: 1000,
-      inputKilograms: 2500.5,
-      inputUniqueProducts: 120,
-      categorizationCacheEntries: 5000,
-      cacheRawNameProducts: 100,
-      cacheCleanedNameProducts: 5,
-      llmMatchedProducts: 15,
-      cacheNoMatchProducts: 2,
-      llmNoMatchProducts: 3,
-      unrecognizedLlmAnswers: 1,
-      categorizedRows: 980,
-      categorizedKilograms: 2400.25,
-      totalCo2eKg: 9000.5,
-      co2eKgPerDinerOrMeal: 1.75,
-      plantPctByWeight: 42.5,
-      plantProteinPctByWeight: 30,
-      readDurationMs: 800,
-      categorizeDurationMs: 45_000,
-      reportDurationMs: 300,
-      pdfDurationMs: 2000,
-      xlsxDurationMs: 400,
-      peakMemoryKib: 250_000,
+      ...FINISHED_RUN_TELEMETRY,
       ...overrides,
     })
     .returningAll()

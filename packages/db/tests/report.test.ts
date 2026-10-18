@@ -7,9 +7,9 @@ import { POSTGRES_CODE_UNIQUE_VIOLATION } from '../src/postgres-codes.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   aChecksum,
-  insertAppUser,
   insertInputFile,
   insertOrganization,
+  insertOrganizationMember,
   insertReport,
 } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
@@ -99,17 +99,15 @@ describe('report', () => {
   test('outlives the user who created it, forgetting only who they were', async () => {
     const report = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);
-      const author = await insertAppUser(transaction);
-      await transaction
-        .insertInto('organizationMember')
-        .values({ userId: author.id, organizationId: organization.id, role: 'member' })
-        .execute();
+      const author = await insertOrganizationMember(transaction, {
+        organizationId: organization.id,
+      });
       const created = await insertReport(transaction, {
         organizationId: organization.id,
-        createdByUserId: author.id,
+        createdByUserId: author.userId,
       });
 
-      await transaction.deleteFrom('auth.users').where('id', '=', author.id).execute();
+      await transaction.deleteFrom('auth.users').where('id', '=', author.userId).execute();
 
       return await transaction
         .selectFrom('report')

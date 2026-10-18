@@ -2,7 +2,7 @@
 
 ## Context
 
-`packages/db` grew one feature at a time, and it shows in three places:
+`packages/db` grew one feature at a time, and it shows in two places:
 
 - **The README restates the schema's own comments.** Most of "The model" and "Design reasoning"
   repeats a `COMMENT ON` that is already in `public-schema.sql` (caches verified-only, telemetry
@@ -12,22 +12,15 @@
   (`result_file_kind` is only `pdf | xlsx`), "a separate hardcoded path" (the column comment says
   `-original` suffix), "iput", and a superadmin link to `ARCHITECTURE.md#auth`, which does not
   mention superadmin (`apps/web/README.md` does).
-- **`tests/` still mixes two kinds of test.** The root README's tier table says it holds
-  *database invariants*, and every file does, one per table group, except that
-  `conventions.test.ts` also tests `withRollback`.
-- **Tests drift from `.claude/rules/typescript.md`'s test organization.** `analysis-attempt.test.ts`
-  has four top-level situation `describe`s instead of one for the table, and a stale header
-  ("and the result files", which live in `result-file.test.ts`). `client.test.ts` has no
-  `describe`s. Three files spell `Transaction<Database>` as
-  `Parameters<Parameters<typeof withRollback>[1]>[0]`. Tests insert rows the fixtures already
-  build (`organization.test.ts` pairs `insertAppUser` + a raw `organizationMember` insert ~8 times
-  where `insertOrganizationMember` does both; `result-file.test.ts`'s `aResultFile` duplicates
-  `insertResultFile`). `attempt-telemetry.test.ts`'s `FINISHED_RUN` is a hand copy of
-  `insertAttemptTelemetry`'s defaults.
+- **The test-database scripts and entry points carry duplication and dead weight.**
+  `run-database.ts` repeats the same connect / `finally end()` six times, the two schema dumps
+  share all but one step, and both entry points export names nothing outside the package imports.
 
 The outcome: a README that orients and states the contract other code must follow, with each "why"
-living once, beside the code that enacts it; `tests/` holding only schema invariants; and test
-files that follow the repo's own conventions.
+living once, beside the code that enacts it; and a package whose scripts and public surface carry
+no more than they need. The tests already follow the repo's conventions (`tests/` is one file per
+table group, each asserting what the schema rejects), so a move in either PR must keep them that
+way.
 
 **Out of scope:** behaviour changes; the SQL in `migrations/` (their TS comments are fair game, and
 get updated wherever they cite a moved path); `src/generated/`;
@@ -36,38 +29,9 @@ deploy config.
 
 ## The stack
 
-Three PRs, stacked with `gh-stack` on top of `analysis-attempt-finding-table` (the finding table's
-own PR), each independently green, landing in this order (later ones reference earlier names).
+Two PRs, stacked with `gh-stack`, each independently green, landing in this order.
 
-### PR 1 — Make the remaining tests follow the repo's conventions
-
-Test-only. After it, `tests/` is one file per table group, each asserting what the schema rejects.
-
-- Rename `tests/attempt-finding.test.ts` → `analysis-attempt-finding.test.ts` and
-  `attempt-telemetry.test.ts` → `analysis-attempt-telemetry.test.ts`, so every file is named for
-  its table.
-- Move `conventions.test.ts`'s `withRollback` block to a new `src/testing/transactions.test.ts`.
-  `conventions.test.ts` keeps the catalog conventions, the Kanel/CamelCase round trip, and the SQL
-  `uuidv7()` tests.
-- `analysis-attempt.test.ts`: one top-level `describe('analysis_attempt')`, with the current
-  groups as situation `describe`s beneath it (status and timestamps, notification columns,
-  contract version, worker git sha, starting a new attempt, at most one active attempt, a terminal
-  attempt is final, the reaping race) — two levels, per `typescript.md`. Fix the header. Keep the
-  one file: it has one subject, and with that structure 883 lines navigate by outline.
-- `src/client.test.ts`: a `describe` per export (`buildPoolConfig`, `shutdownDatabase`,
-  `initializeDatabase`, `logConnectionError`). `src/testing/run-database.test.ts`:
-  `describe('templateFingerprint')` instead of the name in the title.
-- Replace the `Parameters<Parameters<typeof withRollback>[1]>[0]` alias with
-  `Transaction<Database>` (`analysis-attempt`, `result-file`, `organization`).
-- Use a fixture wherever the insert is setup rather than the statement under test:
-  `insertOrganizationMember` in `organization.test.ts` and `report.test.ts:104`; `insertResultFile`
-  for `result-file.test.ts`'s `aResultFile`; the existing `demote` helper in "before a successor is
-  promoted". Leave raw inserts that *are* the statement under test.
-- Export the finished-run defaults from `src/testing/fixtures.ts` (the object
-  `insertAttemptTelemetry` spreads) and have `analysis-attempt-telemetry.test.ts` import it instead
-  of `FINISHED_RUN`.
-
-### PR 2 — Rewrite the README around orientation and contract
+### PR 1 — Rewrite the README around orientation and contract
 
 Per the `writing-docs` skill: name the file that holds a fact, don't copy it. Keep these headings,
 which other docs link to: `#using-it`, `#conventions`, `#writing-a-migration`,
@@ -99,7 +63,7 @@ which other docs link to: `#using-it`, `#conventions`, `#writing-a-migration`,
   worker, so it moves to `apps/worker/README.md` (or is deleted if that README already says it).
 - Run `/prune-comments` over the PR's comment changes.
 
-### PR 3 — Dedupe the test-database scripts and trim the entry points
+### PR 2 — Dedupe the test-database scripts and trim the entry points
 
 - **`src/testing/run-database.ts`**: one `withMaintenanceClient(connectionString, fn)` for the
   connect / try / `finally end()` that six functions repeat; one sweep helper shared by
@@ -130,7 +94,7 @@ delete it and its header paragraph?
 
 ## Considered and left alone
 
-- **Splitting `fixtures.ts` (636 lines) or `organization.test.ts` (629)**: each is one subject
+- **Splitting `fixtures.ts` (641 lines) or `organization.test.ts` (600)**: each is one subject
   with a `describe` or banner per table, and `fixtures.ts` / `unreachable.ts` match the same files
   in `@gbd/email` and `@gbd/storage`.
 - **Moving `analysis-failure-explanations.ts` out**: it is a `Record` over a database enum, read by
@@ -146,13 +110,13 @@ Requires the test stack: `TEST_DB=1 scripts/supabase start`.
 - While iterating: `pnpm --filter @gbd/db test:unit <file>`.
 - **No test lost in a move:** record `pnpm --filter @gbd/db exec vitest list` (with `TEST_DB=1`)
   on the base branch, and again after each PR (the base for PR 1 is the branch as it stands now,
-  with 473 tests). Counts must match; leaf titles must match
+  with 474 tests). Counts must match; leaf titles must match
   apart from the `describe` prefixes deliberately changed.
 - **No dangling paths:** `git grep` for every moved or deleted filename; nothing may still point
-  at one, migration comments included. For PR 2, check that every link into `packages/db/README.md` (from `ARCHITECTURE.md`,
+  at one, migration comments included. For PR 1, check that every link into `packages/db/README.md` (from `ARCHITECTURE.md`,
   `README.md`, `.claude/rules/typescript.md`, `apps/worker/src/attempt/queue.ts`) still resolves
   to a heading.
-- **Public API unchanged (PRs 1–2), shrunk only by the listed names (PR 3):**
+- **Public API unchanged (PR 1), shrunk only by the listed names (PR 2):**
   `pnpm --filter @gbd/db build`, then diff `dist/index.d.ts` and `dist/testing/index.d.ts` against
   the base.
 - Gate per PR, in the background: `pnpm lint && pnpm check && pnpm test`. Report any flake by name.

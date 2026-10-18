@@ -116,28 +116,6 @@ describe('conventions', () => {
   });
 });
 
-describe('withRollback', () => {
-  test('commits nothing', async () => {
-    const id = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertReport(transaction);
-
-      // Visible inside the transaction...
-      await expect(
-        transaction.selectFrom('report').select('id').where('id', '=', id).executeTakeFirst(),
-      ).resolves.toMatchObject({ id });
-
-      return id;
-    });
-
-    // ...and gone once it rolls back.
-    const afterRollback = await DATABASE.selectFrom('report')
-      .select('id')
-      .where('id', '=', id)
-      .executeTakeFirst();
-    expect(afterRollback).toBeUndefined();
-  });
-});
-
 describe('camelCase, enums, and jsonb', () => {
   test('round-trip through Kanel and CamelCasePlugin', async () => {
     const inserted = await withRollback(DATABASE, async (transaction) => {
