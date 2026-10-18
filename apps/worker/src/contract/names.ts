@@ -1,12 +1,13 @@
 /** The vocabularies the parent and child must spell identically from `contract/contract.json`. */
 
-import type {
-  AnalysisFailureReason,
-  CountsBasis,
-  DiagnosticStatus,
-  LlmOperation,
-  QualityCheck,
-  UnitSystem,
+import {
+  type AnalysisFailureReason,
+  type CountsBasis,
+  type DiagnosticStatus,
+  type LlmOperation,
+  MAX_CACHE_KEY_BYTES,
+  type QualityCheck,
+  type UnitSystem,
 } from '@gbd/db';
 
 export const INVOCATION = {
@@ -46,6 +47,19 @@ export const DIAGNOSTIC_STATUSES = [
   'warning',
   'error',
 ] as const satisfies readonly DiagnosticStatus[];
+
+/** The statuses the customer's PDF lists, `analysis_attempt_finding_status_is_warning_or_error`. */
+export const CUSTOMER_FINDING_STATUSES = [
+  'warning',
+  'error',
+] as const satisfies readonly DiagnosticStatus[];
+/** `analysis_attempt_finding_sample_values_at_most_5`. */
+export const MAX_FINDING_SAMPLE_VALUES = 5;
+/** How long a finding's message or sample may be, in UTF-8. Either names at most one product, which
+ * the upload caps far below `MAX_CACHE_KEY_BYTES`, beside a category and a few sentences. The longest
+ * that names none lists every month missing since the upload's earliest date: about 3.5 KB in 2026,
+ * growing 120 bytes a year. */
+export const MAX_FINDING_TEXT_BYTES = 4 * MAX_CACHE_KEY_BYTES;
 
 /** `satisfies Record<AnalysisFailureReason, …>` makes a new database enum value a compile error
  * here until someone assigns it an owner.

@@ -57,8 +57,16 @@ def test_agrees_on_the_telemetry_enums() -> None:
     assert CONTRACT["telemetryEnums"] == {
         "llmOperation": list(names.LLM_OPERATIONS),
         "stage": list(names.STAGES),
+    }
+
+
+def test_agrees_on_the_findings() -> None:
+    assert CONTRACT["findings"] == {
         "qualityCheck": list(names.QUALITY_CHECKS),
         "diagnosticStatus": list(names.DIAGNOSTIC_STATUSES),
+        "customerStatuses": list(names.CUSTOMER_FINDING_STATUSES),
+        "maxSampleValues": names.MAX_FINDING_SAMPLE_VALUES,
+        "maxTextBytes": names.MAX_FINDING_TEXT_BYTES,
     }
 
 

@@ -32,7 +32,7 @@ from gbd_foodservice_insights.report.food_report import (
     total_co2e_kg,
 )
 from gbd_foodservice_insights.report.metric import KILOS
-from gbd_foodservice_insights.report.quality import Finding
+from gbd_foodservice_insights.report.quality import Finding, listed_findings
 from gbd_foodservice_insights.report.schema import (
     DiagnosticStatus,
     DinerOrMeal,
@@ -695,14 +695,14 @@ def quality_lines(findings: Sequence[Finding], *, show_successes: bool) -> list[
     if count_parts:
         lines.append("  " + "  ·  ".join(count_parts))
 
-    visible = [f for f in findings if show_successes or f["status"] in {"warning", "error"}]
-    if not visible:
+    listed = listed_findings(findings, show_successes=show_successes)
+    if not listed:
         return [*lines, "", "No issues were detected."]
 
     lines += ["", "Check details:"]
-    for finding in visible[:20]:
-        lines.append(f"  {_STATUS_LABELS[finding['status']]}:  {finding['message']}")
-        lines += [f"      - {value}" for value in finding.get("sample_values", [])[:5]]
+    for finding in listed:
+        lines.append(f"  {_STATUS_LABELS[finding.status]}:  {finding.message}")
+        lines += [f"      - {value}" for value in finding.sample_values]
     return lines
 
 

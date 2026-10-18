@@ -63,7 +63,9 @@ def _produce_result(run_directory: Path, analyze: Analyze) -> None:
     new_categorizations = new_categorizations_payload(
         analysis_attempt_id=manifest.analysis_attempt_id, rows=outcome.new_categorizations
     )
-    payload = result_payload(analysis_attempt_id=manifest.analysis_attempt_id)
+    payload = result_payload(
+        analysis_attempt_id=manifest.analysis_attempt_id, findings=outcome.findings
+    )
     place_result_files(run_directory, outcome)
     write_json_atomically(run_directory / layout.NEW_CATEGORIZATIONS, new_categorizations)
     write_json_atomically(run_directory / layout.RESULT, payload)

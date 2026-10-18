@@ -31,6 +31,7 @@ const MANIFEST = buildRunManifest({
 
 const RESULT = {
   analysisAttemptId: ATTEMPT_ID,
+  findings: [],
 };
 
 async function directoriesUnder(root: string): Promise<string[]> {

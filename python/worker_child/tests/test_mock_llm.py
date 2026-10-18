@@ -28,7 +28,7 @@ def test_main_runs_a_real_analysis_with_no_api_key(
     assert (files / layout.PDF_FILE_NAME).read_bytes()[:4] == b"%PDF"
     assert (files / layout.XLSX_FILE_NAME).read_bytes()[:2] == b"PK"
     result = json.loads((run_directory / layout.RESULT).read_text(encoding="utf-8"))
-    assert result == {"analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID}
+    assert result == {"analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID, "findings": []}
 
 
 def test_main_records_every_summary_and_no_llm_usage(

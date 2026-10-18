@@ -36,7 +36,9 @@
   },
   "telemetryEnums": {
     "llmOperation": ["clean", "match"],
-    "stage": ["read", "categorize", "report", "pdf", "xlsx"],
+    "stage": ["read", "categorize", "report", "pdf", "xlsx"]
+  },
+  "findings": {
     "qualityCheck": [
       "outlier_line_items",
       "per_product_weight_bounds",
@@ -45,7 +47,10 @@
       "missing_internal_months",
       "date_distribution"
     ],
-    "diagnosticStatus": ["success", "info", "warning", "error"]
+    "diagnosticStatus": ["success", "info", "warning", "error"],
+    "customerStatuses": ["warning", "error"],
+    "maxSampleValues": 5,
+    "maxTextBytes": 8000
   },
   "exitCodes": {
     "wroteResult": 0,

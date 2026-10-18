@@ -6,7 +6,7 @@ import re
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from typing import Any
 
 import pandas as pd
@@ -19,6 +19,7 @@ from gbd_foodservice_insights.analysis import (
     CategorizationSummary,
     InputSummary,
     InvalidInputError,
+    ListedFinding,
     LlmCall,
     MonthlyCounts,
     NewCategorization,
@@ -99,7 +100,7 @@ class FakeReport:
     def build_food_report(self, rows: pd.DataFrame, **kwargs: Any) -> object:
         self.rows = rows
         self.kwargs = kwargs
-        return object()
+        return SimpleNamespace(findings=[])
 
     def summarize_report(self, report: object) -> ReportSummary:
         return FAKE_REPORT_SUMMARY
@@ -689,6 +690,32 @@ def test_hands_back_exactly_the_products_the_llm_categorized(
     assert outcome.new_categorizations == (
         NewCategorization("Pork Loin!", "pork loin", "Pork (pig meat)"),
         NewCategorization("Dish Soap", "dish soap", "No Matches Found"),
+    )
+
+
+def test_hands_back_the_warnings_the_pdf_lists(tmp_path: Path) -> None:
+    request = _request(tmp_path, counts=None)
+    request.input_csv.write_text(
+        input_csv_text(
+            (product, f"{month}-15", 10.0)
+            for month in ("2025-01", "2025-03")
+            for product in KEYWORD_PRODUCTS
+        )
+    )
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    assert outcome.findings == (
+        ListedFinding(
+            quality_check="missing_internal_months",
+            status="warning",
+            message=(
+                "Found 1 missing internal month between Jan 2025 and Mar 2025: Feb 2025. In a "
+                "three-month report window, that means one-third of the expected period is "
+                "missing."
+            ),
+            sample_values=("Feb 2025",),
+        ),
     )
 
 

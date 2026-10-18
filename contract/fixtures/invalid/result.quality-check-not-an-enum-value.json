@@ -1,0 +1,20 @@
+{
+  "analysisAttemptId": "0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+  "findings": [
+    {
+      "qualityCheck": "row_count",
+      "status": "warning",
+      "message": "Found 2 lines with a weight above zero but under 0.01 kg, or over 2,000 kg, which usually means a unit mistake. For example, Oat Milk \"Barista\" 32oz at 4,500 kg, above the upper bound of 2,000 kg.",
+      "sampleValues": [
+        "Oat Milk \"Barista\" 32oz at 4,500 kg, above the upper bound of 2,000 kg.",
+        "Chicken Breast, Boneless 4oz at 0.002 kg, below the lower bound of 0.01 kg."
+      ]
+    },
+    {
+      "qualityCheck": "missing_internal_months",
+      "status": "error",
+      "message": "Found 1 missing internal month between Jan 2025 and Mar 2025: Feb 2025. In a three-month report window, that means one-third of the expected period is missing.",
+      "sampleValues": []
+    }
+  ]
+}

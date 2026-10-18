@@ -19,6 +19,7 @@ import {
   type ReportCounts,
   type RunManifestInput,
 } from './messages.ts';
+import { MAX_FINDING_SAMPLE_VALUES, MAX_FINDING_TEXT_BYTES } from './names.ts';
 
 const FIXTURES = join(findRepoRoot(), 'contract', 'fixtures');
 
@@ -108,10 +109,25 @@ describe('valid fixtures', () => {
     expect(buildRunManifest(input)).toEqual(JSON.parse(read('valid', name)));
   });
 
-  test('result.json parses into the values the parent writes to the database', () => {
-    const result = parseResult(read('valid', 'result.json'));
+  test('result.json parses into exactly what the parent inserts', () => {
+    const text = read('valid', 'result.json');
 
-    expect(result.analysisAttemptId).toBe('0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f');
+    expect(parseResult(text)).toEqual(JSON.parse(text));
+  });
+
+  test('result.json accepts a finding at every bound', () => {
+    const document = JSON.parse(read('valid', 'result.json'));
+    const atTheBound = 'é'.repeat(MAX_FINDING_TEXT_BYTES / 2);
+    document.findings[0].message = atTheBound;
+    document.findings[0].sampleValues = Array(MAX_FINDING_SAMPLE_VALUES).fill(atTheBound);
+
+    expect(parseResult(JSON.stringify(document))).toEqual(document);
+  });
+
+  test('result.json accepts a report with no findings', () => {
+    const document = { ...JSON.parse(read('valid', 'result.json')), findings: [] };
+
+    expect(parseResult(JSON.stringify(document))).toEqual(document);
   });
 
   test('failure.json parses into a reason the database accepts', () => {

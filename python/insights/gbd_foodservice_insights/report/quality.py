@@ -1,6 +1,8 @@
 """Quality-audit helpers for the food-report pipeline."""
 
-from typing import Any, Literal, NotRequired, TypedDict
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, Final, Literal, NotRequired, TypedDict
 
 from gbd_foodservice_insights.report.schema import DiagnosticStatus
 
@@ -54,3 +56,35 @@ def make_finding(
     if metadata:
         finding["metadata"] = metadata
     return finding
+
+
+# How many findings a report lists, and examples of each; the rest are only counted.
+MAX_LISTED_FINDINGS: Final = 20
+MAX_LISTED_SAMPLES: Final = 5
+
+
+@dataclass(frozen=True)
+class ListedFinding:
+    quality_check: QualityCheck
+    status: DiagnosticStatus
+    message: str
+    sample_values: tuple[str, ...]
+
+
+def listed_findings(
+    findings: Sequence[Finding], *, show_successes: bool
+) -> tuple[ListedFinding, ...]:
+    """The findings the PDF's quality page lists, in its order. Without ``show_successes`` (the
+    customer's report), only warnings and errors."""
+    visible = [f for f in findings if show_successes or f["status"] in {"warning", "error"}]
+    return tuple(
+        ListedFinding(
+            quality_check=finding["category"],
+            status=finding["status"],
+            message=finding["message"],
+            sample_values=tuple(
+                str(value) for value in finding.get("sample_values", [])[:MAX_LISTED_SAMPLES]
+            ),
+        )
+        for finding in visible[:MAX_LISTED_FINDINGS]
+    )

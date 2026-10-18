@@ -24,31 +24,32 @@ Today:
   Several of them name the customer's products.
 - **No check emits `error`.** Every finding the customer sees is a `warning`, so `quality_status`
   is only ever `pass` or `warning`.
-- **The customer PDF** lists the `warning` and `error` findings on "Data Completeness & Quality",
-  its third page. The list is capped at 20 findings and 5 examples each, by `quality_lines` with
-  `show_successes=False` in
-  [`pdf.py`](../../python/insights/gbd_foodservice_insights/report/pdf.py). The executive summary
-  points to them "on the next page" (`_narrative_paragraphs`).
-- **The web report page** shows the downloads and the upload details, and no findings.
-- **`result.json`** carries only `analysisAttemptId`. The findings reach the database only as
-  telemetry: counts per check and status, in `analysis_attempt_quality_check`.
+- **What the customer PDF lists is `listed_findings(findings, show_successes=False)`** in
+  [`quality.py`](../../python/insights/gbd_foodservice_insights/report/quality.py): the warnings
+  and errors, at most 20, with at most 5 examples each, as `ListedFinding`s. `quality_lines` in
+  [`pdf.py`](../../python/insights/gbd_foodservice_insights/report/pdf.py) renders that list, and
+  `analyze()` hands the same list back as `AnalysisOutcome.findings`.
+- **The child writes them to `result.json`** as a required `findings` array of
+  `{ qualityCheck, status, message, sampleValues }`, and **the worker stores them in
+  `analysis_attempt_finding`** in the same transaction as the success verdict
+  (`markAttemptSucceeded` in [`queue.ts`](../../apps/worker/src/attempt/queue.ts)). The contract
+  bounds each message and sample at 8,000 bytes of UTF-8 and the samples at 5, under `findings` in
+  [`contract.json`](../../contract/contract.json).
+- **The stubbed child** (`WORKER_MODE=stubbed`, `python/worker_child/worker_child/testing.py`)
+  reports one `missing_internal_months` warning on its happy path, so a report made under
+  `pnpm dev` has a finding to show.
+- **The web report page** shows the downloads and the upload details, and no findings. The rows
+  only appear once a worker that writes them has been deployed.
 
 ## Decisions
 
 ### The page shows the PDF's own wording, stored with the attempt
 
-The child adds the customer's findings to `result.json`. The worker stores them in a new
-`analysis_attempt_finding` table, in the same transaction that `markAttemptSucceeded`
-([`queue.ts`](../../apps/worker/src/attempt/queue.ts)) uses to insert `result_file`. The page loads
-them alongside the result files.
-
-- **One source of wording.** The page and the PDF print the same Python strings, so they cannot
-  disagree.
-- **Written atomically with the success verdict.** A succeeded attempt always has its findings, so
-  no rows means no warnings.
-- **`ON DELETE CASCADE` from `analysis_attempt`.** The messages name products, which are customer
-  data. Deleting a report is only a soft delete, but deleting an organization hard-deletes its
-  reports and attempts, and the findings have to go with them.
+The page reads `analysis_attempt_finding`, ordered by `position`, which is the PDF's order. The
+page and the PDF print the same Python strings, so they cannot disagree. Because the rows are
+written atomically with the success verdict, a succeeded attempt always has its findings, and no
+rows means no warnings. They hang off `analysis_attempt` with `ON DELETE CASCADE`, since the
+messages name products and deleting an organization hard-deletes its attempts.
 
 *Rejected: reading `analysis_attempt_quality_check`.*
 - It holds counts, not wording.
@@ -56,40 +57,14 @@ them alongside the result files.
   and dropped ([`ARCHITECTURE.md`](../../ARCHITECTURE.md)). A succeeded report can show up before its
   telemetry arrives, or without it ever arriving. The page would then show no warnings without
   any sign that something was missing, which is the worst failure this feature can have.
-- The missing foreign key is not itself the obstacle, since a join on `analysis_attempt_id` works.
-  The reason behind it is: telemetry outlives the organization, so it is defined to hold no
-  customer text (the header of
+- Telemetry outlives the organization, so it is defined to hold no customer text (the header of
   [`003_attempt_telemetry.ts`](../../packages/db/migrations/003_attempt_telemetry.ts)). The wording
   cannot go there.
 
 *Rejected: per-check wording in TypeScript keyed on the `quality_check` enum, the way
 [`failure-copy.ts`](../../apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/failure/failure-copy.ts)
-handles failures.*
-- It loses the specifics, such as which month or which product, that make a warning actionable.
-- Its wording drifts from the PDF's.
-- It still needs a source more reliable than telemetry, so it saves little.
-
-The counts are stored twice, here and in telemetry. That is deliberate, because the two are kept
-for different lengths of time.
-
-### What is stored is exactly what the customer PDF lists
-
-`quality_lines` decides which findings the customer sees. That selection moves into a
-`customer_findings(findings)` function, which both the PDF and `result_payload` call, so there is
-one definition of what the customer sees. The extraction belongs to the PR that adds the second
-caller, not to a prefactor with no user.
-
-`analysis_attempt_finding` (migration `008_attempt_findings.ts`):
-
-- `analysis_attempt_id`: references `analysis_attempt`, with `ON DELETE CASCADE`.
-- `position`: the PDF's order, from 0. The primary key is `(analysis_attempt_id, position)`.
-- `quality_check` and `status`: reuse the enums from `003`. A CHECK limits `status` to `warning`
-  and `error`.
-- `message`: non-empty text.
-- `sample_values`: a `text[]` of at most 5.
-
-The contract bounds the length of `message` and of each sample. Base the bound on
-`categorization.maxProductBytes`, since a product name is the longest thing a message embeds.
+handles failures.* It loses the specifics, such as which month or which product, that make a
+warning actionable, and its wording drifts from the PDF's.
 
 ### The page: a notice above the downloads
 
@@ -117,8 +92,8 @@ Adjust the layout once the nonprofit has seen it.
 
 ### Reports from before the change show no notice
 
-Attempts that finished before PR 1's worker was deployed have no rows, so they look clean. We
-accept that. The app is in trial, and a backfill would mean rerunning the checks.
+Attempts that finished before the findings-storing worker was deployed have no rows, so they look
+clean. We accept that. The app is in trial, and a backfill would mean rerunning the checks.
 
 ### Not in this plan: headline numbers
 
@@ -129,7 +104,7 @@ described above. Also note that the optional-counts plan makes the per-diner fig
 
 ### How often warnings fire
 
-Before PR 2 merges, query production's `analysis_attempt_quality_check` for each check's firing
+Before PR 1 merges, query production's `analysis_attempt_quality_check` for each check's firing
 rate. The success rows are kept, so the rate has a denominator. If most reports get a warning, the
 notice becomes noise. The fix then belongs in the thresholds (`diagnostic_thresholds.yaml`) or in a
 severity split, not in hiding the notice.
@@ -143,46 +118,9 @@ The sample is still small, so this informs the decision but does not block it.
   - It deliberately does not report "no counts" as a finding, so no-counts reports will not show
     this notice.
 
-## PR 1 — the child reports its findings and the worker stores them
+## PR 1 — the report page shows the warnings
 
-Merge only once the `analysis_attempt_finding` table's migration (`008_attempt_findings.ts`) has
-deployed. The parent and the child ship in one image, so the contract can change shape in a single PR.
-
-- **Contract:**
-  - `result.json` gains a required `findings` array, which may be empty, of
-    `{ qualityCheck, status, message, sampleValues }`.
-  - The finding enums already live under `telemetryEnums` in `contract.json`. Reuse them, and
-    rename that group if `result.json` sharing it reads wrong.
-- **Python:**
-  - Extract `customer_findings` from `quality_lines`: the warning/error filter and the caps of 20
-    findings and 5 examples each. `quality_lines` calls it, and its existing tests stay green
-    unchanged.
-  - `AnalysisOutcome` gains `findings`, built from `customer_findings(report.findings)` in
-    `analysis.py`.
-  - `result_payload` validates and writes them.
-  - `run.py` passes them through.
-- **TypeScript:**
-  - `ChildResultSchema` in `messages.ts` gains the array.
-  - `markAttemptSucceeded` inserts the rows after `result_file`, with `position` set from each
-    finding's index.
-
-Tests:
-
-- **Contract fixtures:**
-  - The valid `result.json` gains findings.
-  - Invalid fixtures: a `success` status, an unknown check, an empty message, 6 samples, a message
-    over the bound, and an unknown field.
-- **`queue.test.ts`:** `markAttemptSucceeded` writes the findings in order. It writes none when it
-  loses the race.
-- **Python:** `test_pdf` shows the extraction preserved behavior. `test_analysis` covers the outcome's findings, and the child's `run` test covers the
-  payload.
-- **`pnpm test:system`** locally, because this changes the seam between the worker and the child.
-
-**After merging, dispatch a worker deploy.**
-
-## PR 2 — the report page shows the warnings
-
-It shows nothing until PR 1's worker is live.
+It shows nothing in production until the worker that stores findings is deployed.
 
 - **`+page.server.ts`:**
   - The `succeeded` attempt gains `findings`, loaded by position next to `loadResultFiles`.
@@ -200,8 +138,8 @@ Tests:
 
 ## Verification
 
-- Run each stack's gate for every PR.
+- Run the TypeScript gate.
 - Run the whole flow locally. Upload a file with a missing internal month, which trips
-  `missing_internal_months`. Then check that:
+  `missing_internal_months`, or any file under `WORKER_MODE=stubbed`. Then check that:
   - the notice shows on the page once the report finishes;
   - deleting the organization removes its `analysis_attempt_finding` rows.
