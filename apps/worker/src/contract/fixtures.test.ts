@@ -16,6 +16,7 @@ import {
   parseResult,
   parseRunManifest,
   parseTelemetry,
+  type ReportCounts,
   type RunManifestInput,
 } from './messages.ts';
 
@@ -86,7 +87,7 @@ describe('valid fixtures', () => {
     expect(() => PARSERS[document](read('valid', name))).not.toThrow();
   });
 
-  test.each<[string, RunManifestInput['report']['counts']]>([
+  test.each<[string, ReportCounts | null]>([
     [
       'run.json',
       { basis: 'meals', monthly: { '2025-01': 12040, '2025-02': 11360, '2025-03': 12890 } },

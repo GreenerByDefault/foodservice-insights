@@ -256,6 +256,8 @@ export type CategorizationCache = v.InferOutput<typeof CategorizationCacheSchema
 export type NewCategorizations = v.InferOutput<typeof NewCategorizationsSchema>;
 
 // `monthly` is `unknown` because Kysely hands back a `jsonb` column untyped.
+export type ReportCounts = { basis: CountsBasis; monthly: unknown };
+
 export type RunManifestInput = {
   analysisAttemptId: AnalysisAttemptId;
   report: {
@@ -263,7 +265,7 @@ export type RunManifestInput = {
     siteName: string | null;
     organizationName: string;
     unitSystem: UnitSystem;
-    counts: { basis: CountsBasis; monthly: unknown } | null;
+    counts: ReportCounts | null;
   };
 };
 
