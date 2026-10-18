@@ -83,7 +83,7 @@ design:
 
 Out of scope: the panels beyond the first, and every view beyond the three base ones, which are
 `dashboards.md`; the data alerts and database health, which ride this plan's pipe and are
-`alerts.md`; and user country, which Cloudflare's dashboard already shows.
+`alerts.md`; and user country, which [`user-country.md`](user-country.md) has to capture first.
 
 ## Decisions
 

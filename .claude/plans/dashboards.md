@@ -3,8 +3,8 @@
 ## Context
 
 `REQUIREMENTS.md` § Metrics asks for users, reports, attempt timing, AI cost and failed attempts
-over time. User country is Cloudflare's dashboard. [`metrics-pipeline.md`](metrics-pipeline.md)
-builds the pipe:
+over time. User country waits on [`user-country.md`](user-country.md).
+[`metrics-pipeline.md`](metrics-pipeline.md) builds the pipe:
 - the `metrics` schema and its three base views, read only by `metrics_reader`;
 - tombstones, so hard-deleted rows stay counted;
 - a synthetic history and a local Grafana to draw it in;

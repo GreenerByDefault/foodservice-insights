@@ -7,6 +7,25 @@
 > Postmark, per [`email-provider.md`](email-provider.md) § Supabase Auth's settings; and Postmark
 > has approved the account. The PR that lands the last step deletes this file.
 
+## Order of operations
+
+Go-live spans three plans. GBD's part comes first and is one sitting; everything after it is
+Eric's.
+
+1. **GBD:** the insights@ mailbox and the DNS records on both domains, from the handoff doc Eric
+   sends once Postmark has shown him the DKIM record
+   ([`email-provider.md`](email-provider.md) § Before PR 1 steps 3 and 4,
+   [`custom-domain.md`](custom-domain.md) § Before PR 1 step 1).
+2. Postmark verifies the domain, the first send passes DMARC, and Supabase Auth gets its SMTP
+   settings and templates (`email-provider.md`).
+3. `SITE_URL`, Supabase's Site URL, and `custom-domain.md`'s PR: the app answers at
+   `insights.greenerbydefault.com`. This needs only the CNAME, so it can run alongside 2.
+4. `email-provider.md`'s PR: production sends through Postmark. Not before 2, since
+   `EMAIL_TRANSPORT=provider` is what keeps mail from going out under `p=reject` until the DNS
+   verifies.
+5. Postmark approves the account.
+6. This plan: § Before PR 1, then PR 1 and PR 2.
+
 ## Before PR 1: the hosted project
 
 In the production Supabase project:

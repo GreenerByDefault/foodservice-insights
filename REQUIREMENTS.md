@@ -290,7 +290,8 @@ Follow security best practices for web development.
   [`packages/db/src/constraints.ts`](packages/db/src/constraints.ts). Retries exist for internal errors.
 - **Invites:** a user can invite `HOURLY_INVITE_LIMIT` people per hour — see
   [`apps/web/src/lib/server/invites/limits.ts`](apps/web/src/lib/server/invites/limits.ts).
-- Cloudflare for DDoS protection, and potentially geo-restrictions.
+- DDoS protection, from the hosting platform's own edge rather than an edge vendor of ours
+  ([`ARCHITECTURE.md`](ARCHITECTURE.md#hosting) says why). Geo-restriction is not planned.
 
 ### Performance
 
@@ -321,7 +322,8 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md#failure-modes) for the failure-mode inve
 - Analysis attempt time: time in queue, time to process, total.
 - Analysis cost, via AI metrics.
 - Number of failed analysis attempts.
-- Country of users, via the Cloudflare dashboard.
+- Country of users: a nice-to-have, not a requirement, and only in a privacy-preserving form, a
+  country per account with no IP address kept or sent to a third party for it.
 
 ### Maintainability
 

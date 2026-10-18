@@ -167,7 +167,7 @@ MEMORY_HEADROOM: Final = 1.25
 #
 # - Bandwidth. Each instance adds to a pooled allowance, 50 GiB on the smallest tier and 200 GiB
 #   on a 2 GB one, and we send a few GB a month: inputs and results to Supabase Storage, OpenAI
-#   requests of a few KB each, pages through Cloudflare. Forwarded logs do not count. Past the
+#   requests of a few KB each, and pages to users. Forwarded logs do not count. Past the
 #   allowance it is $0.02/GiB.
 # - The dedicated egress IP add-on, $25 per app per month, and web and worker are separate apps.
 #   It gives an app a fixed pair of IPv4 addresses, which only matters to a destination that
@@ -312,11 +312,6 @@ def grafana_cloud(_: Scenario) -> Bill:
     return (LineItem("Free (3 users)", 0.0),)
 
 
-# https://www.cloudflare.com/plans/network-cdn/. Free includes unmetered DDoS protection.
-def cloudflare(_: Scenario) -> Bill:
-    return (LineItem("Free (DDoS protection)", 0.0),)
-
-
 VENDORS: Final[tuple[tuple[str, Callable[[Scenario], Bill]], ...]] = (
     ("Supabase", supabase),
     ("DigitalOcean", digitalocean),
@@ -324,7 +319,6 @@ VENDORS: Final[tuple[tuple[str, Callable[[Scenario], Bill]], ...]] = (
     ("OpenAI", openai),
     ("Better Stack", better_stack),
     ("Grafana Cloud", grafana_cloud),
-    ("Cloudflare", cloudflare),
 )
 
 
