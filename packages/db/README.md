@@ -70,6 +70,9 @@ Classify a failure with `isTransientDatabaseError` or `isPermanentDatabaseError`
 - **Every `metrics` view has a test in [`tests/metrics.test.ts`](tests/metrics.test.ts), and
   exposes no free text** — ids, timestamps, enums and numbers only, so `metrics_reader` is safe to
   hand to a dashboard or an agent. That file enforces the second rule by column type.
+- **A `metrics` view over a table that can be hard-deleted gets a tombstone in the same
+  migration**, so a delete never rewrites past metrics.
+  [`migrations/011_metrics_tombstones.ts`](migrations/011_metrics_tombstones.ts) is the pattern.
 - **New queries should be checked with `EXPLAIN ANALYZE`** before landing, per
   [Use The Index, Luke](https://use-the-index-luke.com) — this is what "queries are optimized" in
   [`REQUIREMENTS.md`](../../REQUIREMENTS.md#performance) means in practice.

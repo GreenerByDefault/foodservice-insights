@@ -5,8 +5,8 @@
 `REQUIREMENTS.md` § Metrics asks for users, reports, attempt timing, AI cost and failed attempts
 over time. User country waits on [`user-country.md`](user-country.md).
 [`metrics-pipeline.md`](metrics-pipeline.md) builds the pipe:
-- the `metrics` schema and its three base views, read only by `metrics_reader`;
-- tombstones, so hard-deleted rows stay counted;
+- the `metrics` schema and its three base views, read only by `metrics_reader`, with tombstones
+  so hard-deleted rows stay counted (landed);
 - a synthetic history and a local Grafana to draw it in;
 - a check in `pnpm test` that runs every panel's query;
 - the push to Grafana Cloud.
@@ -22,7 +22,7 @@ Facts from the tree (2026-10-15, `main` at `d0335043`) that shape the design:
 
 - **Four of § Metrics' five database items need only the base views.** Users, reports, attempt
   timing and failures are `GROUP BY`s over `metrics.app_user`, `metrics.report` and
-  `metrics.attempt`, which keep hard-deleted rows once the pipeline's tombstones land. "Users over
+  `metrics.attempt`, which keep hard-deleted rows through their tombstones. "Users over
   time" counts by `email_confirmed_at`, because a code request alone makes an `auth.users` row
   (`metrics-pipeline.md` § Context).
 - **AI cost comes from the attempt telemetry, which every ending records.** `003_attempt_telemetry`
@@ -113,14 +113,14 @@ quality rows. Without that, a second run would double every telemetry panel.
 
 ## PR 1 — the product dashboard
 
-Needs `metrics-pipeline.md` PR 4, so the panel check covers these panels from the start.
+Needs `metrics-pipeline.md` PR 3, so the panel check covers these panels from the start.
 
 - `product` gains its starting panels beside the pipeline's reports per week. No migration: the
   base views and the synthetic history already cover them.
 
 ## PR 2 — the telemetry views, and the cost dashboard
 
-Needs `metrics-pipeline.md` PR 4. Independent of PR 1.
+Needs `metrics-pipeline.md` PR 3. Independent of PR 1.
 
 - The views from Decisions, in the next migration. Each gets its tests. The conventions test
   allowlists `requested_model` and `served_model` in `IDENTIFIER_TEXT_COLUMNS`, with their reasons.

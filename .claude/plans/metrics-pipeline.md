@@ -7,8 +7,8 @@ over time, and § Observability for dashboards. This plan builds the pipe they r
 metric definitions in the database, a read-only role to read them, a Grafana that runs locally
 against the dev stack, a check that runs every panel's query, and the push that ships dashboards
 to Grafana Cloud, which the team chose (`ARCHITECTURE.md` § Stack). The definitions and the role
-have landed, with the three base views every later view joins; what remains keeps those views
-counting through hard deletes, and builds the rest of the pipe around one panel. What the
+have landed, with the three base views every later view joins and the tombstones that keep them
+counting through hard deletes; what remains builds the rest of the pipe around one panel. What the
 dashboards show is [`dashboards.md`](dashboards.md). Nothing before the last PR needs a vendor
 account, and that PR needs only a Grafana Cloud stack.
 
@@ -21,18 +21,16 @@ design:
   `auth.users` has `created_at`. Every § Metrics item except AI cost and user country is a
   `GROUP BY` over rows that already exist, so a time series needs no sampling. Even the queue
   depth at a past moment *t* can be computed: `created_at <= t`, and `claimed_at` null or later.
-- **But rows do leave.** Deleting an organization cascades to its reports, their attempts and its
-  rejected uploads. Deleting an account removes the `auth.users` row
-  ([`_deleteAccount`](../../apps/web/src/routes/api/account/+server.ts)). So a count over live
-  rows falls, after the fact, for every week the deleted rows touched. Deleting a report is soft and keeps
-  everything (`REQUIREMENTS.md` § Data deletion), so these two hard deletes are the only leaks.
-  `audit_event` already keeps raw ids with no FK, so it outlives what it names.
-- **Cascades fire row triggers on every child, in order.** When an organization is deleted,
-  each report's `BEFORE DELETE` trigger fires while the report row still exists. The report's
-  attempts are deleted only after it, so an attempt's trigger can no longer read its report.
-  Supabase Auth's admin API connects as `supabase_auth_admin`, not `postgres`, so a trigger on
-  `auth.users` runs with that role's grants unless it is `SECURITY DEFINER`. That is Supabase's
-  documented pattern for `auth.users` triggers; PR 1 confirms it against a real delete.
+- **Rows do leave, but stay counted.** Deleting an organization cascades to its reports, their
+  attempts and its rejected uploads, and deleting an account removes the `auth.users` row.
+  [`011_metrics_tombstones.ts`](../../packages/db/migrations/011_metrics_tombstones.ts) gives
+  `report`, `analysis_attempt` and `auth.users` an `AFTER DELETE` trigger that copies the row into
+  `metrics.purged_report`, `metrics.purged_attempt` or `metrics.purged_user`, and each base view is
+  its live rows `UNION ALL` its tombstones, with `purged_at` null for a live row. A tombstone is
+  keyed by the original id and written `ON CONFLICT DO NOTHING`. Its header carries the reasoning
+  and the rejected alternatives, and `packages/db/README.md` the rule that a later view over a
+  hard-deletable table gets its tombstone in the same migration. `rejected_upload` is the next,
+  if a view ever reads it.
 - **An `auth.users` row is not a user.** The sign-in form's first code request passes
   `shouldCreateUser: true` (`email-step.svelte`), so anyone who types an address gets a row,
   whether or not they ever enter the code. `email_confirmed_at` marks the ones who did.
@@ -44,18 +42,14 @@ design:
   [`009_metrics.ts`](../../packages/db/migrations/009_metrics.ts), whose header carries why
   metrics are views and the alternatives rejected. `metrics.attempt`, `metrics.report` and
   `metrics.app_user` each expose their row's own `id`, and durations are `double precision`
-  seconds. Until PR 1 a hard delete drops rows out of them.
+  seconds.
   [`tests/metrics.test.ts`](../../packages/db/tests/metrics.test.ts) reads every view as the role,
   through its `readAsMetricsReader` helper, and holds the conventions: the role can read every
   relation in `metrics`, and only read it, and holds nothing in `public` or `auth`; and no
   `metrics` column has a string, array, `json`, `jsonb`, `bytea` or `xml` type outside
-  `IDENTIFIER_TEXT_COLUMNS`. Both conventions query the catalog, so they cover a tombstone table
-  or a later view with no change. Kanel never reads `metrics` (its relations would collide with
+  `IDENTIFIER_TEXT_COLUMNS`. Both conventions query the catalog, so they cover a later view with
+  no change. Kanel never reads `metrics` (its relations would collide with
   `public`'s by bare name); `metrics-schema.sql` is the typed record, which `ts-db-types` diffs.
-- **A test can log in as `supabase_auth_admin`, but cannot `SET ROLE` to it.** `postgres` is
-  neither a member nor granted `SET`. On the local stacks the role's password is `postgres`,
-  and it can insert into and delete from `auth.users`. It has no
-  `USAGE` on `metrics`, so it cannot read what its delete left behind.
 - **Roles are cluster-level, and the test stack migrates concurrently.** Turbo runs every
   package's `globalSetup` migration against `postgres` while Playwright builds a template
   database in the same cluster ([`run-database.ts`](../../packages/db/src/testing/run-database.ts)),
@@ -93,39 +87,13 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
   already computed. A panel buckets those rows with Grafana's `$__timeGroup` macro, and an alert
   counts them, so each metric has one definition. Why views, and the rejected alternatives, are in
   `009_metrics.ts`.
-- **Views count what ever existed: a hard delete leaves a tombstone** (PR 1).
-  - Each table a view reads that can be hard-deleted (`report`, `analysis_attempt` and
-    `auth.users`) gets a `BEFORE DELETE` row trigger. The trigger copies the columns the view
-    exposes, plus `purged_at`, into a tombstone table in `metrics`: `metrics.purged_report`,
-    `metrics.purged_attempt` and `metrics.purged_user`. It is `purged_at`, not `deleted_at`,
-    because `report.deleted_at` already means the soft delete.
-  - Each view becomes its live rows `UNION ALL` its tombstones, with `purged_at` null for a
-    live row. So a deleted organization's reports, and a deleted account, stay in every week they
-    were in.
-  - `metrics.attempt` gets `organization_id` by joining `metrics.report`, live or tombstoned,
-    because an attempt's trigger fires after its report is gone (§ Context).
-  - What a customer asked us to remove is removed. A tombstone holds only what the
-    no-free-text rule below already allows: ids, timestamps, enums and numbers. The one id that
-    names a person is a deleted user's raw id, the same call as "the raw user ID stays in the
-    audit log".
-  - The trigger functions are `SECURITY DEFINER`, owned by `postgres`, with `search_path = ''`.
-    So a delete made through Supabase Auth's role can still write a tombstone, and the only
-    thing they write is a tombstone. Tombstones live in `metrics`, so `metrics_reader` reads
-    them through the default privileges, the no-free-text test covers their columns, and Kanel
-    never sees them.
-  - The rule for later views: a view over a table that can be hard-deleted gets its tombstone
-    in the same migration. `rejected_upload` is the next, if a view ever reads it. A view over
-    a table that is never deleted from, such as the attempt telemetry, needs none.
-
-  *Rejected: a daily rollup table.* It keeps counts, not rows. So percentiles and
-  per-organization slices are lost, and it is a job to run.
-  *Rejected: soft-deleting organizations.* `REQUIREMENTS.md` has an organization's deletion
-  remove its reports, and a customer who deletes one expects that.
+- **Views count what ever existed: a hard delete leaves a tombstone** (§ Context). A view over a
+  table that is never deleted from, such as the attempt telemetry, needs none.
 - **The base views already carry every column a planned view or rule reads**, including
   `worker_git_sha`, `notification_attempts`, `notification_email_sent_at` and `has_requester`
-  (§ Context). Once tombstones exist, adding a column to a base view means changing the view, its
-  tombstone table and its trigger, and rows tombstoned earlier hold null in it, so the tombstone
-  tables copy every column the views expose. A new view that joins a base view costs none of this.
+  (§ Context). Adding a column to a base view means changing the view, its tombstone table and its
+  trigger, and rows tombstoned earlier hold null in it. A new view that joins a base view costs
+  none of this.
 - **Views expose ids, timestamps, enums and numbers, never free text**, which is what makes
   `metrics_reader` safe to hand to a dashboard, a notebook or an AI agent. A text column is
   allowed only when its source has a pattern CHECK making it an identifier, and goes in
@@ -190,7 +158,7 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
 
   So an agent's edit appears in the open browser tab on its own, and a person's save in the UI
   appears as a diff. Queries still run through the real Grafana, against the dev database.
-  **Open, verify in PR 3:** the write-back. gcx documents it, but nobody here has seen it work.
+  **Open, verify in PR 2:** the write-back. gcx documents it, but nobody here has seen it work.
   If it disappoints, the fallback is to save in Grafana directly and run `gcx resources pull`,
   which is the same tool writing the same files.
   gcx is one Go binary: installed with Homebrew locally, and pinned, with its checksum verified,
@@ -225,12 +193,11 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
 - **`pnpm seed:history` replaces; it never appends.** In one transaction, under an advisory lock,
   it deletes every marked organization, which cascades to its reports, attempts and uploads,
   then every marked user, and then calls the generator. Running it twice leaves what running it
-  once does, with the dates moved up to today. Its deletes leave tombstones (PR 1), which would
+  once does, with the dates moved up to today. Its deletes leave tombstones, which would
   make a second run's history count twice, so it collects the marked ids first and deletes their
   tombstones in the same transaction. It never touches the placeholder identity or rows someone
-  made by hand, and `pnpm truncate` still clears everything. `TRUNCATE` fires no row triggers,
-  and the script clears `metrics`' tables too. It refuses any connection string that is not
-  local.
+  made by hand, and `pnpm truncate` still clears everything, tombstones included. It refuses any
+  connection string that is not local.
   *Rejected: append a batch per run.* A second run doubles every count, so a panel's shape
   depends on how many times someone ran a command.
 
@@ -318,47 +285,10 @@ where agents operate. Explore production data in Grafana Cloud instead.
 
 ## Order
 
-PR 1 is `packages/db` only and needs no vendor. Land it before launch, because a hard delete
-before it lands is never counted. Everything after can follow launch without losing
-history, since the views read rows that already exist.
+Everything left can follow launch without losing history, since the views read rows that already
+exist and the tombstones keep the ones a delete removes.
 
-## PR 1 — hard-deleted rows stay counted
-
-`packages/db`, the next migration.
-
-- The migration creates:
-  - `metrics.purged_report`, `metrics.purged_attempt` and `metrics.purged_user`, each with the
-    columns its view reads plus `purged_at timestamptz NOT NULL DEFAULT now()`, PK on the
-    original id;
-  - one `SECURITY DEFINER` trigger function per table, `search_path = ''`;
-  - `BEFORE DELETE … FOR EACH ROW` triggers on `report`, `analysis_attempt` and `auth.users`.
-
-  It then recreates `metrics.report`, `metrics.attempt` and `metrics.app_user` as live `UNION ALL`
-  tombstones, each with `purged_at`. `metrics.attempt` takes `organization_id` from
-  `metrics.report`. `CREATE OR REPLACE VIEW` cannot add a column in the middle, so it drops and
-  recreates the views, which `009_metrics`'s default privilege re-grants.
-- `scripts/truncate.ts` also truncates `metrics`' tables.
-- Tests, in `tests/metrics.test.ts`, inside `withRollback`, reading through `readAsMetricsReader`:
-  - Deleting an organization with a report and two attempts leaves `metrics.report` and
-    `metrics.attempt` returning the same rows as before, `organization_id` included, plus
-    `purged_at`.
-  - Deleting an `auth.users` row leaves `metrics.app_user` returning it.
-  - Deleting one as `supabase_auth_admin` succeeds, which is the path Supabase Auth's admin API
-    takes. Without `SECURITY DEFINER`, the trigger's insert into the tombstone table would fail
-    and the delete would fail with it. The test logs in as the role, on a connection of its own
-    built from `DB_CONNECTION_STRING` with the role's local password (§ Context). There it
-    inserts a user and deletes it in a transaction it rolls back, outside `withRollback`, which
-    is bound to the `postgres` handle. The role cannot read `metrics`, so the case above, not
-    this one, checks what the tombstone holds.
-  - A soft-deleted report stays live with its `deleted_at` and no `purged_at`.
-  - The existing conventions cover the tombstones: no free text in `metrics`, and
-    `metrics_reader` can read them.
-- `packages/db/README.md` gains the rule from Decisions: a view over a hard-deletable table gets
-  its tombstone in the same migration. `REQUIREMENTS.md` § Data deletion gets one line:
-  metric tombstones (ids, timestamps and enums) outlive a deleted organization or account.
-- By hand: delete an account through the app, and the user still counts in `metrics.app_user`.
-
-## PR 2 — synthetic history
+## PR 1 — synthetic history
 
 - The fixtures gain the timestamp overrides the generator needs and lack today:
   `insertAppUser` takes `createdAt` and `emailConfirmedAt`, and `insertOrganization` and
@@ -381,9 +311,7 @@ history, since the views read rows that already exist.
   - The refusal.
 - The root README's § Seeding says when to run it, and that re-running it is safe.
 
-It comes after PR 1 so that the replace handles tombstones from its first version.
-
-## PR 3 — Grafana locally
+## PR 2 — Grafana locally
 
 - A new workspace package, `apps/grafana` (`@gbd/grafana`). It is an app because `deploy.yml`
   ships it, even though it has no image. It holds:
@@ -392,7 +320,7 @@ It comes after PR 1 so that the replace handles tombstones from its first versio
   - `src/data-source.ts`: builds the data source from a connection string and upserts it. The
     builder is pure and gets a unit test.
   - `src/local-password.ts`: the guarded helper from Decisions that sets the local role password.
-    It refuses a host that is not local. PR 4's setup calls it too.
+    It refuses a host that is not local. PR 3's setup calls it too.
   - `scripts/start.ts`, behind `pnpm grafana`. It sets the local role password with that helper. Then it brings the dev container up, waits for
     `/api/health`, upserts the data source, and runs `gcx dev serve` over `resources/`.
     `pnpm grafana:stop` takes the container down.
@@ -413,7 +341,7 @@ It comes after PR 1 so that the replace handles tombstones from its first versio
 
   The root README's everyday-commands table gains `pnpm grafana`.
 
-## PR 4 — every panel query runs in `pnpm test`
+## PR 3 — every panel query runs in `pnpm test`
 
 - `apps/grafana`'s vitest `globalSetup`:
   - sweeps stale run databases and run data sources;
@@ -421,14 +349,14 @@ It comes after PR 1 so that the replace handles tombstones from its first versio
     it;
   - starts the test Grafana if it is not already running, and sets the local role password with
     the guarded helper;
-  - upserts the run's data source with PR 3's function, given the run database's connection
+  - upserts the run's data source with PR 2's function, given the run database's connection
     string as Grafana sees it;
   - hands the data source's uid to the tests through vitest's `provide`.
   Its teardown deletes the data source, then drops the run database. No gcx is involved.
 - The panel check from Decisions, with one test case per panel, named by dashboard and panel
   title. Each case fails on an error or on zero rows. The file also checks that every panel names
   the `metrics` data source, and that every file is at the pinned `apiVersion`.
-- PR 3's data source builder takes the pool limits as an argument, so the test passes one
+- PR 2's data source builder takes the pool limits as an argument, so the test passes one
   connection and no idle ones while dev and Cloud keep theirs.
 - `@gbd/grafana` depends on `@gbd/db`, so Turbo's affected filter reruns the check when a
   migration changes. The `ts-unit` job needs no change beyond Docker, which its runner already
@@ -436,9 +364,9 @@ It comes after PR 1 so that the replace handles tombstones from its first versio
 - `.claude/rules/typescript.md` gains a note that a change to a `metrics` view or a dashboard
   is covered by `pnpm test`, with the panel check as the reason.
 
-This PR needs PR 2's generator and PR 3's data source builder.
+This PR needs PR 1's generator and PR 2's data source builder.
 
-## PR 5 — Grafana Cloud
+## PR 4 — Grafana Cloud
 
 - Do the manual steps from Decisions first: the stack, the service account, the role password,
   and the secrets.
@@ -466,15 +394,13 @@ This PR needs PR 2's generator and PR 3's data source builder.
 
 Each PR is verified by `pnpm lint && pnpm check && pnpm test`. Then by hand:
 
-- After PR 1, deleting an organization in the app leaves `metrics.report` and `metrics.attempt`
-  returning its rows, with `purged_at` set.
-- After PR 3, `pnpm grafana` serves the product dashboard, and its panel draws a shape from
+- After PR 2, `pnpm grafana` serves the product dashboard, and its panel draws a shape from
   `pnpm seed:history`. Running `pnpm seed:history` a second time leaves the panel's totals
   unchanged. Editing the panel's SQL in the file reloads the open tab. Saving a change in the UI
   gives a diff containing only that change.
-- After PR 4, renaming a column in a view without touching the dashboard fails `pnpm test`, and
+- After PR 3, renaming a column in a view without touching the dashboard fails `pnpm test`, and
   names the panel. So does a panel whose filter matches nothing. Two worktrees running
   `pnpm test` at once both pass, and leave no run database or run data source behind.
-- After PR 5, the first deploy creates the folder, the data source and the dashboard in Grafana
+- After PR 4, the first deploy creates the folder, the data source and the dashboard in Grafana
   Cloud. A query in Explore shows a real attempt's `queue_seconds`. Deleting a dashboard's file
   removes it at the next deploy.

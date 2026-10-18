@@ -19,9 +19,9 @@ import { type Kysely, sql } from 'kysely';
 // `failure_detail`. That is what makes `metrics_reader` safe to hand to a dashboard, a notebook or
 // an AI agent. `tests/metrics.test.ts` enforces it by column type.
 //
-// Until a later migration adds tombstones, a hard delete drops rows out of the history: deleting an
-// organization cascades to its reports and attempts, and deleting an account removes its
-// `auth.users` row. A soft-deleted report stays, with its `deleted_at`.
+// A hard delete would drop rows out of the history: deleting an organization cascades to its
+// reports and attempts, and deleting an account removes its `auth.users` row.
+// `011_metrics_tombstones` keeps them counted. A soft-deleted report stays, with its `deleted_at`.
 //
 // A view pins the columns it reads: Postgres refuses to drop or retype one. A migration that has to
 // change such a column drops the view, changes the column and recreates the view, in one migration.
