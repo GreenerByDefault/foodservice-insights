@@ -260,6 +260,7 @@ async function llmUsage(database: Kysely<any>): Promise<void> {
     .addColumn('cached_input_tokens', 'integer', (column) => column.notNull())
     .addColumn('output_tokens', 'integer', (column) => column.notNull())
     .addColumn('cost_micro_usd', 'integer', (column) => column.notNull())
+    // Leads with the foreign key, so it is also that key's index.
     .addPrimaryKeyConstraint('analysis_attempt_llm_usage_pkey', [
       'analysis_attempt_id',
       'operation',
@@ -342,6 +343,7 @@ async function qualityCheck(database: Kysely<any>): Promise<void> {
     .addColumn('quality_check', sql`quality_check`, (column) => column.notNull())
     .addColumn('status', sql`diagnostic_status`, (column) => column.notNull())
     .addColumn('findings', 'integer', (column) => column.notNull())
+    // Leads with the foreign key, so it is also that key's index.
     .addPrimaryKeyConstraint('analysis_attempt_quality_check_pkey', [
       'analysis_attempt_id',
       'quality_check',

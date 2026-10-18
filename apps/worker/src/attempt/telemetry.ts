@@ -1,9 +1,9 @@
 /** Writing a child's `telemetry.json` into the three telemetry tables.
  *
  * The rows carry the attempt, report and organization ids raw, with no foreign key to any of them,
- * so they outlive what they describe — `packages/db/README.md` has why. That also means the insert
- * touches no row another worker could own, which is what lets a parent that lost its attempt still
- * record what its child spent.
+ * so they outlive what they describe — `packages/db/migrations/003_attempt_telemetry.ts` has why.
+ * That also means the insert touches no row another worker could own, which is what lets a parent
+ * that lost its attempt still record what its child spent.
  */
 
 import type {

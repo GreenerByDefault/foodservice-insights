@@ -532,6 +532,5 @@ analysis attempt state machine, and the audit trail all live there. A `report` i
 upload; it has exactly one `input_file` and one or more `analysis_attempt` rows, each of which
 produces `result_file` rows.
 
-The model and the reasoning behind it are in
-[`packages/db/README.md`](packages/db/README.md), which also names which generated artifact
-answers which question about the schema.
+The model is in [`packages/db/README.md`](packages/db/README.md), which also names which file
+answers which question about the schema, including why it is shaped the way it is.

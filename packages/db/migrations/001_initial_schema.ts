@@ -426,8 +426,9 @@ async function reportsAndUploads(database: Kysely<any>): Promise<void> {
 
   await database.schema
     .createTable('input_file')
-    // v4, not v7: this id is the public /file/:id link, and a v7 embeds its creation time and
-    // leaves fewer random bits to guess.
+    // A table of its own, not columns on `report`, so a file has an id of its own to be the public
+    // /file/:id link. v4, not v7, because a v7 embeds its creation time and leaves fewer random
+    // bits to guess.
     .addColumn('id', 'uuid', (column) => column.primaryKey().defaultTo(sql`gen_random_uuid()`))
     .addColumn('report_id', 'uuid', (column) =>
       column.notNull().unique().references('report.id').onDelete('cascade'),
@@ -933,7 +934,8 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
 
   await database.schema
     .createTable('result_file')
-    // v4 for the same reason as input_file.id: it is a public /file/:id link.
+    // Apart from `analysis_attempt`, and v4, for the same reason as input_file: its id is a public
+    // /file/:id link.
     .addColumn('id', 'uuid', (column) => column.primaryKey().defaultTo(sql`gen_random_uuid()`))
     .addColumn('analysis_attempt_id', 'uuid', (column) =>
       column.notNull().references('analysis_attempt.id').onDelete('cascade'),

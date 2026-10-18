@@ -1,7 +1,7 @@
 /** The worker's side of the analysis attempt queue: claim one, hold it, finish it.
  *
- * Every write here obeys the two rules the state machine imposes on any code that touches
- * `analysis_attempt.status`, documented in
+ * Every write here obeys the state machine's rules for code that writes `analysis_attempt`,
+ * documented in
  * [`@gbd/db`'s README](../../../../packages/db/README.md#the-analysis-attempt-state-machine):
  *
  * 1. **A transition to a terminal status is one `UPDATE`.** Checks cannot be deferred, so
