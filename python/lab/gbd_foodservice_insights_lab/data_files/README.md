@@ -1,7 +1,6 @@
 # Data files
 
-Three caches, pulled from the database's verified rows by step 1 and `just pull-caches` — or,
-until you hold `CACHE_DB_CONNECTION_STRING`, handed out privately. See the
+Three caches, pulled from the database's verified rows by step 1 and `just pull-caches`. See the
 [lab README](../../README.md#working-on-a-client).
 
 - `previously_categorized_items.csv` — GBD's product-categorization cache.

@@ -145,10 +145,7 @@ Merges when the strings are ready to hand out. Rehearse it beforehand against th
   - `test_spreadsheet.py`'s serving test asserts the push, not a file write.
   - A test with `push_suggestions=False` asserts no push.
 - Docs:
-  - `python/lab/README.md` § Working on a client and the lab's `data_files/README.md` drop the
-    hand-out fallback ("until you hold the string"). Step 1's WARNING with each file's age stays,
-    for a developer without the string.
-  - § Working on a client: step 1 suggests its new answers, someone verifies them in Studio, and
+  - `python/lab/README.md` § Working on a client: step 1 suggests its new answers, someone verifies them in Studio, and
     the next pull brings the verified rows down.
   - `REQUIREMENTS.md` § Product categorization cache names the lab's two caches under the same
     rule.

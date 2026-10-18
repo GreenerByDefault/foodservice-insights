@@ -40,14 +40,12 @@ The lab reads three keys from `.env`: `OPENAI_API_KEY`, `GEMINI_API_KEY`, and
 
 The categorization, entree and weight caches live in the database. Ask GBD for the
 `cache_client` connection string, and put it in `.env` as `CACHE_DB_CONNECTION_STRING`, in the
-form [`.env.example`](../../.env.example) shows, with an absolute path to the CA. Step 1 then pulls
-the verified rows into the
+form [`.env.example`](../../.env.example) shows. Step 1 then pulls the verified rows into the
 [lab's cache files](gbd_foodservice_insights_lab/data_files/README.md) before it calls any LLM,
-and stops if it cannot; `just pull-caches` pulls on demand. **A pull overwrites the three files,
+and stops if it cannot. `just pull-caches` pulls on demand. **A pull overwrites the three files,
 hand edits included.**
 
-Until you hold the string, the files are handed out privately, and each step 1 warns how old they
-are. Without them everything still runs, with every item going to the LLM.
+Without the string, step 1 warns, and sends the LLM whatever the files on disk do not answer.
 
 ## Conventions
 
