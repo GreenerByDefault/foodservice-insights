@@ -1,4 +1,5 @@
 # Generated files. Marking them collapses their diffs on GitHub.
 packages/db/public-schema.sql linguist-generated=true
 packages/db/auth-schema.sql linguist-generated=true
+packages/db/metrics-schema.sql linguist-generated=true
 packages/db/src/generated/** linguist-generated=true

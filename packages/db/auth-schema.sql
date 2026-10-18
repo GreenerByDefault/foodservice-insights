@@ -1595,6 +1595,7 @@ CREATE INDEX "webauthn_credentials_user_id_idx" ON "auth"."webauthn_credentials"
 
 
 
+
 --
 -- Name: identities identities_user_id_fkey; Type: FK CONSTRAINT; Schema: auth; Owner: supabase_auth_admin
 --

@@ -1,16 +1,21 @@
 /** The `metrics` views and `metrics_reader`, the role that reads them. Every view is read as that
  * role, which also proves a view reaches its base tables with its owner's rights, not the role's. */
 
+import { requireEnv } from '@gbd/core/env';
 import { type RawBuilder, sql, type Transaction } from 'kysely';
-import { describe, expect, test } from 'vitest';
+import { afterAll, describe, expect, test } from 'vitest';
 import { METRICS_READER_CONNECTION_LIMIT } from '../src/budget.ts';
+import { initializeDatabase, shutdownDatabase } from '../src/client.ts';
 import { DATABASE } from '../src/env.ts';
+import type { UsersId } from '../src/generated/auth/Users.ts';
 import type { Database } from '../src/schema.ts';
+import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   DB_NOW,
   dbMsAgo,
   insertAnalysisAttempt,
   insertAppUser,
+  insertOrganization,
   insertReport,
 } from '../src/testing/fixtures/index.ts';
 import { withRollback } from '../src/testing/transactions.ts';
@@ -20,6 +25,8 @@ import { withRollback } from '../src/testing/transactions.ts';
 const IDENTIFIER_TEXT_COLUMNS = new Set([
   // analysis_attempt_worker_git_sha_format: 40 hex characters.
   'attempt.worker_git_sha',
+  // purged_attempt_worker_git_sha_format: the same.
+  'purged_attempt.worker_git_sha',
 ]);
 
 async function readAsMetricsReader<Row>(
@@ -50,6 +57,7 @@ describe('metrics.attempt', () => {
     notificationAttempts: number;
     notificationEmailSentAt: Date | null;
     hasRequester: boolean;
+    purgedAt: Date | null;
   };
 
   function selectAttempt(id: string): RawBuilder<AttemptRow> {
@@ -89,6 +97,7 @@ describe('metrics.attempt', () => {
         notificationAttempts: 0,
         notificationEmailSentAt: null,
         hasRequester: false,
+        purgedAt: null,
       },
     ]);
   });
@@ -127,7 +136,7 @@ describe('metrics.attempt', () => {
 });
 
 describe('metrics.report', () => {
-  test('keeps a soft-deleted report, with its deleted_at', async () => {
+  test('keeps a soft-deleted report live, with its deleted_at', async () => {
     const { report, deletedAt, rows } = await withRollback(DATABASE, async (transaction) => {
       const report = await insertReport(transaction, { createdAt: dbMsAgo(60_000) });
       const { deletedAt } = await transaction
@@ -149,6 +158,7 @@ describe('metrics.report', () => {
         organizationId: report.organizationId,
         createdAt: report.createdAt,
         deletedAt,
+        purgedAt: null,
       },
     ]);
   });
@@ -171,7 +181,197 @@ describe('metrics.app_user', () => {
       return { user, rows };
     });
 
-    expect(rows).toEqual([user]);
+    expect(rows).toEqual([{ ...user, purgedAt: null }]);
+  });
+});
+
+// A hard delete leaves the row in its view, as it was, with `purged_at` set. Each case reads the
+// rows before and after, so a column the tombstone failed to copy shows up as a difference.
+describe('tombstones', () => {
+  type Row = Record<string, unknown>;
+
+  async function readNow(transaction: Transaction<Database>): Promise<Date> {
+    const { now } = await transaction.selectNoFrom(DB_NOW.as('now')).executeTakeFirstOrThrow();
+    return now;
+  }
+
+  test('keep a deleted organization’s reports and attempts', async () => {
+    const { before, after, now } = await withRollback(DATABASE, async (transaction) => {
+      const { organization } = await insertOrganization(transaction);
+      const requester = await insertAppUser(transaction);
+      const report = await insertReport(transaction, {
+        organizationId: organization.id,
+        createdAt: dbMsAgo(120_000),
+      });
+      const failed = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        status: 'failed',
+        failureReason: 'upstream_api',
+        requestedByUserId: requester.id,
+        createdAt: dbMsAgo(100_000),
+        claimedAt: dbMsAgo(90_000),
+        finishedAt: dbMsAgo(80_000),
+      });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({
+          notificationClaimedAt: dbMsAgo(70_000),
+          notificationClaimedByWorkerId: 'test-worker',
+          notificationAttempts: 1,
+          notificationEmailSentAt: dbMsAgo(60_000),
+        })
+        .where('id', '=', failed.id)
+        .execute();
+      const retry = await insertAnalysisAttempt(transaction, {
+        reportId: report.id,
+        attemptNumber: 2,
+        status: 'processing',
+        createdAt: dbMsAgo(50_000),
+        claimedAt: dbMsAgo(40_000),
+      });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ workerGitSha: 'a'.repeat(40) })
+        .where('id', '=', retry.id)
+        .execute();
+      await transaction
+        .updateTable('report')
+        .set({ deletedAt: dbMsAgo(10_000) })
+        .where('id', '=', report.id)
+        .execute();
+
+      async function read() {
+        return {
+          reports: await readAsMetricsReader(
+            transaction,
+            sql<Row>`SELECT * FROM metrics.report WHERE id = ${report.id}`,
+          ),
+          attempts: await readAsMetricsReader(
+            transaction,
+            sql<Row>`SELECT * FROM metrics.attempt WHERE report_id = ${report.id} ORDER BY attempt_number`,
+          ),
+        };
+      }
+
+      const before = await read();
+      await transaction.deleteFrom('organization').where('id', '=', organization.id).execute();
+      return { before, after: await read(), now: await readNow(transaction) };
+    });
+
+    expect(before.reports).toHaveLength(1);
+    expect(before.attempts).toHaveLength(2);
+    expect(after).toEqual({
+      reports: before.reports.map((row) => ({ ...row, purgedAt: now })),
+      attempts: before.attempts.map((row) => ({ ...row, purgedAt: now })),
+    });
+  });
+
+  test('keep a deleted account', async () => {
+    const { before, after, now } = await withRollback(DATABASE, async (transaction) => {
+      const { id } = await insertAppUser(transaction);
+      await transaction
+        .updateTable('auth.users')
+        .set({ emailConfirmedAt: dbMsAgo(50_000), lastSignInAt: dbMsAgo(10_000) })
+        .where('id', '=', id)
+        .execute();
+
+      const select = sql<Row>`SELECT * FROM metrics.app_user WHERE id = ${id}`;
+      const before = await readAsMetricsReader(transaction, select);
+      await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
+      return {
+        before,
+        after: await readAsMetricsReader(transaction, select),
+        now: await readNow(transaction),
+      };
+    });
+
+    expect(before).toHaveLength(1);
+    expect(after).toEqual(before.map((row) => ({ ...row, purgedAt: now })));
+  });
+
+  // The dev seed's placeholder user is one such id.
+  test('keep the first of two accounts deleted under the same id', async () => {
+    const { first, rows } = await withRollback(DATABASE, async (transaction) => {
+      const id = crypto.randomUUID() as UsersId;
+      async function insertAndDelete(createdAt: RawBuilder<Date>) {
+        await transaction
+          .insertInto('auth.users')
+          .values({ id, email: `${id}@example.test`, createdAt })
+          .execute();
+        await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
+      }
+
+      await insertAndDelete(dbMsAgo(60_000));
+      const first = await readAsMetricsReader(
+        transaction,
+        sql`SELECT * FROM metrics.app_user WHERE id = ${id}`,
+      );
+      await insertAndDelete(dbMsAgo(30_000));
+      const rows = await readAsMetricsReader(
+        transaction,
+        sql`SELECT * FROM metrics.app_user WHERE id = ${id}`,
+      );
+      return { first, rows };
+    });
+
+    expect(first).toHaveLength(1);
+    expect(rows).toEqual(first);
+  });
+
+  // Supabase Auth's admin API deletes as `supabase_auth_admin`, which holds nothing in `metrics`.
+  // The delete succeeding is the assertion: a tombstone it could not write would fail it. The role
+  // cannot read `metrics`, so the cases above check what the tombstone holds.
+  describe('as supabase_auth_admin', () => {
+    const authAdmin = initializeDatabase({
+      connectionString: authAdminConnectionString(),
+      limits: { minConnections: 0, maxConnections: 1 },
+      log: 'console',
+    });
+    afterAll(async () => {
+      await shutdownDatabase(authAdmin);
+    });
+
+    // The password is the local stacks' own, which opens nothing that is not already open.
+    function authAdminConnectionString(): string {
+      const url = new URL(requireEnv('DB_CONNECTION_STRING'));
+      url.username = 'supabase_auth_admin';
+      url.password = 'postgres';
+      return url.toString();
+    }
+
+    test('a user can still be deleted', async () => {
+      const deleted = await withRollback(authAdmin, async (transaction) => {
+        const id = crypto.randomUUID() as UsersId;
+        await transaction
+          .insertInto('auth.users')
+          .values({ id, email: `${id}@example.test` })
+          .execute();
+        const { numDeletedRows } = await transaction
+          .deleteFrom('auth.users')
+          .where('id', '=', id)
+          .executeTakeFirstOrThrow();
+        return numDeletedRows;
+      });
+
+      expect(deleted).toBe(1n);
+    });
+  });
+
+  test('purged_attempt rejects a worker_git_sha that is not a commit hash', async () => {
+    await withRollback(DATABASE, async (transaction) => {
+      await expectConstraintViolation(
+        sql`
+          INSERT INTO metrics.purged_attempt (
+            id, report_id, attempt_number, status, created_at, worker_git_sha,
+            notification_attempts, has_requester
+          )
+          VALUES (
+            ${crypto.randomUUID()}, ${crypto.randomUUID()}, 1, 'pending', now(), 'main', 0, false
+          )
+        `.execute(transaction),
+        'purged_attempt_worker_git_sha_format',
+      );
+    });
   });
 });
 
