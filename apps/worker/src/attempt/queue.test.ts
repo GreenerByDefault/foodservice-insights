@@ -423,8 +423,9 @@ describe('loadAttemptInputs', () => {
 
   test('throws when the report has no input file', async () => {
     const load = withRollback(WORKER_DATABASE, async (transaction) => {
-      const { attemptId } = await pendingAttempt(transaction);
-      await loadAttemptInputs(transaction, attemptId);
+      const report = await insertReport(transaction, { inputFile: null });
+      const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
+      await loadAttemptInputs(transaction, attempt.id);
     });
 
     await expect(load).rejects.toThrow(NoResultError);
