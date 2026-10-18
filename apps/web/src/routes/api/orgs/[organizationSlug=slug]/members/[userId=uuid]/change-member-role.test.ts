@@ -4,17 +4,21 @@ import { describe, expect, test } from 'vitest';
 import type { Actor } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
-import { anAdminOrg, anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { statusOf } from '#lib/server/testing/http-error.js';
+import {
+  insertAdminOrg,
+  insertOrganizationWithMembers,
+} from '#lib/server/testing/organizations.js';
 import { _changeMemberRole } from './+server.ts';
 
 describe('_changeMemberRole', () => {
   describe('a valid role change', () => {
     test('promotes a member, and writes a member.role_changed audit event', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin, members } = await anOrganizationWithMembers(transaction, [
-          { role: 'member' },
-        ]);
+        const { organizationId, admin, members } = await insertOrganizationWithMembers(
+          transaction,
+          [{ role: 'member' }],
+        );
         const [targetUserId] = members as [UserId];
         const actor: Actor = { userId: admin, role: 'admin' };
 
@@ -45,7 +49,7 @@ describe('_changeMemberRole', () => {
 
     test('demoting one of two admins succeeds', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, actor } = await anAdminOrg(transaction);
+        const { organizationId, actor } = await insertAdminOrg(transaction);
         const secondAdmin = await insertOrganizationMember(transaction, {
           organizationId,
           role: 'admin',
@@ -69,7 +73,7 @@ describe('_changeMemberRole', () => {
 
     test('setting the same role again answers with no error and writes no audit event', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin, actor } = await anAdminOrg(transaction);
+        const { organizationId, admin, actor } = await insertAdminOrg(transaction);
 
         await _changeMemberRole(
           transaction,
@@ -85,7 +89,7 @@ describe('_changeMemberRole', () => {
   describe('demoting the only admin', () => {
     test('answers 409 last-admin, leaves the role, and writes no audit event', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin, actor } = await anAdminOrg(transaction);
+        const { organizationId, admin, actor } = await insertAdminOrg(transaction);
 
         const response = await _changeMemberRole(
           transaction,
@@ -104,7 +108,7 @@ describe('_changeMemberRole', () => {
   describe('a user who is not a member of the organization', () => {
     test('is a 404', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, actor } = await anAdminOrg(transaction);
+        const { organizationId, actor } = await insertAdminOrg(transaction);
         const stranger = crypto.randomUUID() as UserId;
 
         await expect(
@@ -125,7 +129,7 @@ describe('_changeMemberRole', () => {
     // wiring check that the route actually calls it.
     test('a role outside the picklist is a 400', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin, actor } = await anAdminOrg(transaction);
+        const { organizationId, admin, actor } = await insertAdminOrg(transaction);
 
         const response = await _changeMemberRole(
           transaction,

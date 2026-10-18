@@ -6,53 +6,14 @@ import {
   insertOrganizationMember,
   withRollback,
 } from '@gbd/db/testing';
-import { unreachableEmailer } from '@gbd/email/testing';
 import { type BlobStore, deletePrefix, organizationPrefix } from '@gbd/storage';
 import type { Transaction } from 'kysely';
-import type { Actor, AuthContext, AuthenticatedUser, OrganizationAccess } from '../auth/types.ts';
+import type { Actor } from '../auth/types.ts';
 import { database } from '../db.ts';
 import { blobStore } from '../storage.ts';
 
-// -----------------------------------------------------
-// Auth
-// -----------------------------------------------------
-
-/** An `AuthContext` with no database behind it. */
-export function anAuthContext(
-  overrides: {
-    user?: Partial<AuthenticatedUser>;
-    memberships?: readonly OrganizationAccess[];
-  } = {},
-): AuthContext {
-  return {
-    user: {
-      id: crypto.randomUUID() as UserId,
-      email: 'member@example.test',
-      displayName: null,
-      isSuperadmin: false,
-      ...overrides.user,
-    },
-    memberships: overrides.memberships ?? [],
-  };
-}
-
-/** An `OrganizationAccess` for an organization named `name`, with `member` role and a random id
- * and slug unless overridden. */
-export function anOrganizationAccess(
-  name: string,
-  role: OrganizationRole = 'member',
-  organizationId: OrganizationId = crypto.randomUUID() as OrganizationId,
-  organizationSlug: string = `test-org-${crypto.randomUUID().slice(0, 8)}`,
-): OrganizationAccess {
-  return { organizationId, organizationSlug, organizationName: name, role };
-}
-
-// -----------------------------------------------------
-// Organizations
-// -----------------------------------------------------
-
 /** A user inserted for use as an organization's creator. */
-export async function anOrganizationCreator(
+export async function insertOrganizationCreator(
   transaction: Parameters<typeof insertAppUserWithEmail>[0],
 ): Promise<{ actor: Actor; actorEmail: string }> {
   const user = await insertAppUserWithEmail(transaction);
@@ -62,7 +23,7 @@ export async function anOrganizationCreator(
 /** An organization with one member row per entry in `roles`, in order — the
  * `insertOrganization` + `insertAppUser` + `insertOrganizationMember` sequence that member-listing
  * tests otherwise repeat per case. */
-export async function anOrganizationWithMembers(
+export async function insertOrganizationWithMembers(
   transaction: Transaction<Database>,
   roles: { role: OrganizationRole; displayName?: string; email?: string }[],
 ): Promise<{ organizationId: OrganizationId; admin: UserId; members: UserId[] }> {
@@ -84,10 +45,10 @@ export async function anOrganizationWithMembers(
 
 /** An organization and its sole admin, acting as themselves — the preamble for tests that don't
  * need a second member. */
-export async function anAdminOrg(
+export async function insertAdminOrg(
   transaction: Transaction<Database>,
 ): Promise<{ organizationId: OrganizationId; admin: UserId; actor: Actor }> {
-  const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+  const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
   return { organizationId, admin, actor: { userId: admin, role: 'admin' } };
 }
 
@@ -122,26 +83,4 @@ export async function withOrganizationFixtures<T>(
       await deletePrefix(blobStore(), organizationPrefix(organization.id));
     }
   });
-}
-
-// -----------------------------------------------------
-// Email
-// -----------------------------------------------------
-
-/** A unique address per call, so no test can see another's invite. */
-export function anEmail(): string {
-  return `${crypto.randomUUID()}@example.test`;
-}
-
-/** A `vi.mock('#lib/server/email.js', ...)` factory aimed at a port nothing listens on, so a test
- * proves `notifyGbd`'s own catch rather than depending on whatever Mailpit happens to be doing
- * locally.
- *
- * Use as `vi.mock('#lib/server/email.js', (importOriginal) => mockUnreachableEmailer(importOriginal))`
- * — not a bare reference, which vi.mock's hoisting evaluates before this import is initialized. */
-export async function mockUnreachableEmailer(
-  importOriginal: () => Promise<typeof import('../email.ts')>,
-): Promise<typeof import('../email.ts')> {
-  const actual = await importOriginal();
-  return { ...actual, emailer: () => unreachableEmailer() };
 }

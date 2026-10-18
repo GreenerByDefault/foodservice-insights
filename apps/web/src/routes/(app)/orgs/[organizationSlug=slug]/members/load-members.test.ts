@@ -2,13 +2,13 @@ import type { UserId } from '@gbd/db';
 import { withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
-import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
+import { insertOrganizationWithMembers } from '#lib/server/testing/organizations.js';
 import { _loadMembers } from './+page.server.ts';
 
 describe('_loadMembers', () => {
   test('lists admins before members, then by email, and marks the viewer’s own row', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin, members } = await anOrganizationWithMembers(transaction, [
+      const { organizationId, admin, members } = await insertOrganizationWithMembers(transaction, [
         { role: 'member', displayName: 'Ana Ruiz', email: 'ana@example.test' },
       ]);
       const [ana] = members;
@@ -37,7 +37,7 @@ describe('_loadMembers', () => {
 
   test('returns a null displayName rather than substituting the email', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, members } = await anOrganizationWithMembers(transaction, [
+      const { organizationId, members } = await insertOrganizationWithMembers(transaction, [
         { role: 'member', email: 'no-name@example.test' },
       ]);
       const [noName] = members;

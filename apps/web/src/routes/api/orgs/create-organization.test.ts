@@ -3,7 +3,8 @@ import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test, vi } from 'vitest';
 import { database } from '#lib/server/db.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
-import { anOrganizationCreator, mockUnreachableEmailer } from '#lib/server/testing/fixtures.js';
+import { mockUnreachableEmailer } from '#lib/server/testing/email.js';
+import { insertOrganizationCreator } from '#lib/server/testing/organizations.js';
 import { _createOrganization } from './+server.ts';
 
 vi.mock('#lib/server/email.js', (importOriginal) => mockUnreachableEmailer(importOriginal));
@@ -12,7 +13,7 @@ describe('_createOrganization', () => {
   describe('a valid name', () => {
     test('answers 201 with a location header', async () => {
       await withRollback(database(), async (transaction) => {
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, {
           name: 'Acme Foodservice',
@@ -26,7 +27,7 @@ describe('_createOrganization', () => {
 
     test('creates the organization with its creator as the sole admin', async () => {
       await withRollback(database(), async (transaction) => {
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, {
           name: 'Acme Foodservice',
@@ -56,7 +57,7 @@ describe('_createOrganization', () => {
 
     test('writes an organization.created audit event', async () => {
       await withRollback(database(), async (transaction) => {
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, {
           name: 'Acme Foodservice',
@@ -78,7 +79,7 @@ describe('_createOrganization', () => {
     // here already proves the organization survives that failure.
     test('still creates the organization when the GBD notice fails to send', async () => {
       await withRollback(database(), async (transaction) => {
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, {
           name: 'Acme Foodservice',
@@ -101,7 +102,7 @@ describe('_createOrganization', () => {
     test('answers 409 name-taken, case-insensitively', async () => {
       await withRollback(database(), async (transaction) => {
         await insertOrganization(transaction, { name: 'Acme Foodservice' });
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, {
           name: 'acme foodservice',
@@ -119,7 +120,7 @@ describe('_createOrganization', () => {
     test('answers 409 slug-taken', async () => {
       await withRollback(database(), async (transaction) => {
         await insertOrganization(transaction, { name: 'Acme Inc', slug: 'acme-inc' });
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, {
           name: 'Acme, Inc.',
@@ -134,7 +135,7 @@ describe('_createOrganization', () => {
   describe('a name with no address to derive', () => {
     test.for(['———', '日本語'])('answers 422 slug-underivable for %j', async (name) => {
       await withRollback(database(), async (transaction) => {
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, { name });
 
@@ -147,7 +148,7 @@ describe('_createOrganization', () => {
   describe('a name that derives to a reserved slug', () => {
     test.for(RESERVED_ORGANIZATION_SLUGS)('answers 422 slug-reserved for %j', async (reserved) => {
       await withRollback(database(), async (transaction) => {
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, { name: reserved });
 
@@ -160,7 +161,7 @@ describe('_createOrganization', () => {
   describe('an invalid name', () => {
     test.for([null, '', '   ', 'x', 'x'.repeat(1000)])('answers 400 for %j', async (name) => {
       await withRollback(database(), async (transaction) => {
-        const creator = await anOrganizationCreator(transaction);
+        const creator = await insertOrganizationCreator(transaction);
 
         const response = await _createOrganization(transaction, creator, { name });
 

@@ -3,7 +3,8 @@ import { insertReport } from '@gbd/db/testing';
 import { listObjectKeys, organizationPrefix, putInputFile } from '@gbd/storage';
 import { describe, expect, test, vi } from 'vitest';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
-import { mockUnreachableEmailer, withOrganizationFixtures } from '#lib/server/testing/fixtures.js';
+import { mockUnreachableEmailer } from '#lib/server/testing/email.js';
+import { withOrganizationFixtures } from '#lib/server/testing/organizations.js';
 import { _deleteOrganization } from './+server.ts';
 
 const CSV = new TextEncoder().encode('product name,date ordered,weight\n');

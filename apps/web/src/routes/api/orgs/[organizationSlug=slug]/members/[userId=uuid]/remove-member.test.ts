@@ -4,17 +4,21 @@ import { describe, expect, test } from 'vitest';
 import type { Actor } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
-import { anAdminOrg, anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { statusOf } from '#lib/server/testing/http-error.js';
+import {
+  insertAdminOrg,
+  insertOrganizationWithMembers,
+} from '#lib/server/testing/organizations.js';
 import { _removeMember } from './+server.ts';
 
 describe('_removeMember', () => {
   describe('an admin removing another member', () => {
     test('removes them, and writes a member.removed audit event', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin, members } = await anOrganizationWithMembers(transaction, [
-          { role: 'member' },
-        ]);
+        const { organizationId, admin, members } = await insertOrganizationWithMembers(
+          transaction,
+          [{ role: 'member' }],
+        );
         const [targetUserId] = members as [UserId];
         const actor: Actor = { userId: admin, role: 'admin' };
 
@@ -43,7 +47,7 @@ describe('_removeMember', () => {
   describe('a member leaving', () => {
     test('writes a member.left audit event', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, members } = await anOrganizationWithMembers(transaction, [
+        const { organizationId, members } = await insertOrganizationWithMembers(transaction, [
           { role: 'member' },
         ]);
         const [targetUserId] = members as [UserId];
@@ -66,7 +70,7 @@ describe('_removeMember', () => {
   describe('an admin leaving while another admin remains', () => {
     test('succeeds', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin, actor } = await anAdminOrg(transaction);
+        const { organizationId, admin, actor } = await insertAdminOrg(transaction);
         const secondAdmin = await insertOrganizationMember(transaction, {
           organizationId,
           role: 'admin',
@@ -93,7 +97,7 @@ describe('_removeMember', () => {
   describe('the only admin leaving', () => {
     test('answers 409 last-admin, and writes no audit event', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin, actor } = await anAdminOrg(transaction);
+        const { organizationId, admin, actor } = await insertAdminOrg(transaction);
 
         const response = await _removeMember(transaction, {
           organizationId,
@@ -112,7 +116,7 @@ describe('_removeMember', () => {
   describe('a user who is not a member of the organization', () => {
     test('is a 404', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, actor } = await anAdminOrg(transaction);
+        const { organizationId, actor } = await insertAdminOrg(transaction);
         const stranger = crypto.randomUUID() as UserId;
 
         await expect(

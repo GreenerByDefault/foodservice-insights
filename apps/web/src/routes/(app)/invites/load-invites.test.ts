@@ -8,7 +8,7 @@ import {
 } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
-import { anEmail } from '#lib/server/testing/fixtures.js';
+import { anEmail } from '#lib/server/testing/email.js';
 import { _loadInvites } from './+page.server.ts';
 
 describe('_loadInvites', () => {

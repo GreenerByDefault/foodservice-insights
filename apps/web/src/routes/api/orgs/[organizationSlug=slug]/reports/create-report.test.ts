@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { HOURLY_REPORT_LIMIT, MAX_UPLOAD_FIELD_BYTES } from '#lib/reports/limits.js';
 import { FIELD } from '#lib/reports/metadata.js';
 import { lockAndCheckReportRateLimit } from '#lib/server/reports/rate-limit.js';
-import { withOrganizationFixtures } from '#lib/server/testing/fixtures.js';
+import { withOrganizationFixtures } from '#lib/server/testing/organizations.js';
 import { _createReport } from './+server.ts';
 
 // A local .env with REPORT_RATE_LIMIT=off would otherwise bypass the limit and break the
