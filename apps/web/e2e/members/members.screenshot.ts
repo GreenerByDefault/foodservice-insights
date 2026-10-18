@@ -1,33 +1,31 @@
 /** Nine committed images.
  *
- * `as-admin.png` and `as-member.png` are one roster seen by each of the two
- * viewer roles — both roles among the people listed, and both name shapes a row renders: a
- * display name with the email beneath, and a display name-less row that shows only the email.
- * The pair is what shows the admin-only controls are admin-only: the per-row "⋯" menus are in
- * the first and gone from the second, and the "Your membership" section holds Step down + Leave
- * for the admin image but Leave alone for the member one. `as-admin.png` also carries the
- * admin-only invites section — one live invite and one expired, plus the invite form — since that
- * section is admin-only the same way the per-row menus are.
+ * `as-admin.png` and `as-member.png` are one roster seen by each of the two viewer roles — both
+ * roles among the people listed, and both name shapes a row renders: a display name with the
+ * email beneath, and a display name-less row that shows only the email. The pair is what shows
+ * the admin-only controls are admin-only: the "Invite someone" button and the per-row "⋯" menus
+ * are in the first and gone from the second, and the "Your membership" section holds Step down +
+ * Leave for the admin image but Leave alone for the member one. `as-admin.png` also carries the
+ * admin-only pending invitations — one live and one expired.
  *
- * `menu.png` is a row's menu open — where that menu lands against the row it belongs to,
- * which a roster image can't show — now with Remove from organization below the role toggle.
- * `remove-confirm.png` continues one step further: the menu's "Remove from organization"
- * item opens `ConfirmAction`'s dialog, not its own trigger, so this is the one place that path —
- * and the member's name interpolated into the dialog's title — renders. The dialog's own chrome
+ * `menu.png` is a row's menu open — where that menu lands against the row it belongs to, which a
+ * roster image can't show — now with Remove from organization below the role toggle.
+ * `remove-confirm.png` continues one step further: the menu's "Remove from organization" item
+ * opens `ConfirmAction`'s dialog, not its own trigger, so this is the one place that path — and
+ * the member's name interpolated into the dialog's title — renders. The dialog's own chrome
  * (loading, error banner) is generic across every `ConfirmAction` call site and already covered by
- * `step-down-refused.png`, so this image isn't re-proving that.
- * `step-down-refused.png` is the "Your membership" section's refused Step down, the one
- * action that acts on the viewer rather than another row.
+ * `step-down-refused.png`, so this image isn't re-proving that. `step-down-refused.png` is the
+ * "Your membership" section's refused Step down, the one action that acts on the viewer rather
+ * than another row.
  *
- * `invite-refused.png`, `invite-rate-limited.png`, and
- * `invite-email-failed.png` are the invite form's own three non-happy outcomes — inline
- * "already a member", the 429 alert, and the "sent but not emailed" warning — none of which
- * `as-admin.png` can show since it's mid-invite, not post-submit. The rate-limit and
+ * `invite-refused.png`, `invite-rate-limited.png`, and `invite-email-failed.png` are the invite
+ * dialog showing three of its non-happy outcomes — inline "already a member", the 429 alert, and
+ * the "sent but not emailed" warning — and between them its whole form. The rate-limit and
  * email-failed cases are routed rather than actually hit (sending real mail 20 times, or breaking
  * the emailer, just to render one alert), the same way a network failure is faked elsewhere in
- * this suite rather than actually cut. `invite-revoke-failed.png` is the pending-invite
- * row's own error banner, the Revoke counterpart to `remove-confirm.png`'s dialog chrome —
- * this list has no dialog to reuse that from, since Revoke has none.
+ * this suite rather than actually cut. `cancel-invite-failed.png` is the pending-invite row's own
+ * error banner, the Cancel invite counterpart to `remove-confirm.png`'s dialog chrome — this list
+ * has no dialog to reuse that from, since Cancel invite has none.
  *
  * Every person's email is fixed rather than the fixture's default random one: unlike a
  * behavioural spec, which only asserts a row exists, these are diffed pixel-for-pixel against
@@ -89,7 +87,7 @@ test('the roster as an admin, the viewer among them', async ({ page, organizatio
 
   await page.goto(`/orgs/${organizationSlug}/members`);
 
-  await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Organization members' })).toBeVisible();
   // `exact: true`, since each row's own "⋯" menu carries a sr-only "Manage {name}" label that
   // would otherwise also match a plain substring search.
   await expect(page.getByText('Priya Shah', { exact: true })).toBeVisible();
@@ -114,7 +112,7 @@ test('the roster as an admin, the viewer among them', async ({ page, organizatio
   // A plain string match is case-insensitive, which would also match the row's own
   // "…-expired@example.test" address — a regex without the `i` flag isn't.
   await expect(expiredInviteRow.getByText(/Expired/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Send invitation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Invite someone' })).toBeVisible();
 
   await expectScreenshots(page, 'as-admin.png');
 });
@@ -131,7 +129,7 @@ test('the roster as a member, who administers none of it', async ({ page, organi
 
   await page.goto(`/orgs/${organizationSlug}/members`);
 
-  await expect(page.getByRole('heading', { name: 'Members', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Organization members' })).toBeVisible();
   await expect(page.getByText('Priya Shah', { exact: true })).toBeVisible();
   await expect(page.getByText('(You)')).toBeVisible();
   // No row offers a menu, not even their own — the admin-only "⋯".
@@ -139,6 +137,7 @@ test('the roster as a member, who administers none of it', async ({ page, organi
   // "Your membership" holds Leave alone: no Step down, since the viewer isn't an admin here.
   await expect(page.getByRole('button', { name: 'Step down as admin' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Leave organization' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Invite someone' })).toHaveCount(0);
 
   await expectScreenshots(page, 'as-member.png');
 });
@@ -223,6 +222,7 @@ test('inviting an existing member is refused inline', async ({ page, organizatio
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
+  await page.getByRole('button', { name: 'Invite someone' }).click();
   await page.getByLabel('Email address').fill('members-invite-refused-ana@example.test');
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
@@ -231,7 +231,7 @@ test('inviting an existing member is refused inline', async ({ page, organizatio
   await expectScreenshots(page, 'invite-refused.png');
 });
 
-test('the invite form’s rate-limit alert', async ({ page, organizations }) => {
+test('the invite dialog’s rate-limit alert', async ({ page, organizations }) => {
   const { slug: organizationSlug } = await organizations.create({
     name: 'Members Invite Rate Limited Screenshot Foodservice',
   });
@@ -249,6 +249,7 @@ test('the invite form’s rate-limit alert', async ({ page, organizations }) => 
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
+  await page.getByRole('button', { name: 'Invite someone' }).click();
   await page.getByLabel('Email address').fill('members-invite-rate-limited@example.test');
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
@@ -271,6 +272,7 @@ test('an invite that saved but couldn’t be emailed', async ({ page, organizati
   await page.goto(`/orgs/${organizationSlug}/members`);
   await ensureHydrated(page);
 
+  await page.getByRole('button', { name: 'Invite someone' }).click();
   await page.getByLabel('Email address').fill('members-invite-email-failed@example.test');
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
@@ -281,12 +283,12 @@ test('an invite that saved but couldn’t be emailed', async ({ page, organizati
   await expectScreenshots(page, 'invite-email-failed.png');
 });
 
-test('revoking an invite, refused', async ({ page, organizations }) => {
+test('canceling an invite, refused', async ({ page, organizations }) => {
   const { slug: organizationSlug } = await organizations.create({
-    name: 'Members Invite Revoke Failed Screenshot Foodservice',
+    name: 'Members Cancel Invite Failed Screenshot Foodservice',
     invites: [
       {
-        email: 'members-invite-revoke-failed@example.test',
+        email: 'members-cancel-invite-failed@example.test',
         role: 'member',
         // Well within a week, so `formatUntil` reads relative — "in 3 days" — rather than an
         // absolute date. Left at the default `INVITE_LIFETIME_DAYS` (14 days out), the row would
@@ -305,10 +307,10 @@ test('revoking an invite, refused', async ({ page, organizations }) => {
   await ensureHydrated(page);
 
   await page
-    .getByRole('button', { name: 'Revoke invite for members-invite-revoke-failed@example.test' })
+    .getByRole('button', { name: 'Cancel invite for members-cancel-invite-failed@example.test' })
     .click();
 
-  await expect(page.getByText("Couldn't revoke this invite — please try again.")).toBeVisible();
+  await expect(page.getByText("Couldn't cancel this invite — please try again.")).toBeVisible();
 
-  await expectScreenshots(page, 'invite-revoke-failed.png');
+  await expectScreenshots(page, 'cancel-invite-failed.png');
 });

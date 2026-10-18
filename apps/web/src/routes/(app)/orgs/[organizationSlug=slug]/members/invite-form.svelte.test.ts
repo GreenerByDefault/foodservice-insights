@@ -5,17 +5,19 @@ import { resetToastMocks, toast } from '#lib/testing/toast.js';
 import InviteForm from './invite-form.svelte';
 
 const invalidate = vi.fn();
+const onInvited = vi.fn();
 vi.mock('$app/navigation', () => ({ invalidate: (key: string) => invalidate(key) }));
 vi.mock('svelte-sonner', () => import('#lib/testing/toast.js'));
 
 afterEach(() => {
   vi.unstubAllGlobals();
   invalidate.mockClear();
+  onInvited.mockClear();
   resetToastMocks();
 });
 
 async function filledOut(email = 'invitee@example.test') {
-  const screen = await render(InviteForm, { organizationSlug: 'org-1' });
+  const screen = await render(InviteForm, { organizationSlug: 'org-1', onInvited });
   await screen.getByLabelText('Email address').fill(email);
   return screen;
 }
@@ -67,14 +69,29 @@ describe('InviteForm', () => {
     await expect.poll(() => toast.success.mock.calls.length).toBe(1);
   });
 
-  test('success clears the field and toasts the address', async () => {
+  test('each role is described', async () => {
+    const screen = await render(InviteForm, { organizationSlug: 'org-1', onInvited });
+    const roles = screen.getByRole('radiogroup', { name: 'Role' });
+
+    await expect
+      .element(roles.getByRole('radio', { name: 'Member' }))
+      .toHaveAccessibleDescription('Can see and upload reports.');
+    await expect
+      .element(roles.getByRole('radio', { name: 'Admin' }))
+      .toHaveAccessibleDescription(
+        'Can also invite and remove people, and manage the organization.',
+      );
+  });
+
+  test('success calls onInvited, refreshes the list and toasts the address', async () => {
     stubFetch(jsonResponse({ inviteId: 'invite-1', emailSent: true }, 201));
     const screen = await filledOut();
 
     await screen.getByRole('button', { name: 'Send invitation' }).click();
 
-    await expect.element(screen.getByLabelText('Email address')).toHaveValue('');
     await expect.poll(() => toast.success.mock.calls).toEqual([['Invited invitee@example.test']]);
+    expect(onInvited).toHaveBeenCalledOnce();
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith('app:members');
   });
 
   test('a 409 shows an inline "already a member" error on the field and keeps the typed email', async () => {
@@ -90,6 +107,7 @@ describe('InviteForm', () => {
       .element(emailInput)
       .toHaveAccessibleDescription('That person is already a member.');
     await expect.element(emailInput).toHaveAttribute('aria-invalid', 'true');
+    expect(onInvited).not.toHaveBeenCalled();
   });
 
   test('a 429 shows the rate-limit alert', async () => {
@@ -101,9 +119,10 @@ describe('InviteForm', () => {
     await expect
       .element(screen.getByRole('alert'))
       .toHaveTextContent("You've sent too many invites. Try again in an hour.");
+    expect(onInvited).not.toHaveBeenCalled();
   });
 
-  test('an invite sent but not emailed shows the warning without a toast, and still clears the field', async () => {
+  test('an invite sent but not emailed shows the warning and keeps the email to resend', async () => {
     stubFetch(jsonResponse({ inviteId: 'invite-1', emailSent: false }, 201));
     const screen = await filledOut();
 
@@ -112,24 +131,31 @@ describe('InviteForm', () => {
     await expect
       .element(screen.getByRole('status'))
       .toHaveTextContent(/They're invited, but we couldn't email them/);
-    await expect.element(screen.getByLabelText('Email address')).toHaveValue('');
+    await expect
+      .element(screen.getByLabelText('Email address'))
+      .toHaveValue('invitee@example.test');
+    await expect.poll(() => invalidate.mock.calls).toEqual([['app:members']]);
+    expect(onInvited).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
   });
 
-  test('an unknown failure keeps the typed email, warns to check the list, and refreshes it', async () => {
+  test('an unknown failure keeps the typed email, says to check Pending invitations, and refreshes them', async () => {
     stubFetch(jsonResponse({ message: 'Nope' }, 500));
     const screen = await filledOut();
 
     await screen.getByRole('button', { name: 'Send invitation' }).click();
 
     await expect
-      .element(screen.getByText(/We couldn't tell whether that invite was sent/))
-      .toBeVisible();
+      .element(screen.getByRole('alert'))
+      .toHaveTextContent(
+        "We couldn't tell whether that invite was sent. Close this and check Pending invitations. If it's not there, try again.",
+      );
     await expect
       .element(screen.getByLabelText('Email address'))
       .toHaveValue('invitee@example.test');
     await expect.poll(() => invalidate.mock.calls.length).toBe(1);
     expect(invalidate).toHaveBeenCalledWith('app:members');
+    expect(onInvited).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
   });
 });

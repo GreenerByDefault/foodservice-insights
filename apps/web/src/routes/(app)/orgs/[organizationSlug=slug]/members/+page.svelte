@@ -1,7 +1,7 @@
 <script lang="ts">
 import PageHeading from '#lib/components/page-heading.svelte';
 import type { PageProps } from './$types';
-import InviteForm from './invite-form.svelte';
+import InviteDialog from './invite-dialog.svelte';
 import MembersList from './members-list.svelte';
 import PendingInvites from './pending-invites.svelte';
 import YourMembership from './your-membership.svelte';
@@ -15,10 +15,20 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
 </script>
 
 <svelte:head>
-  <title>{pageTitle('Members', data.organization.name)}</title>
+  <title>{pageTitle('Organization members', data.organization.name)}</title>
 </svelte:head>
 
-<PageHeading>Members</PageHeading>
+<PageHeading>
+  Organization members
+  {#snippet actions()}
+    {#if data.invites}
+      <InviteDialog
+        organizationSlug={data.organization.slug}
+        organizationName={data.organization.name}
+      />
+    {/if}
+  {/snippet}
+</PageHeading>
 
 <div class="flex w-full flex-col gap-10">
   <MembersList
@@ -31,11 +41,6 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
     <section class="flex flex-col gap-3">
       <h2 class="font-medium">Pending invitations</h2>
       <PendingInvites invites={data.invites} organizationSlug={data.organization.slug} />
-    </section>
-
-    <section class="flex max-w-md flex-col gap-3">
-      <h2 class="font-medium">Invite someone</h2>
-      <InviteForm organizationSlug={data.organization.slug} />
     </section>
   {/if}
 

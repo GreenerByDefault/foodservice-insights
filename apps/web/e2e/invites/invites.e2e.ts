@@ -47,6 +47,7 @@ test('the invite email signs a new invitee in with their address filled in, asks
   // Invited through the page rather than the fixture's `invites`, which sends no email.
   await page.goto(organizationMembersHref(slug));
   await ensureHydrated(page);
+  await page.getByRole('button', { name: 'Invite someone' }).click();
   await page.getByLabel('Email address').fill(invitee.email);
   await page.getByRole('button', { name: 'Send invitation' }).click();
 
