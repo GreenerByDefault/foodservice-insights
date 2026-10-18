@@ -281,6 +281,7 @@ def test_write_report_pdf_orders_the_procurement_pages(recording_pdf: _Recording
     assert _page_titles(recording_pdf) == [
         "Food Report",
         "Executive Summary",
+        "Data Completeness & Quality",
         "How to Read This Report",
         "",
         "Category Template",
@@ -288,7 +289,6 @@ def test_write_report_pdf_orders_the_procurement_pages(recording_pdf: _Recording
         "Decision KPIs",
         "Substitution Scenarios",
         "About This Report",
-        "Data Completeness & Quality",
     ]
 
 
@@ -312,7 +312,7 @@ def test_write_report_pdf_includes_each_procurement_page_its_data_supports(
     _write(_report(animal_product))
 
     titles = _page_titles(recording_pdf)
-    assert titles[titles.index("Category Template") + 1 : -2] == procurement_pages
+    assert titles[titles.index("Category Template") + 1 : -1] == procurement_pages
 
 
 def test_write_report_pdf_continues_a_long_quality_section_onto_more_pages(
@@ -328,10 +328,9 @@ def test_write_report_pdf_continues_a_long_quality_section_onto_more_pages(
     _write(replace(_report(), findings=(long_finding,) * 12))
 
     titles = _page_titles(recording_pdf)
-    assert (
-        titles[titles.index("Data Completeness & Quality") + 1 :]
-        == ["Data Completeness & Quality (cont.)"] * 3
-    )
+    start = titles.index("Data Completeness & Quality")
+    assert titles[start + 1 : start + 4] == ["Data Completeness & Quality (cont.)"] * 3
+    assert titles[start + 4] == "How to Read This Report"
 
 
 def test_write_report_pdf_closes_its_own_figures_when_a_page_raises(
@@ -431,8 +430,8 @@ def test_write_report_pdf_caveats_only_a_warning(
 
     pages = ["".join((page.extract_text() or "").split()) for page in PdfReader(str(path)).pages]
     assert ("Somedata-qualitynotesapply" in pages[1]) is caveat_shown
-    assert ("Extrafinding" in pages[-1]) is caveat_shown
-    assert ("Allautomateddatacheckspassed" in pages[-1]) is not caveat_shown
+    assert ("Extrafinding" in pages[2]) is caveat_shown
+    assert ("Allautomateddatacheckspassed" in pages[2]) is not caveat_shown
 
 
 def test_quality_lines_explain_an_invalid_status() -> None:
@@ -882,8 +881,8 @@ def test_narrative_paragraphs_caveat_the_quality() -> None:
     assert paragraphs[1:] == [
         "The biggest contributors were Legumes (70%) and Cheese (30%).",
         "All of the categorised food was plant-based.",
-        "Some data-quality notes apply to this analysis; they are listed in plain language at "
-        "the back of this report.",
+        "Some data-quality notes apply to this analysis; they are listed in plain language on "
+        "the next page.",
         "The pages that follow show how the footprint breaks down by month, category and "
         "product. The methodology is explained at the back.",
     ]

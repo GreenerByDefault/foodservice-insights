@@ -9,9 +9,12 @@ The nonprofit tried the app and wrote:
 > so users can take the findings with a grain of salt. Right now, having the data quality pieces
 > at the end might cause users to miss that piece
 
-We asked whether they meant the web page or only the PDF. This plan assumes the web page, and
-reorders the PDF either way. The PDF is what gets forwarded, and the people who receive it are the
-ones most likely to take its numbers at face value.
+We asked whether they meant the web page or only the PDF. This plan assumes the web page. The PDF
+now has its "Data Completeness & Quality" page directly after the executive summary, which was our
+idea, not theirs: the PDF is what gets forwarded, and the people who receive it are the ones most
+likely to take its numbers at face value. The page keeps that position when every check passed, as
+a short page saying so, because a page whose position depends on the data is harder to find and
+to test. The web notice, by contrast, appears only when there are findings.
 
 Today:
 
@@ -22,11 +25,10 @@ Today:
 - **No check emits `error`.** Every finding the customer sees is a `warning`, so `quality_status`
   is only ever `pass` or `warning`.
 - **The customer PDF** lists the `warning` and `error` findings on "Data Completeness & Quality",
-  its last page. The list is capped at 20 findings and 5 examples each, by `quality_lines` with
+  its third page. The list is capped at 20 findings and 5 examples each, by `quality_lines` with
   `show_successes=False` in
   [`pdf.py`](../../python/insights/gbd_foodservice_insights/report/pdf.py). The executive summary
-  only says the notes are "listed in plain language at the back of this report"
-  (`_narrative_paragraphs`).
+  points to them "on the next page" (`_narrative_paragraphs`).
 - **The web report page** shows the downloads and the upload details, and no findings.
 - **`result.json`** carries only `analysisAttemptId`. The findings reach the database only as
   telemetry: counts per check and status, in `analysis_attempt_quality_check`.
@@ -74,7 +76,8 @@ for different lengths of time.
 
 `quality_lines` decides which findings the customer sees. That selection moves into a
 `customer_findings(findings)` function, which both the PDF and `result_payload` call, so there is
-one definition of what the customer sees.
+one definition of what the customer sees. The extraction belongs to the PR that adds the second
+caller, not to a prefactor with no user.
 
 `analysis_attempt_finding`:
 
@@ -112,20 +115,9 @@ only when there are findings:
 
 Adjust the layout once the nonprofit has seen it.
 
-### The PDF: the quality page follows the executive summary
-
-The page order becomes: title, executive summary, Data Completeness & Quality, How to Read, then
-the charts and the rest. The page stays there when every check passed. In that case it is a short
-page saying so.
-
-The executive summary's sentence changes from "at the back of this report" to "on the next page".
-
-*Rejected: moving the page only when a warning fired.* A page whose position depends on the data is
-harder for a reader to find and harder to test.
-
 ### Reports from before the change show no notice
 
-Attempts that finished before PR 3's worker was deployed have no rows, so they look clean. We
+Attempts that finished before PR 2's worker was deployed have no rows, so they look clean. We
 accept that. The app is in trial, and a backfill would mean rerunning the checks.
 
 ### Not in this plan: headline numbers
@@ -137,7 +129,7 @@ described above. Also note that the optional-counts plan makes the per-diner fig
 
 ### How often warnings fire
 
-Before PR 4 merges, query production's `analysis_attempt_quality_check` for each check's firing
+Before PR 3 merges, query production's `analysis_attempt_quality_check` for each check's firing
 rate. The success rows are kept, so the rate has a denominator. If most reports get a warning, the
 notice becomes noise. The fix then belongs in the thresholds (`diagnostic_thresholds.yaml`) or in a
 severity split, not in hiding the notice.
@@ -152,24 +144,7 @@ The sample is still small, so this informs the decision but does not block it.
     this notice.
   - It also claims migration `004`. Whichever lands second renumbers.
 
-## PR 1 — the PDF puts the quality page up front
-
-Python only, and independent of the rest, so it can merge first.
-
-- **`write_report_pdf`:** move the "Data Completeness & Quality" page to directly after
-  `create_executive_summary_page`.
-- **`_narrative_paragraphs`:** change "at the back of this report" to "on the next page".
-- **Extract `customer_findings`:** pull out the warning/error filter and the 20 and 5 caps, and
-  have `quality_lines` call it. This is a prefactor for PR 3.
-
-Tests (`test_pdf.py`):
-
-- The page-title order in the existing `write_report_pdf` test.
-- The narrative sentence.
-- The existing `quality_lines` tests stay green unchanged, which shows the extraction preserved
-  behavior.
-
-## PR 2 — the `analysis_attempt_finding` table
+## PR 1 — the `analysis_attempt_finding` table
 
 - **The migration:** add `packages/db/migrations/004_attempt_findings.ts` (or the next free
   number), with the columns and constraints above and comments on the table and on `position`.
@@ -189,9 +164,9 @@ Tests (`withRollback`):
   - a duplicate position.
 - Deleting the report's organization deletes the rows.
 
-## PR 3 — the child reports its findings and the worker stores them
+## PR 2 — the child reports its findings and the worker stores them
 
-Merge only once PR 2 has deployed. The parent and the child ship in one image, so the contract can
+Merge only once PR 1 has deployed. The parent and the child ship in one image, so the contract can
 change shape in a single PR.
 
 - **Contract:**
@@ -200,6 +175,9 @@ change shape in a single PR.
   - The finding enums already live under `telemetryEnums` in `contract.json`. Reuse them, and
     rename that group if `result.json` sharing it reads wrong.
 - **Python:**
+  - Extract `customer_findings` from `quality_lines`: the warning/error filter and the caps of 20
+    findings and 5 examples each. `quality_lines` calls it, and its existing tests stay green
+    unchanged.
   - `AnalysisOutcome` gains `findings`, built from `customer_findings(report.findings)` in
     `analysis.py`.
   - `result_payload` validates and writes them.
@@ -217,15 +195,15 @@ Tests:
     over the bound, and an unknown field.
 - **`queue.test.ts`:** `markAttemptSucceeded` writes the findings in order. It writes none when it
   loses the race.
-- **Python:** `test_analysis` covers the outcome's findings, and the child's `run` test covers the
+- **Python:** `test_pdf` shows the extraction preserved behavior. `test_analysis` covers the outcome's findings, and the child's `run` test covers the
   payload.
 - **`pnpm test:system`** locally, because this changes the seam between the worker and the child.
 
 **After merging, dispatch a worker deploy.**
 
-## PR 4 — the report page shows the warnings
+## PR 3 — the report page shows the warnings
 
-This can merge any time after PR 2. It shows nothing until PR 3's worker is live.
+This can merge any time after PR 1. It shows nothing until PR 2's worker is live.
 
 - **`+page.server.ts`:**
   - The `succeeded` attempt gains `findings`, loaded by position next to `loadResultFiles`.
@@ -247,5 +225,4 @@ Tests:
 - Run the whole flow locally. Upload a file with a missing internal month, which trips
   `missing_internal_months`. Then check that:
   - the notice shows on the page once the report finishes;
-  - the warning in the PDF is on page 3;
   - deleting the organization removes its `analysis_attempt_finding` rows.
