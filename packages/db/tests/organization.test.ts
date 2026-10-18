@@ -3,6 +3,12 @@
 
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import {
+  MAX_DISPLAY_NAME_LENGTH,
+  MAX_ORGANIZATION_NAME_LENGTH,
+  MAX_ORGANIZATION_SLUG_LENGTH,
+  RESERVED_ORGANIZATION_SLUGS,
+} from '../src/constraints.ts';
 import { DATABASE } from '../src/env.ts';
 import type { AppUser } from '../src/generated/public/AppUser.ts';
 import type { OrganizationId } from '../src/generated/public/Organization.ts';
@@ -24,12 +30,6 @@ import {
   insertOrganizationInvite,
 } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
-import {
-  MAX_DISPLAY_NAME_LENGTH,
-  MAX_ORGANIZATION_NAME_LENGTH,
-  MAX_ORGANIZATION_SLUG_LENGTH,
-  RESERVED_ORGANIZATION_SLUGS,
-} from '../src/types.ts';
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 

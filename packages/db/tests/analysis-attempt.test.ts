@@ -10,6 +10,7 @@
 
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { MAX_ANALYSIS_ATTEMPTS } from '../src/constraints.ts';
 import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttempt } from '../src/generated/public/AnalysisAttempt.ts';
 import type AnalysisAttemptStatus from '../src/generated/public/AnalysisAttemptStatus.ts';
@@ -29,7 +30,6 @@ import {
   insertReport,
 } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
-import { MAX_ANALYSIS_ATTEMPTS } from '../src/types.ts';
 
 type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 

@@ -111,7 +111,7 @@ function reviewColumns(
  * only spaces, to agree with Python's `str.strip`.
  *
  * The byte bound keeps the unique index's entry inside the b-tree's limit of about 2,700 bytes.
- * Not imported from MAX_CACHE_KEY_BYTES (types.ts), so a later change to the constant cannot
+ * Not imported from MAX_CACHE_KEY_BYTES (constraints.ts), so a later change to the constant cannot
  * silently disagree with an applied constraint; caches.test.ts pins the two together. */
 function productKey(
   builder: CreateTableBuilder<string, any>,

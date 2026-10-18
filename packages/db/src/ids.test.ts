@@ -1,5 +1,8 @@
+import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
-import { uuidV7, uuidV7Timestamp } from './uuid.ts';
+import { DATABASE } from './env.ts';
+import { uuidV7, uuidV7Timestamp } from './ids.ts';
+import { withRollback } from './testing/transactions.ts';
 
 const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -30,5 +33,21 @@ describe('uuidV7', () => {
     const ids = new Set(Array.from({ length: 10_000 }, uuidV7));
 
     expect(ids.size).toBe(10_000);
+  });
+
+  test('agrees with the SQL `uuidv7()` on version and timestamp', async () => {
+    const generated = uuidV7();
+
+    const row = await withRollback(DATABASE, async (transaction) => {
+      const { rows } = await sql<{ version: number; timestampMs: string }>`
+        SELECT
+          uuid_extract_version(${generated}::uuid) AS version,
+          ('x' || substr(replace(${generated}, '-', ''), 1, 12))::bit(48)::bigint AS "timestampMs"
+      `.execute(transaction);
+      return rows[0];
+    });
+
+    expect(row?.version).toBe(7);
+    expect(Number(row?.timestampMs)).toBe(uuidV7Timestamp(generated));
   });
 });

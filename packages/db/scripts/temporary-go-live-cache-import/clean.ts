@@ -7,8 +7,8 @@
 // wrong. A verified row blocks every later suggestion for its key, so a wrong one is never
 // corrected by the pipeline.
 
+import { MAX_CACHE_KEY_BYTES } from '../../src/constraints.ts';
 import type EntreeClassificationLabel from '../../src/generated/public/EntreeClassificationLabel.ts';
-import { MAX_CACHE_KEY_BYTES } from '../../src/types.ts';
 import type { CsvRecord } from './csv.ts';
 
 export const NO_MATCHES_FOUND = 'No Matches Found';

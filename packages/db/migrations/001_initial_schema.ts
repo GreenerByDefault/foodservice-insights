@@ -140,27 +140,27 @@ async function usersAndOrganizations(database: Kysely<any>): Promise<void> {
     .addColumn('updated_at', 'timestamptz', (column) => column.notNull().defaultTo(sql`now()`))
     .addCheckConstraint('organization_name_trimmed', sql`name = btrim(name)`)
     .addCheckConstraint(
-      // Not imported from MAX_ORGANIZATION_NAME_LENGTH (types.ts): a value imported into the
+      // Not imported from MAX_ORGANIZATION_NAME_LENGTH (constraints.ts): a value imported into the
       // migration only affects databases created from now on, so it could silently stop matching
       // an already-applied constraint. organization.test.ts pins the two together instead.
       'organization_name_length',
       sql`char_length(name) BETWEEN 1 AND 100`,
     )
     .addCheckConstraint(
-      // Not imported from ORGANIZATION_SLUG_PATTERN (types.ts), same reasoning as
+      // Not imported from ORGANIZATION_SLUG_PATTERN (constraints.ts), same reasoning as
       // organization_name_length above. Lowercase alphanumerics, hyphen-separated, no leading,
       // trailing or doubled hyphen — what deriveOrganizationSlug produces and nothing else.
       'organization_slug_format',
       sql`slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`,
     )
     .addCheckConstraint(
-      // Mirrors MAX_ORGANIZATION_SLUG_LENGTH (types.ts), not imported, same reasoning as
+      // Mirrors MAX_ORGANIZATION_SLUG_LENGTH (constraints.ts), not imported, same reasoning as
       // organization_name_length above.
       'organization_slug_length',
       sql`char_length(slug) <= 48`,
     )
     .addCheckConstraint(
-      // Mirrors RESERVED_ORGANIZATION_SLUGS (types.ts), not imported, same reasoning as
+      // Mirrors RESERVED_ORGANIZATION_SLUGS (constraints.ts), not imported, same reasoning as
       // organization_name_length above. These are the static directories SvelteKit routes ahead
       // of the dynamic `[organizationSlug=slug]` segment — an organization slugged `new` would be
       // a real route and so unreachable.

@@ -2,7 +2,7 @@
 
 ## Context
 
-`packages/db` grew one feature at a time, and it shows in four places:
+`packages/db` grew one feature at a time, and it shows in three places:
 
 - **The README restates the schema's own comments.** Most of "The model" and "Design reasoning"
   repeats a `COMMENT ON` that is already in `public-schema.sql` (caches verified-only, telemetry
@@ -12,10 +12,9 @@
   (`result_file_kind` is only `pdf | xlsx`), "a separate hardcoded path" (the column comment says
   `-original` suffix), "iput", and a superadmin link to `ARCHITECTURE.md#auth`, which does not
   mention superadmin (`apps/web/README.md` does).
-- **`tests/` mixes two kinds of test.** The root README's tier table says it holds *database
-  invariants*, and most files do, one per table group. But `product-categorization`,
-  `invite-rate-limit` and `report-rate-limit` test a `src/` module's exports, and
-  `conventions.test.ts` also tests `withRollback` and the TS `uuidV7`.
+- **`tests/` still mixes two kinds of test.** The root README's tier table says it holds
+  *database invariants*, and every file does, one per table group, except that
+  `conventions.test.ts` also tests `withRollback`.
 - **Tests drift from `.claude/rules/typescript.md`'s test organization.** `analysis-attempt.test.ts`
   has four top-level situation `describe`s instead of one for the table, and a stale header
   ("and the result files", which live in `result-file.test.ts`). `client.test.ts` has no
@@ -25,11 +24,6 @@
   where `insertOrganizationMember` does both; `result-file.test.ts`'s `aResultFile` duplicates
   `insertResultFile`). `attempt-telemetry.test.ts`'s `FINISHED_RUN` is a hand copy of
   `insertAttemptTelemetry`'s defaults.
-- **Small `src/` modules that only make sense together are split apart.** `advisory-locks.ts`
-  exists only to serve `invite-rate-limit.ts` and `report-rate-limit.ts`, and each of those sends
-  the reader to it for "why a lock is needed at all". `types.ts` mixes type re-exports, CHECK
-  mirrors and id factories, while `uuid.ts` holds the v7 generator those factories call and
-  `invariants.ts` holds the one helper for reading a CHECK's guarantee.
 
 The outcome: a README that orients and states the contract other code must follow, with each "why"
 living once, beside the code that enacts it; `tests/` holding only schema invariants; and test
@@ -42,44 +36,10 @@ deploy config.
 
 ## The stack
 
-Four PRs, stacked with `gh-stack` on top of `analysis-attempt-finding-table` (the finding table's
+Three PRs, stacked with `gh-stack` on top of `analysis-attempt-finding-table` (the finding table's
 own PR), each independently green, landing in this order (later ones reference earlier names).
 
-### PR 1 — Group the rate limits, the CHECK mirrors, and id minting
-
-Source moves, with their tests colocated. `@gbd/db`'s public exports do not change.
-
-- **`src/rate-limits.ts`** ← `advisory-locks.ts` + `invite-rate-limit.ts` + `report-rate-limit.ts`.
-  The windowed-limit reasoning from `lockRateLimitKey`'s doc comment becomes the file header; the
-  `LOCK_CLASS_*` registry and `lockRateLimitKey` become module-private; the two "see
-  `lockRateLimitKey` for why" hops go away.
-- **`src/rate-limits.test.ts`** ← `tests/invite-rate-limit.test.ts` + `tests/report-rate-limit.test.ts`.
-  One top-level `describe` per export; each "the count-then-insert race" block nests under its
-  lock's `describe`.
-- **`src/ids.ts`** ← `uuid.ts` + `newInputFileId` / `newResultFileId` / `newReportId` /
-  `newRejectedUploadId` from `types.ts`. One line on the v4 pair pointing at migration 001's
-  reasoning (`input_file.id`), not a copy of it.
-- **`src/ids.test.ts`** ← `src/uuid.test.ts` + the "agrees with the TypeScript implementation" test
-  from `tests/conventions.test.ts`.
-- **`src/product-categorization.test.ts`** ← `tests/product-categorization.test.ts`.
-- **`src/constraints.ts`** ← the six CHECK mirrors from `types.ts` (`MAX_*`,
-  `ORGANIZATION_SLUG_PATTERN`, `RESERVED_ORGANIZATION_SLUGS`) + `requireConstraint` from
-  `invariants.ts`: everything that carries a CHECK's guarantee into TypeScript. Each mirror's doc
-  comment now repeats "Mirrored here, not read from the DB … (`packages/db/public-schema.sql`)";
-  the file header says that once, and each constant keeps only its constraint name and any
-  non-obvious note (e.g. reserved slugs = the static dirs under `routes/(app)/orgs/`). It sits
-  beside `src/testing/constraints.ts`, which asserts a violation: the same subject from the other
-  side.
-- **`types.ts`** is left holding only the type re-exports from `generated/`, which is what its name
-  says. `invariants.ts` and `uuid.ts` are deleted.
-- Update `src/index.ts` imports, and the comments that cite moved paths: migration 001's four
-  "(types.ts)" notes (lines 143–163) and 002:114 → `constraints.ts`; `REQUIREMENTS.md:286`;
-  `apps/web/src/lib/server/reports/rate-limit.test.ts:2`; the README's rate-limit bullet (rewritten
-  in PR 3 anyway). Check with
-  `git grep -nE "advisory-locks|invite-rate-limit|report-rate-limit|uuid\.ts|invariants\.ts|types\.ts"`
-  — no hit may name a moved symbol.
-
-### PR 2 — Make the remaining tests follow the repo's conventions
+### PR 1 — Make the remaining tests follow the repo's conventions
 
 Test-only. After it, `tests/` is one file per table group, each asserting what the schema rejects.
 
@@ -107,7 +67,7 @@ Test-only. After it, `tests/` is one file per table group, each asserting what t
   `insertAttemptTelemetry` spreads) and have `analysis-attempt-telemetry.test.ts` import it instead
   of `FINISHED_RUN`.
 
-### PR 3 — Rewrite the README around orientation and contract
+### PR 2 — Rewrite the README around orientation and contract
 
 Per the `writing-docs` skill: name the file that holds a fact, don't copy it. Keep these headings,
 which other docs link to: `#using-it`, `#conventions`, `#writing-a-migration`,
@@ -139,7 +99,7 @@ which other docs link to: `#using-it`, `#conventions`, `#writing-a-migration`,
   worker, so it moves to `apps/worker/README.md` (or is deleted if that README already says it).
 - Run `/prune-comments` over the PR's comment changes.
 
-### PR 4 — Dedupe the test-database scripts and trim the entry points
+### PR 3 — Dedupe the test-database scripts and trim the entry points
 
 - **`src/testing/run-database.ts`**: one `withMaintenanceClient(connectionString, fn)` for the
   connect / try / `finally end()` that six functions repeat; one sweep helper shared by
@@ -175,7 +135,7 @@ delete it and its header paragraph?
   in `@gbd/email` and `@gbd/storage`.
 - **Moving `analysis-failure-explanations.ts` out**: it is a `Record` over a database enum, read by
   both `apps/web` and `@gbd/email`; nothing below `@gbd/db` knows the type.
-- **Merging `schema.ts` into `types.ts`**: after PR 1 they divide cleanly. `schema.ts` holds the
+- **Merging `schema.ts` into `types.ts`**: they divide cleanly. `schema.ts` holds the
   Kysely `Database` and `DatabaseExecutor`, and `types.ts` the re-exported id, row and enum types.
   Merging them would change about 20 import sites for little gain.
 
@@ -185,13 +145,14 @@ Requires the test stack: `TEST_DB=1 scripts/supabase start`.
 
 - While iterating: `pnpm --filter @gbd/db test:unit <file>`.
 - **No test lost in a move:** record `pnpm --filter @gbd/db exec vitest list` (with `TEST_DB=1`)
-  on the base branch, and again after PRs 1 and 2. Counts must match; leaf titles must match
+  on the base branch, and again after each PR (the base for PR 1 is the branch as it stands now,
+  with 473 tests). Counts must match; leaf titles must match
   apart from the `describe` prefixes deliberately changed.
 - **No dangling paths:** `git grep` for every moved or deleted filename; nothing may still point
-  at one, migration comments included. For PR 3, check that every link into `packages/db/README.md` (from `ARCHITECTURE.md`,
+  at one, migration comments included. For PR 2, check that every link into `packages/db/README.md` (from `ARCHITECTURE.md`,
   `README.md`, `.claude/rules/typescript.md`, `apps/worker/src/attempt/queue.ts`) still resolves
   to a heading.
-- **Public API unchanged (PRs 1–3), shrunk only by the listed names (PR 4):**
+- **Public API unchanged (PRs 1–2), shrunk only by the listed names (PR 3):**
   `pnpm --filter @gbd/db build`, then diff `dist/index.d.ts` and `dist/testing/index.d.ts` against
   the base.
 - Gate per PR, in the background: `pnpm lint && pnpm check && pnpm test`. Report any flake by name.
