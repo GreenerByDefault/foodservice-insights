@@ -1,7 +1,8 @@
-import type { DatabaseExecutor, UserId } from '@gbd/db';
+import type { Database, DatabaseExecutor, OrganizationInviteId, UserId } from '@gbd/db';
+import type { Transaction } from 'kysely';
 import * as v from 'valibot';
 import { DisplayNameSchema } from '#lib/account/display-name.js';
-import { recordAuditEvent } from '#lib/server/audit.js';
+import { type InviteAuditAction, recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import type { AuthenticatedUser } from '#lib/server/auth/types.js';
 import { parseBody } from '#lib/server/body.js';
@@ -41,6 +42,35 @@ export async function _renameSelf(
   return new Response(null, { status: 204 });
 }
 
+const ANSWERED_INVITE_ACTIONS: InviteAuditAction[] = [
+  'invite.accepted',
+  'invite.declined',
+  'invite.expired',
+];
+
+/** Delete the `organization_invite` rows this user accepted, declined or let expire, so the
+ * address they were sent to is not left beside the user's id in `audit_event`. Pending invites
+ * stay: nothing ties them to this user's id, and they are an admin's live invitation. */
+async function deleteAnsweredInvites(
+  transaction: Transaction<Database>,
+  userId: UserId,
+): Promise<void> {
+  await transaction
+    .deleteFrom('organizationInvite')
+    .where('id', 'in', (eb) =>
+      // Via the audit rows, not `email`: the invite holds the address it was sent to, which the
+      // user may have changed since.
+      eb
+        .selectFrom('auditEvent')
+        .select('targetId')
+        .$castTo<{ targetId: OrganizationInviteId }>()
+        .where('actorUserId', '=', userId)
+        .where('targetType', '=', 'invite')
+        .where('action', 'in', ANSWERED_INVITE_ACTIONS),
+    )
+    .execute();
+}
+
 /** Delete `user`'s `auth.users` row, which cascades to `app_user` and their memberships. Their
  * reports stay, with a null creator; the raw id survives in `audit_event`, which has no foreign
  * keys for exactly this reason.
@@ -64,6 +94,7 @@ export async function _deleteAccount(
           actor: { userId: user.id },
           target: { type: 'user', id: user.id, organizationId: null },
         });
+        await deleteAnsweredInvites(transaction, user.id);
         await transaction.deleteFrom('auth.users').where('id', '=', user.id).execute();
       }),
     { action: 'delete an account', context: { userId: user.id } },

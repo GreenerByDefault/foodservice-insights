@@ -228,7 +228,8 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
 - **A user deleting their account** hard-deletes the user, but does *not* delete that member's
   reports in the organization.
   - The app displays the submitter as a deleted user.
-  - The raw user ID stays in the audit log.
+  - The raw user ID stays in the audit log. The invites the user answered are deleted with the
+    account, so the log cannot lead back to their address.
 - **An admin is blocked** from deleting their account, or leaving an organization, until they
   either delete the whole organization or promote another admin.
 - **An admin deleting an organization** *does* hard-delete all of the organization's reports and input files. It

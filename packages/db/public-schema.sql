@@ -1555,6 +1555,13 @@ CREATE INDEX "analysis_attempt_telemetry_recorded_at" ON "public"."analysis_atte
 
 
 --
+-- Name: audit_event_actor_user_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "audit_event_actor_user_id" ON "public"."audit_event" USING "btree" ("actor_user_id");
+
+
+--
 -- Name: audit_event_organization_id_occurred_at; Type: INDEX; Schema: public; Owner: postgres
 --
 
