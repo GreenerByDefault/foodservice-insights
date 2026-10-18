@@ -1,7 +1,23 @@
+import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../../env.ts';
 import { withRollback } from '../transactions.ts';
 import { insertOrganization, insertOrganizationInvite } from './organization.ts';
+import { dbMsAgo } from './values.ts';
+
+describe('insertOrganization', () => {
+  test('backdates createdAt', async () => {
+    const { organization, now } = await withRollback(DATABASE, async (transaction) => {
+      const { organization } = await insertOrganization(transaction, {
+        createdAt: dbMsAgo(60_000),
+      });
+      const { rows } = await sql<{ now: Date }>`SELECT now()`.execute(transaction);
+      return { organization, now: (rows[0] as { now: Date }).now };
+    });
+
+    expect(organization.createdAt).toEqual(new Date(now.getTime() - 60_000));
+  });
+});
 
 describe('insertOrganizationInvite', () => {
   test('defaults expiresAt to a full lifetime out, and leaves createdAt at its column default', async () => {

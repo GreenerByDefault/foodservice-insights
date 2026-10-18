@@ -1,9 +1,19 @@
+import type { RawBuilder } from 'kysely';
 import type { AppUser } from '../../generated/public/AppUser.ts';
 import type { DatabaseExecutor } from '../../schema.ts';
 
 export async function insertAppUser(
   database: DatabaseExecutor,
-  overrides: { id?: string; displayName?: string; isSuperadmin?: boolean; email?: string } = {},
+  overrides: {
+    id?: string;
+    displayName?: string;
+    isSuperadmin?: boolean;
+    email?: string;
+    /** Left out, null, as `auth.users` has no default for it. */
+    createdAt?: Date | RawBuilder<Date>;
+    /** When the user entered their sign-in code. Left out, null: the address was never confirmed. */
+    emailConfirmedAt?: Date | RawBuilder<Date>;
+  } = {},
 ): Promise<AppUser> {
   const { id } = await database
     .insertInto('auth.users')
@@ -12,6 +22,8 @@ export async function insertAppUser(
       // JWT carries.
       id: (overrides.id ?? crypto.randomUUID()) as AppUser['id'],
       email: overrides.email ?? `${crypto.randomUUID()}@example.test`,
+      createdAt: overrides.createdAt,
+      emailConfirmedAt: overrides.emailConfirmedAt,
     })
     .returning('id')
     .executeTakeFirstOrThrow();

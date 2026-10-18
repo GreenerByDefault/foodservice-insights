@@ -49,6 +49,26 @@ describe('insertAnalysisAttempt', () => {
       });
     },
   );
+
+  test('records notificationEmailSentAt as one claim that sent the email', async () => {
+    const sentAt = new Date('2024-01-01T00:06:00Z');
+
+    const attempt = await withRollback(DATABASE, async (transaction) =>
+      insertAnalysisAttempt(transaction, {
+        status: 'succeeded',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        finishedAt: new Date('2024-01-01T00:05:00Z'),
+        notificationEmailSentAt: sentAt,
+      }),
+    );
+
+    expect(attempt).toMatchObject({
+      notificationClaimedAt: sentAt,
+      notificationClaimedByWorkerId: 'test-worker',
+      notificationAttempts: 1,
+      notificationEmailSentAt: sentAt,
+    });
+  });
 });
 
 describe('insertReportWithAttempt', () => {

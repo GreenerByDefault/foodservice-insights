@@ -134,7 +134,7 @@ point per vendor, if the team ends up working in a Slack channel.
 - **The contact point and notification policy are code**, like the data source. They are built
   from `ALERT_EMAILS`, which points at Mailpit locally, and upserted by the same script. Each
   person gets one email when an alert fires and one when it resolves.
-- **Every rule's query runs in `pnpm test`.** The panel check from `metrics-pipeline.md` PR 3
+- **Every rule's query runs in `pnpm test`.** The panel check from `metrics-pipeline.md` PR 2
   also reads the rule files and sends each query through Grafana against its run database. A rule
   must return exactly one number, and zero passes. So a view change that breaks a rule fails
   `pnpm test` and names the rule. Whether each rule fires on the rows it should is checked once,
@@ -191,7 +191,7 @@ have landed.
 
 ## PR 2 — the data rules
 
-Needs `metrics-pipeline.md` PR 4, so that a push to Grafana Cloud exists, and PR 1 here.
+Needs `metrics-pipeline.md` PR 3, so that a push to Grafana Cloud exists, and PR 1 here.
 
 - `apps/grafana/resources/`: one rule file per rule from Decisions, in a folder of its own.
   Thresholds sit in the files, each with a comment saying what firing would mean.
