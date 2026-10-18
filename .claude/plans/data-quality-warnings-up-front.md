@@ -79,10 +79,10 @@ for different lengths of time.
 one definition of what the customer sees. The extraction belongs to the PR that adds the second
 caller, not to a prefactor with no user.
 
-`analysis_attempt_finding`:
+`analysis_attempt_finding` (migration `008_attempt_findings.ts`):
 
 - `analysis_attempt_id`: references `analysis_attempt`, with `ON DELETE CASCADE`.
-- `position`: the PDF's order. The primary key is `(analysis_attempt_id, position)`.
+- `position`: the PDF's order, from 0. The primary key is `(analysis_attempt_id, position)`.
 - `quality_check` and `status`: reuse the enums from `003`. A CHECK limits `status` to `warning`
   and `error`.
 - `message`: non-empty text.
@@ -117,7 +117,7 @@ Adjust the layout once the nonprofit has seen it.
 
 ### Reports from before the change show no notice
 
-Attempts that finished before PR 2's worker was deployed have no rows, so they look clean. We
+Attempts that finished before PR 1's worker was deployed have no rows, so they look clean. We
 accept that. The app is in trial, and a backfill would mean rerunning the checks.
 
 ### Not in this plan: headline numbers
@@ -129,7 +129,7 @@ described above. Also note that the optional-counts plan makes the per-diner fig
 
 ### How often warnings fire
 
-Before PR 3 merges, query production's `analysis_attempt_quality_check` for each check's firing
+Before PR 2 merges, query production's `analysis_attempt_quality_check` for each check's firing
 rate. The success rows are kept, so the rate has a denominator. If most reports get a warning, the
 notice becomes noise. The fix then belongs in the thresholds (`diagnostic_thresholds.yaml`) or in a
 severity split, not in hiding the notice.
@@ -142,32 +142,11 @@ The sample is still small, so this informs the decision but does not block it.
   - Its PR 1 skips the counts check when there are no counts. That needs no change here.
   - It deliberately does not report "no counts" as a finding, so no-counts reports will not show
     this notice.
-  - It also claims migration `004`. Whichever lands second renumbers.
 
-## PR 1 — the `analysis_attempt_finding` table
+## PR 1 — the child reports its findings and the worker stores them
 
-- **The migration:** add `packages/db/migrations/004_attempt_findings.ts` (or the next free
-  number), with the columns and constraints above and comments on the table and on `position`.
-- **Regenerate:** `public-schema.sql` and `src/generated/`.
-- **Docs:** add one line on the table to the model section of `packages/db/README.md`.
-
-This is a pure expand: nothing reads or writes the table yet. The migration runs when
-`deploy.yml` deploys web.
-
-Tests (`withRollback`):
-
-- A `warning` row is accepted.
-- The table rejects:
-  - a `success` or `info` status;
-  - an empty message;
-  - more than 5 samples;
-  - a duplicate position.
-- Deleting the report's organization deletes the rows.
-
-## PR 2 — the child reports its findings and the worker stores them
-
-Merge only once PR 1 has deployed. The parent and the child ship in one image, so the contract can
-change shape in a single PR.
+Merge only once the `analysis_attempt_finding` table's migration (`008_attempt_findings.ts`) has
+deployed. The parent and the child ship in one image, so the contract can change shape in a single PR.
 
 - **Contract:**
   - `result.json` gains a required `findings` array, which may be empty, of
@@ -201,9 +180,9 @@ Tests:
 
 **After merging, dispatch a worker deploy.**
 
-## PR 3 — the report page shows the warnings
+## PR 2 — the report page shows the warnings
 
-This can merge any time after PR 1. It shows nothing until PR 2's worker is live.
+It shows nothing until PR 1's worker is live.
 
 - **`+page.server.ts`:**
   - The `succeeded` attempt gains `findings`, loaded by position next to `loadResultFiles`.

@@ -1,4 +1,5 @@
 import type { default as AnalysisAttemptTable } from './AnalysisAttempt.js';
+import type { default as AnalysisAttemptFindingTable } from './AnalysisAttemptFinding.js';
 import type { default as AnalysisAttemptLlmUsageTable } from './AnalysisAttemptLlmUsage.js';
 import type { default as AnalysisAttemptQualityCheckTable } from './AnalysisAttemptQualityCheck.js';
 import type { default as AnalysisAttemptTelemetryTable } from './AnalysisAttemptTelemetry.js';
@@ -45,6 +46,8 @@ export default interface PublicSchema {
   organization: OrganizationTable;
 
   entreeClassification: EntreeClassificationTable;
+
+  analysisAttemptFinding: AnalysisAttemptFindingTable;
 
   productCategorization: ProductCategorizationTable;
 }
