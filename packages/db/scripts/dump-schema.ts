@@ -45,15 +45,16 @@ writeSchema('public', dumpSchema('public'));
 writeSchema('metrics', dumpSchema('metrics'));
 
 // `pg_dump --schema auth` groups a trigger with the table it's defined on, not with the schema
-// that owns the function it calls. That means it also picks up `on_auth_user_created`, which is
-// ours, not GoTrue's — `001_initial_schema.ts` attaches it to `auth.users` to mirror new signups
-// into `public.app_user`. Restoring it here would call a function that doesn't exist yet, since
-// migrations run after this file does. Stripping it just leaves migration 001 to create the
-// identical trigger once its function exists.
+// that owns the function it calls. That means it also picks up our own triggers on `auth.users`,
+// which are not GoTrue's: `on_auth_user_created` from `001_initial_schema.ts`, which mirrors new
+// signups into `public.app_user`, and `metrics_tombstone` from `011_metrics_tombstones.ts`.
+// Restoring them here would call functions that don't exist yet, since migrations run after this
+// file does. Stripping them just leaves the migrations to create the identical triggers once their
+// functions exist.
 writeSchema(
   'auth',
   dumpSchema('auth').replace(
-    /--\n-- Name: [^\n]*; Type: TRIGGER;[^\n]*\n--\n\nCREATE (?:OR REPLACE )?TRIGGER "[^"]+" [^\n]*EXECUTE FUNCTION "public"\.[^\n]*\n\n/g,
+    /--\n-- Name: [^\n]*; Type: TRIGGER;[^\n]*\n--\n\nCREATE (?:OR REPLACE )?TRIGGER "[^"]+" [^\n]*EXECUTE FUNCTION "(?:public|metrics)"\.[^\n]*\n\n/g,
     '',
   ),
 );

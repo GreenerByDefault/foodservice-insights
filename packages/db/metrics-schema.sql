@@ -36,15 +36,115 @@ COMMENT ON SCHEMA "metrics" IS 'Product metrics, one row per event, read by Graf
 
 
 --
+-- Name: tombstone_attempt(); Type: FUNCTION; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "metrics"."tombstone_attempt"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+    BEGIN
+      INSERT INTO metrics.purged_attempt (
+        id, report_id, attempt_number, status, failure_reason, created_at, claimed_at,
+        finished_at, worker_git_sha, notification_attempts, notification_email_sent_at,
+        has_requester
+      )
+      VALUES (
+        OLD.id, OLD.report_id, OLD.attempt_number, OLD.status, OLD.failure_reason,
+        OLD.created_at, OLD.claimed_at, OLD.finished_at, OLD.worker_git_sha,
+        OLD.notification_attempts, OLD.notification_email_sent_at,
+        OLD.requested_by_user_id IS NOT NULL
+      )
+      ON CONFLICT (id) DO NOTHING;
+      RETURN NULL;
+    END;
+    $$;
+
+
+ALTER FUNCTION "metrics"."tombstone_attempt"() OWNER TO "postgres";
+
+--
+-- Name: tombstone_report(); Type: FUNCTION; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "metrics"."tombstone_report"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+    BEGIN
+      INSERT INTO metrics.purged_report (id, organization_id, created_at, deleted_at)
+      VALUES (OLD.id, OLD.organization_id, OLD.created_at, OLD.deleted_at)
+      ON CONFLICT (id) DO NOTHING;
+      RETURN NULL;
+    END;
+    $$;
+
+
+ALTER FUNCTION "metrics"."tombstone_report"() OWNER TO "postgres";
+
+--
+-- Name: tombstone_user(); Type: FUNCTION; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "metrics"."tombstone_user"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+    BEGIN
+      INSERT INTO metrics.purged_user (id, created_at, email_confirmed_at, last_sign_in_at)
+      VALUES (OLD.id, OLD.created_at, OLD.email_confirmed_at, OLD.last_sign_in_at)
+      ON CONFLICT (id) DO NOTHING;
+      RETURN NULL;
+    END;
+    $$;
+
+
+ALTER FUNCTION "metrics"."tombstone_user"() OWNER TO "postgres";
+
+SET default_tablespace = '';
+
+SET default_table_access_method = "heap";
+
+--
+-- Name: purged_user; Type: TABLE; Schema: metrics; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "metrics"."purged_user" (
+    "id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone,
+    "email_confirmed_at" timestamp with time zone,
+    "last_sign_in_at" timestamp with time zone,
+    "purged_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "metrics"."purged_user" OWNER TO "postgres";
+
+--
+-- Name: TABLE "purged_user"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON TABLE "metrics"."purged_user" IS 'What metrics.app_user showed of each auth.users row when it was deleted. The raw id stays, as it does in audit_event.';
+
+
+--
 -- Name: app_user; Type: VIEW; Schema: metrics; Owner: postgres
 --
 
 CREATE OR REPLACE VIEW "metrics"."app_user" AS
- SELECT "id",
-    "created_at",
-    "email_confirmed_at",
-    "last_sign_in_at"
-   FROM "auth"."users";
+ SELECT "users"."id",
+    "users"."created_at",
+    "users"."email_confirmed_at",
+    "users"."last_sign_in_at",
+    NULL::timestamp with time zone AS "purged_at"
+   FROM "auth"."users"
+UNION ALL
+ SELECT "purged_user"."id",
+    "purged_user"."created_at",
+    "purged_user"."email_confirmed_at",
+    "purged_user"."last_sign_in_at",
+    "purged_user"."purged_at"
+   FROM "metrics"."purged_user";
 
 
 ALTER VIEW "metrics"."app_user" OWNER TO "postgres";
@@ -53,7 +153,89 @@ ALTER VIEW "metrics"."app_user" OWNER TO "postgres";
 -- Name: VIEW "app_user"; Type: COMMENT; Schema: metrics; Owner: postgres
 --
 
-COMMENT ON VIEW "metrics"."app_user" IS 'One row per auth.users row. A row exists as soon as someone requests a sign-in code, so count email_confirmed_at, not created_at, for users who actually signed in.';
+COMMENT ON VIEW "metrics"."app_user" IS 'One row per auth.users row, including deleted accounts. A row exists as soon as someone requests a sign-in code, so count email_confirmed_at, not created_at, for users who actually signed in. purged_at is the account''s deletion, null while the row exists.';
+
+
+--
+-- Name: purged_attempt; Type: TABLE; Schema: metrics; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "metrics"."purged_attempt" (
+    "id" "uuid" NOT NULL,
+    "report_id" "uuid" NOT NULL,
+    "attempt_number" smallint NOT NULL,
+    "status" "public"."analysis_attempt_status" NOT NULL,
+    "failure_reason" "public"."analysis_failure_reason",
+    "created_at" timestamp with time zone NOT NULL,
+    "claimed_at" timestamp with time zone,
+    "finished_at" timestamp with time zone,
+    "worker_git_sha" "text",
+    "notification_attempts" integer NOT NULL,
+    "notification_email_sent_at" timestamp with time zone,
+    "has_requester" boolean NOT NULL,
+    "purged_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    CONSTRAINT "purged_attempt_worker_git_sha_format" CHECK (("worker_git_sha" ~ '^[0-9a-f]{40}$'::"text"))
+);
+
+
+ALTER TABLE "metrics"."purged_attempt" OWNER TO "postgres";
+
+--
+-- Name: TABLE "purged_attempt"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON TABLE "metrics"."purged_attempt" IS 'What metrics.attempt showed of each analysis attempt when it was hard-deleted, less what the view derives. Its organization is its report''s, in metrics.report.';
+
+
+--
+-- Name: purged_report; Type: TABLE; Schema: metrics; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "metrics"."purged_report" (
+    "id" "uuid" NOT NULL,
+    "organization_id" "uuid" NOT NULL,
+    "created_at" timestamp with time zone NOT NULL,
+    "deleted_at" timestamp with time zone,
+    "purged_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+
+ALTER TABLE "metrics"."purged_report" OWNER TO "postgres";
+
+--
+-- Name: TABLE "purged_report"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON TABLE "metrics"."purged_report" IS 'What metrics.report showed of each report when it was hard-deleted, which happens only when its organization is.';
+
+
+--
+-- Name: report; Type: VIEW; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "metrics"."report" AS
+ SELECT "report"."id",
+    "report"."organization_id",
+    "report"."created_at",
+    "report"."deleted_at",
+    NULL::timestamp with time zone AS "purged_at"
+   FROM "public"."report"
+UNION ALL
+ SELECT "purged_report"."id",
+    "purged_report"."organization_id",
+    "purged_report"."created_at",
+    "purged_report"."deleted_at",
+    "purged_report"."purged_at"
+   FROM "metrics"."purged_report";
+
+
+ALTER VIEW "metrics"."report" OWNER TO "postgres";
+
+--
+-- Name: VIEW "report"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON VIEW "metrics"."report" IS 'One row per report, which is one accepted upload, including those hard-deleted with their organization. deleted_at is the customer''s soft delete; the report still counts as created. purged_at is the hard delete, null while the row exists.';
 
 
 --
@@ -61,6 +243,37 @@ COMMENT ON VIEW "metrics"."app_user" IS 'One row per auth.users row. A row exist
 --
 
 CREATE OR REPLACE VIEW "metrics"."attempt" AS
+ WITH "a" AS (
+         SELECT "analysis_attempt"."id",
+            "analysis_attempt"."report_id",
+            "analysis_attempt"."attempt_number",
+            "analysis_attempt"."status",
+            "analysis_attempt"."failure_reason",
+            "analysis_attempt"."created_at",
+            "analysis_attempt"."claimed_at",
+            "analysis_attempt"."finished_at",
+            "analysis_attempt"."worker_git_sha",
+            "analysis_attempt"."notification_attempts",
+            "analysis_attempt"."notification_email_sent_at",
+            ("analysis_attempt"."requested_by_user_id" IS NOT NULL) AS "has_requester",
+            NULL::timestamp with time zone AS "purged_at"
+           FROM "public"."analysis_attempt"
+        UNION ALL
+         SELECT "purged_attempt"."id",
+            "purged_attempt"."report_id",
+            "purged_attempt"."attempt_number",
+            "purged_attempt"."status",
+            "purged_attempt"."failure_reason",
+            "purged_attempt"."created_at",
+            "purged_attempt"."claimed_at",
+            "purged_attempt"."finished_at",
+            "purged_attempt"."worker_git_sha",
+            "purged_attempt"."notification_attempts",
+            "purged_attempt"."notification_email_sent_at",
+            "purged_attempt"."has_requester",
+            "purged_attempt"."purged_at"
+           FROM "metrics"."purged_attempt"
+        )
  SELECT "a"."id",
     "a"."report_id",
     "r"."organization_id",
@@ -76,9 +289,10 @@ CREATE OR REPLACE VIEW "metrics"."attempt" AS
     "a"."worker_git_sha",
     "a"."notification_attempts",
     "a"."notification_email_sent_at",
-    ("a"."requested_by_user_id" IS NOT NULL) AS "has_requester"
-   FROM ("public"."analysis_attempt" "a"
-     JOIN "public"."report" "r" ON (("r"."id" = "a"."report_id")));
+    "a"."has_requester",
+    "a"."purged_at"
+   FROM ("a"
+     JOIN "metrics"."report" "r" ON (("r"."id" = "a"."report_id")));
 
 
 ALTER VIEW "metrics"."attempt" OWNER TO "postgres";
@@ -87,28 +301,31 @@ ALTER VIEW "metrics"."attempt" OWNER TO "postgres";
 -- Name: VIEW "attempt"; Type: COMMENT; Schema: metrics; Owner: postgres
 --
 
-COMMENT ON VIEW "metrics"."attempt" IS 'One row per analysis attempt. queue_seconds is created to claimed, run_seconds claimed to finished, total_seconds created to finished; each is null until both ends exist. has_requester is false once the user who asked for it has been deleted.';
+COMMENT ON VIEW "metrics"."attempt" IS 'One row per analysis attempt, including those hard-deleted with their report. queue_seconds is created to claimed, run_seconds claimed to finished, total_seconds created to finished; each is null until both ends exist. has_requester is false once the user who asked for it has been deleted. purged_at is the hard delete, null while the row exists.';
 
 
 --
--- Name: report; Type: VIEW; Schema: metrics; Owner: postgres
+-- Name: purged_attempt purged_attempt_pkey; Type: CONSTRAINT; Schema: metrics; Owner: postgres
 --
 
-CREATE OR REPLACE VIEW "metrics"."report" AS
- SELECT "id",
-    "organization_id",
-    "created_at",
-    "deleted_at"
-   FROM "public"."report";
+ALTER TABLE ONLY "metrics"."purged_attempt"
+    ADD CONSTRAINT "purged_attempt_pkey" PRIMARY KEY ("id");
 
-
-ALTER VIEW "metrics"."report" OWNER TO "postgres";
 
 --
--- Name: VIEW "report"; Type: COMMENT; Schema: metrics; Owner: postgres
+-- Name: purged_report purged_report_pkey; Type: CONSTRAINT; Schema: metrics; Owner: postgres
 --
 
-COMMENT ON VIEW "metrics"."report" IS 'One row per report, which is one accepted upload. deleted_at is the customer''s soft delete; the report still counts as created.';
+ALTER TABLE ONLY "metrics"."purged_report"
+    ADD CONSTRAINT "purged_report_pkey" PRIMARY KEY ("id");
+
+
+--
+-- Name: purged_user purged_user_pkey; Type: CONSTRAINT; Schema: metrics; Owner: postgres
+--
+
+ALTER TABLE ONLY "metrics"."purged_user"
+    ADD CONSTRAINT "purged_user_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -119,6 +336,13 @@ GRANT USAGE ON SCHEMA "metrics" TO "metrics_reader";
 
 
 --
+-- Name: TABLE "purged_user"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."purged_user" TO "metrics_reader";
+
+
+--
 -- Name: TABLE "app_user"; Type: ACL; Schema: metrics; Owner: postgres
 --
 
@@ -126,10 +350,17 @@ GRANT SELECT ON TABLE "metrics"."app_user" TO "metrics_reader";
 
 
 --
--- Name: TABLE "attempt"; Type: ACL; Schema: metrics; Owner: postgres
+-- Name: TABLE "purged_attempt"; Type: ACL; Schema: metrics; Owner: postgres
 --
 
-GRANT SELECT ON TABLE "metrics"."attempt" TO "metrics_reader";
+GRANT SELECT ON TABLE "metrics"."purged_attempt" TO "metrics_reader";
+
+
+--
+-- Name: TABLE "purged_report"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."purged_report" TO "metrics_reader";
 
 
 --
@@ -137,6 +368,13 @@ GRANT SELECT ON TABLE "metrics"."attempt" TO "metrics_reader";
 --
 
 GRANT SELECT ON TABLE "metrics"."report" TO "metrics_reader";
+
+
+--
+-- Name: TABLE "attempt"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."attempt" TO "metrics_reader";
 
 
 --

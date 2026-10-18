@@ -242,6 +242,8 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
   cost, product counts, stage times, which quality checks fired, and its report's headline
   figures: kilograms bought, CO2e and plant share. It holds no names, product text, file names or
   user IDs.
+- **Metric tombstones outlive a deleted organization or account**, so past metrics do not change.
+  They hold only ids, timestamps, enums and numbers, including a deleted user's raw ID.
 
 ### Account recovery
 

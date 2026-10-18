@@ -593,6 +593,43 @@ SET default_tablespace = '';
 SET default_table_access_method = "heap";
 
 --
+-- Name: report; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."report" (
+    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
+    "organization_id" "uuid" NOT NULL,
+    "created_by_user_id" "uuid",
+    "name" "text" NOT NULL,
+    "site_name" "text",
+    "counts_basis" "public"."counts_basis",
+    "monthly_counts" "jsonb",
+    "unit_system" "public"."unit_system" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "deleted_at" timestamp with time zone,
+    CONSTRAINT "report_counts_all_or_none" CHECK ((("counts_basis" IS NULL) = ("monthly_counts" IS NULL))),
+    CONSTRAINT "report_deleted_at_after_created_at" CHECK ((("deleted_at" IS NULL) OR ("deleted_at" >= "created_at"))),
+    CONSTRAINT "report_monthly_counts_is_object" CHECK ((("jsonb_typeof"("monthly_counts") = 'object'::"text") AND ("monthly_counts" <> '{}'::"jsonb")))
+);
+
+
+ALTER TABLE "public"."report" OWNER TO "postgres";
+
+--
+-- Name: COLUMN "report"."counts_basis"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."report"."counts_basis" IS 'Whether monthly_counts counts diners or meals. NULL when the uploader chose not to give counts.';
+
+
+--
+-- Name: COLUMN "report"."monthly_counts"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."report"."monthly_counts" IS 'Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis. NULL when the uploader chose not to give counts.';
+
+
+--
 -- Name: analysis_attempt; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -705,43 +742,6 @@ COMMENT ON COLUMN "public"."analysis_attempt"."required_contract_version" IS 'Th
 --
 
 COMMENT ON COLUMN "public"."analysis_attempt"."worker_git_sha" IS 'The commit the claiming worker was built from, set at claim. Null for a build that does not know its own, such as a local one.';
-
-
---
--- Name: report; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."report" (
-    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
-    "organization_id" "uuid" NOT NULL,
-    "created_by_user_id" "uuid",
-    "name" "text" NOT NULL,
-    "site_name" "text",
-    "counts_basis" "public"."counts_basis",
-    "monthly_counts" "jsonb",
-    "unit_system" "public"."unit_system" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "deleted_at" timestamp with time zone,
-    CONSTRAINT "report_counts_all_or_none" CHECK ((("counts_basis" IS NULL) = ("monthly_counts" IS NULL))),
-    CONSTRAINT "report_deleted_at_after_created_at" CHECK ((("deleted_at" IS NULL) OR ("deleted_at" >= "created_at"))),
-    CONSTRAINT "report_monthly_counts_is_object" CHECK ((("jsonb_typeof"("monthly_counts") = 'object'::"text") AND ("monthly_counts" <> '{}'::"jsonb")))
-);
-
-
-ALTER TABLE "public"."report" OWNER TO "postgres";
-
---
--- Name: COLUMN "report"."counts_basis"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN "public"."report"."counts_basis" IS 'Whether monthly_counts counts diners or meals. NULL when the uploader chose not to give counts.';
-
-
---
--- Name: COLUMN "report"."monthly_counts"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN "public"."report"."monthly_counts" IS 'Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis. NULL when the uploader chose not to give counts.';
 
 
 --
@@ -1782,6 +1782,20 @@ CREATE OR REPLACE TRIGGER "entree_classification_set_verified_at" BEFORE INSERT 
 
 
 --
+-- Name: analysis_attempt metrics_tombstone; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "metrics_tombstone" AFTER DELETE ON "public"."analysis_attempt" FOR EACH ROW EXECUTE FUNCTION "metrics"."tombstone_attempt"();
+
+
+--
+-- Name: report metrics_tombstone; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "metrics_tombstone" AFTER DELETE ON "public"."report" FOR EACH ROW EXECUTE FUNCTION "metrics"."tombstone_report"();
+
+
+--
 -- Name: organization organization_has_a_member; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -1998,21 +2012,21 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 --
--- Name: TABLE "analysis_attempt"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "anon";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "authenticated";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "service_role";
-
-
---
 -- Name: TABLE "report"; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "service_role";
+
+
+--
+-- Name: TABLE "analysis_attempt"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "service_role";
 
 
 --

@@ -7,14 +7,16 @@
 import { sql } from 'kysely';
 import { DATABASE, shutdown } from '../src/env.ts';
 
-/** Truncate every table in `public` and `auth`, except each schema's own migration
- * bookkeeping. */
+/** Truncate every table in `public`, `auth` and `metrics`, except each schema's own migration
+ * bookkeeping. `metrics` holds the tombstones of rows deleted earlier, which would otherwise outlive
+ * the truncate as metrics for rows that no longer exist anywhere. */
 async function truncateAll(): Promise<void> {
   const { rows } = await sql<{ schemaName: string; tableName: string }>`
     SELECT schemaname AS "schemaName", tablename AS "tableName"
     FROM pg_tables
     WHERE (schemaname = 'public' AND tablename NOT IN ('kysely_migration', 'kysely_migration_lock'))
        OR (schemaname = 'auth' AND tablename NOT IN ('schema_migrations'))
+       OR schemaname = 'metrics'
   `.execute(DATABASE);
 
   if (rows.length === 0) {
