@@ -52,41 +52,50 @@ describe('InviteDialog', () => {
     await expect.poll(() => toast.success.mock.calls).toEqual([['Invited a@example.test']]);
   });
 
+  // Which message each outcome shows is `InviteForm`'s to test; what the dialog adds is staying
+  // open, and not offering "Cancel" once the invite may already exist.
   test.each([
-    {
-      outcome: 'already a member',
-      response: jsonResponse({ message: 'Already a member', code: 'already-member' }, 409),
-      message: 'That person is already a member.',
-    },
-    {
-      outcome: 'rate-limited',
-      response: jsonResponse({ message: 'Too many invites', code: 'rate-limited' }, 429),
-      message: "You've sent too many invites. Try again in an hour.",
-    },
     {
       outcome: 'saved but not emailed',
       response: jsonResponse({ inviteId: 'invite-1', emailSent: false }, 201),
-      message: "They're invited, but we couldn't email them. Send the invite again to retry.",
     },
-    {
-      outcome: 'unknown',
-      response: jsonResponse({ message: 'Nope' }, 500),
-      message: "We couldn't tell whether that invite was sent.",
+    { outcome: 'unknown', response: jsonResponse({ message: 'Nope' }, 500) },
+  ])(
+    'stays open after an invite that may be saved ($outcome), offering Close',
+    async ({ response }) => {
+      stubFetch(response);
+      const screen = await opened();
+
+      await submit(screen);
+
+      const dialog = screen.getByRole('dialog', { name: TITLE });
+      await expect.element(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
+      await expect.element(dialog.getByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+
+      await dialog.getByRole('button', { name: 'Close' }).click();
+      await expect.element(screen.getByRole('dialog')).not.toBeInTheDocument();
     },
-  ])('stays open to show the $outcome message', async ({ response, message }) => {
-    stubFetch(response);
+  );
+
+  test('keeps offering Close when a resend is then refused', async () => {
+    stubFetch(jsonResponse({ inviteId: 'invite-1', emailSent: false }, 201));
     const screen = await opened();
-
     await submit(screen);
+    await expect.element(screen.getByRole('button', { name: 'Close' })).toBeVisible();
 
-    const dialog = screen.getByRole('dialog', { name: TITLE });
-    await expect.element(dialog.getByText(message, { exact: false })).toBeVisible();
-    await expect.element(dialog).toBeVisible();
+    stubFetch(jsonResponse({ message: 'Too many invites', code: 'rate-limited' }, 429));
+    await screen.getByRole('button', { name: 'Send invitation' }).click();
+
+    await expect
+      .element(screen.getByText("You've sent too many invites. Try again in an hour."))
+      .toBeVisible();
+    await expect.element(screen.getByRole('button', { name: 'Close' })).toBeVisible();
   });
 
-  test('reopens with an empty form after closing', async () => {
+  test('stays open on a refusal, still offering Cancel, and reopens with an empty form', async () => {
     stubFetch(jsonResponse({ message: 'Already a member', code: 'already-member' }, 409));
     const screen = await opened();
+    await screen.getByRole('radio', { name: 'Admin' }).click();
     await submit(screen);
     await expect.element(screen.getByText('That person is already a member.')).toBeVisible();
 
@@ -95,6 +104,7 @@ describe('InviteDialog', () => {
     await screen.getByRole('button', { name: 'Invite someone' }).click();
 
     await expect.element(screen.getByLabelText('Email address')).toHaveValue('');
+    await expect.element(screen.getByRole('radio', { name: 'Member' })).toBeChecked();
     await expect
       .element(screen.getByText('That person is already a member.'))
       .not.toBeInTheDocument();

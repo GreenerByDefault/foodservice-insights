@@ -18,8 +18,9 @@ interface Props {
   onInvited: () => void;
   /** True while a request is in flight, for a container that must not close mid-request. */
   submitting?: boolean;
-  /** Rendered before "Send invitation", e.g. a dialog's Cancel. */
-  cancel?: Snippet;
+  /** Rendered before "Send invitation", e.g. a dialog's dismiss button. Its label is "Close" once
+   * an invite may have been saved, since "Cancel" would read as undoing it. */
+  cancel?: Snippet<[label: 'Cancel' | 'Close']>;
 }
 
 let { organizationSlug, onInvited, submitting = $bindable(false), cancel }: Props = $props();
@@ -35,6 +36,8 @@ type FormState =
   | { status: 'outcome-unknown' };
 
 let formState: FormState = $state({ status: 'idle' });
+// Stays true through a resend: the earlier invite exists whatever the next attempt does.
+let maybeSaved = $state(false);
 let emailInputElement: HTMLInputElement | null = $state(null);
 const id = $props.id();
 const emailErrorId = `${id}-email-error`;
@@ -69,12 +72,14 @@ async function handleSubmit(event: SubmitEvent) {
   }
   if (outcome.kind === 'unknown') {
     formState = { status: 'outcome-unknown' };
+    maybeSaved = true;
     await invalidate(MEMBERS_DEPENDENCY);
     return;
   }
   // The address stays in the field, so pressing "Send invitation" again resends.
   if (!outcome.emailSent) {
     formState = { status: 'email-failed' };
+    maybeSaved = true;
     await invalidate(MEMBERS_DEPENDENCY);
     return;
   }
@@ -150,7 +155,7 @@ async function handleSubmit(event: SubmitEvent) {
   {/if}
 
   <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-    {@render cancel?.()}
+    {@render cancel?.(maybeSaved ? 'Close' : 'Cancel')}
     <Button type="submit" disabled={submitting} aria-busy={submitting}>
       {submitting ? 'Sending…' : 'Send invitation'}
     </Button>

@@ -153,9 +153,22 @@ describe('InviteForm', () => {
     await expect
       .element(screen.getByLabelText('Email address'))
       .toHaveValue('invitee@example.test');
-    await expect.poll(() => invalidate.mock.calls.length).toBe(1);
-    expect(invalidate).toHaveBeenCalledWith('app:members');
+    await expect.poll(() => invalidate.mock.calls).toEqual([['app:members']]);
     expect(onInvited).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  test('after an invite saved but not emailed, sending again clears the warning and succeeds', async () => {
+    stubFetch(jsonResponse({ inviteId: 'invite-1', emailSent: false }, 201));
+    const screen = await filledOut();
+    await screen.getByRole('button', { name: 'Send invitation' }).click();
+    await expect.element(screen.getByRole('status')).toBeVisible();
+
+    stubFetch(jsonResponse({ inviteId: 'invite-2', emailSent: true }, 201));
+    await screen.getByRole('button', { name: 'Send invitation' }).click();
+
+    await expect.poll(() => toast.success.mock.calls).toEqual([['Invited invitee@example.test']]);
+    await expect.element(screen.getByRole('status')).not.toBeInTheDocument();
+    expect(onInvited).toHaveBeenCalledOnce();
   });
 });
