@@ -313,8 +313,8 @@ same cluster. As `supabase_admin` (password `postgres`), `CREATE DATABASE wt_<na
 template0 OWNER postgres`, restore [`packages/db/auth-schema.sql`](packages/db/auth-schema.sql)
 into it, and run the tests with
 `DB_CONNECTION_STRING=postgresql://postgres:postgres@127.0.0.1:65322/wt_<name>`, which beats
-`.env.test`. Only the `sweepStaleGoTrueUsers` test fails, since it always targets `postgres`. Drop
-the database when the migration lands.
+`.env.test`. Only the `sweepStaleGoTrueUsers` test fails, since it always targets `postgres`.
+Run `DROP DATABASE wt_<name> WITH (FORCE)` once you are done with it.
 
 #### Reset a database
 

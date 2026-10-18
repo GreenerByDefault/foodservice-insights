@@ -435,6 +435,7 @@ export async function insertReportWithAttempt(
   overrides: {
     organizationId?: Organization['id'];
     createdByUserId?: AppUser['id'] | null;
+    requestedByUserId?: AppUser['id'] | null;
     status?: AnalysisAttemptStatus;
   } = {},
 ): Promise<{ report: Report; attempt: AnalysisAttempt }> {
@@ -445,6 +446,7 @@ export async function insertReportWithAttempt(
   const attempt = await insertAnalysisAttempt(database, {
     reportId: report.id,
     status: overrides.status ?? 'pending',
+    requestedByUserId: overrides.requestedByUserId,
   });
   return { report, attempt };
 }

@@ -22,7 +22,12 @@ import {
   withConcurrentTransactions,
 } from '../src/testing/concurrency.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
-import { insertAnalysisAttempt, insertInputFile, insertReport } from '../src/testing/fixtures.ts';
+import {
+  insertAnalysisAttempt,
+  insertAppUser,
+  insertInputFile,
+  insertReport,
+} from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 import { MAX_ANALYSIS_ATTEMPTS } from '../src/types.ts';
 
@@ -710,6 +715,44 @@ describe('a terminal attempt is final', () => {
       await transaction
         .updateTable('analysisAttempt')
         .set({ notificationAttempts: 2, failureDetail: 'rewritten after the fact' })
+        .where('id', '=', attempt.id)
+        .execute();
+    });
+
+    await expectConstraintViolation(update, 'analysis_attempt_terminal_is_final');
+  });
+
+  test.each(['succeeded', 'failed', 'canceled'] as const)(
+    'deleting the requester of a %s attempt nulls the requester',
+    async (status) => {
+      const requester = await withRollback(DATABASE, async (transaction) => {
+        const user = await insertAppUser(transaction);
+        const attempt = await insertAnalysisAttempt(transaction, {
+          status,
+          requestedByUserId: user.id,
+        });
+        await transaction.deleteFrom('appUser').where('id', '=', user.id).execute();
+        return await transaction
+          .selectFrom('analysisAttempt')
+          .select('requestedByUserId')
+          .where('id', '=', attempt.id)
+          .executeTakeFirstOrThrow();
+      });
+
+      expect(requester).toEqual({ requestedByUserId: null });
+    },
+  );
+
+  test('rejects reassigning the requester of a finished attempt', async () => {
+    const update = withRollback(DATABASE, async (transaction) => {
+      const [first, second] = [await insertAppUser(transaction), await insertAppUser(transaction)];
+      const attempt = await insertAnalysisAttempt(transaction, {
+        status: 'succeeded',
+        requestedByUserId: first.id,
+      });
+      await transaction
+        .updateTable('analysisAttempt')
+        .set({ requestedByUserId: second.id })
         .where('id', '=', attempt.id)
         .execute();
     });
