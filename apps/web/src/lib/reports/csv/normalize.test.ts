@@ -1,3 +1,4 @@
+import type { UnitSystem } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { MAX_FREE_TEXT_LENGTH } from '../limits.ts';
 import type { RejectedUploadRecord } from '../rejection.ts';
@@ -14,10 +15,14 @@ function normalizeText(text: string, options: NormalizeOptions = {}): CsvNormali
 function accepted(
   text: string,
   options?: NormalizeOptions,
-): { text: string; months: readonly string[] } {
+): { text: string; months: readonly string[]; weightUnit?: UnitSystem } {
   const outcome = normalizeText(text, options);
   if (!outcome.ok) throw new Error(`expected acceptance, got: ${outcome.rejection.summary}`);
-  return { text: new TextDecoder().decode(outcome.normalized), months: outcome.months };
+  return {
+    text: new TextDecoder().decode(outcome.normalized),
+    months: outcome.months,
+    ...(outcome.weightUnit && { weightUnit: outcome.weightUnit }),
+  };
 }
 
 function rejected(text: string, options?: NormalizeOptions): RejectedUploadRecord {
@@ -58,6 +63,20 @@ describe('normalizeCsv', () => {
         '',
       ].join('\n'),
       months: ['2026-01', '2026-03', '2026-04'],
+    });
+  });
+
+  // The header row of GBD's own sample distributor export, `python/lab/test_data/raw_data/`.
+  test('takes the weight unit from the header, writing a plain `weight` header', () => {
+    const text = [
+      'Date,Product Description,Total Amount ($),Weight (lbs),Sales,,',
+      '2023-10-02,"CEREAL, CHEERIO WHL GRAIN SS",106.45,21.87,,,',
+    ].join('\n');
+
+    expect(accepted(text)).toEqual({
+      text: 'product,date,weight\n"CEREAL, CHEERIO WHL GRAIN SS",2023-10-02,21.87\n',
+      months: ['2023-10'],
+      weightUnit: 'lb',
     });
   });
 
@@ -161,7 +180,7 @@ describe('normalizeCsv', () => {
     test('every fault in a row, rather than the first', () => {
       expect(ruleNames(rejected(`${HEADER}\nbeef,never,5 oz`))).toEqual([
         'The weight has a unit in it',
-        'The date is not a date we recognise',
+        'The date is not a date we recognize',
       ]);
     });
 

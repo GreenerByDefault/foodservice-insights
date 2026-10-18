@@ -52,6 +52,19 @@ describe('readLayout', () => {
     });
   });
 
+  test('carries the weight unit the header names', () => {
+    expect(readLayout('product,date,Weight (kg)\nbeef,2026-01-05,12\n')).toEqual({
+      ok: true,
+      layout: {
+        delimiter: ',',
+        columns: { product: 0, date: 1, weight: 2 },
+        width: 3,
+        headerLine: 1,
+        weightUnit: 'kg',
+      },
+    });
+  });
+
   describe('locating the header row', () => {
     test("skips junk rows above the header — a title, a teammate's note, blank lines", () => {
       const text = ['Procurement export', '', 'product,date,weight', 'beef,2026-01-05,1'].join(
@@ -96,6 +109,27 @@ describe('readLayout', () => {
           fields: ['product', 'item', 'date', 'weight'],
           fault: { kind: 'ambiguous', column: 'product', headers: ['product', 'item'] },
         },
+      });
+    });
+    describe('naming all three columns, but not usably', () => {
+      const OUNCES = {
+        kind: 'bad-header',
+        fields: ['product', 'date', 'Weight (oz)'],
+        fault: { kind: 'unsupported-unit', header: 'Weight (oz)', unit: 'ounces' },
+      };
+
+      test('reports that row rather than the title above it', () => {
+        const text = ['Procurement export', 'product,date,Weight (oz)', 'beef,2026-01-05,1'].join(
+          '\n',
+        );
+
+        expect(readLayout(text)).toEqual({ ok: false, fault: OUNCES });
+      });
+
+      test('reports that row on whichever delimiter splits it', () => {
+        const text = 'product;date;Weight (oz)\nbeef;2026-01-05;1\n';
+
+        expect(readLayout(text)).toEqual({ ok: false, fault: OUNCES });
       });
     });
   });

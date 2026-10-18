@@ -56,8 +56,10 @@ an ambiguity on the user's behalf: an ambiguous date or an unrecognized header g
 them instead of guessed at.
 
 What comes out is `product,date,weight`: comma-delimited, UTF-8, dates `YYYY-MM-DD`, weights plain
-numbers, and nothing else. Ambiguous dates, unit words, semicolon delimiters, Windows-1252 are rejected. Weights stay in the unit the form declared, which
-the run manifest carries; converting them is the analysis's job.
+numbers, and nothing else. Ambiguous dates and unit words inside a weight cell are rejected. A weight
+header may name its unit, as `Weight (lbs)` does, and the server rejects a form that declares the
+other one. Weights stay in the unit the form declared, which the run manifest carries; converting
+them is the analysis's job.
 
 A workbook reaches this folder as CSV: the sibling `excel/` converts one in the browser into
 exactly the bytes a user could have saved from that sheet themselves, so everything here applies

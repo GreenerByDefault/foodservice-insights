@@ -1,4 +1,10 @@
-export type { ColumnIndexes, ColumnsRead, HeaderFault, RequiredColumn } from './columns.ts';
+export type {
+  ColumnIndexes,
+  ColumnsRead,
+  HeaderFault,
+  RequiredColumn,
+  UnsupportedUnit,
+} from './columns.ts';
 export { normalizeHeaderName, REQUIRED_COLUMNS, resolveHeader } from './columns.ts';
 export type { Decoded, DecodeFault } from './decode.ts';
 export { decodeCsv } from './decode.ts';

@@ -96,6 +96,49 @@ const LAYOUT_CASES: [string, LayoutFault, RejectedUploadRecord][] = [
     },
   ],
   [
+    'two header rows, split the same way',
+    {
+      kind: 'ambiguous',
+      candidates: [
+        { delimiter: ',', line: 1 },
+        { delimiter: ',', line: 6 },
+      ],
+    },
+    {
+      reason: 'bad_columns',
+      summary:
+        'Lines 1 and 6 each look like a header row. Keep the one that names your columns, delete the rest, and upload it again.',
+      rejectionDetail: '"," at line 1 and "," at line 6',
+    },
+  ],
+  [
+    'a weight column in a unit we cannot use',
+    {
+      kind: 'bad-header',
+      fields: ['product', 'date', 'Weight (oz)'],
+      fault: { kind: 'unsupported-unit', header: 'Weight (oz)', unit: 'ounces' },
+    },
+    {
+      reason: 'bad_columns',
+      summary:
+        'Your weight column "Weight (oz)" is in ounces. Convert the weights to lb or kg, and name the column "Weight".',
+      rejectionDetail: 'unsupported weight unit: ounces (Weight (oz))',
+    },
+  ],
+  [
+    'a weight column whose name is too long to repeat in full',
+    {
+      kind: 'bad-header',
+      fields: ['product', 'date', `Weight${' '.repeat(40)}(oz)`],
+      fault: { kind: 'unsupported-unit', header: `Weight${' '.repeat(40)}(oz)`, unit: 'ounces' },
+    },
+    {
+      reason: 'bad_columns',
+      summary: `Your weight column "Weight${' '.repeat(34)}…" is in ounces. Convert the weights to lb or kg, and name the column "Weight".`,
+      rejectionDetail: `unsupported weight unit: ounces (Weight${' '.repeat(40)}(oz))`,
+    },
+  ],
+  [
     'an empty layout',
     { kind: 'empty' },
     { reason: 'empty', summary: 'That file has no rows in it.' },

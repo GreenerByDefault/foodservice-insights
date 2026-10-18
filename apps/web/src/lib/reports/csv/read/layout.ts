@@ -1,5 +1,6 @@
 /** Choosing the delimiter and finding the header, before anything about individual rows matters. */
 
+import type { UnitSystem } from '@gbd/db';
 import { MAX_COLUMNS, MAX_HEADER_SEARCH_LINES } from '../../limits.ts';
 import { type ColumnIndexes, type HeaderFault, resolveHeader } from './columns.ts';
 import { type CsvDelimiter, CsvParseError, type CsvRecord, parseCsv } from './parse.ts';
@@ -19,6 +20,7 @@ export type Layout = {
    * records starts after this line rather than after line 1.
    */
   headerLine: number;
+  weightUnit?: UnitSystem;
 };
 
 /** Where an ambiguous row was found, for the error message — not enough to open the file with. */
@@ -51,6 +53,7 @@ export function readLayout(text: string): LayoutDecision {
         columns: candidate.columns,
         width: candidate.record.fields.length,
         headerLine: candidate.record.line,
+        ...(candidate.weightUnit && { weightUnit: candidate.weightUnit }),
       },
     };
   }
@@ -75,7 +78,12 @@ type Probe = {
 };
 
 /** A row within the search window that names all three required columns, under one delimiter. */
-type Candidate = { delimiter: CsvDelimiter; record: CsvRecord; columns: ColumnIndexes };
+type Candidate = {
+  delimiter: CsvDelimiter;
+  record: CsvRecord;
+  columns: ColumnIndexes;
+  weightUnit?: UnitSystem;
+};
 
 function probe(text: string, delimiter: CsvDelimiter): Probe {
   try {
@@ -89,13 +97,19 @@ function probe(text: string, delimiter: CsvDelimiter): Probe {
 function headerCandidates(probe: Probe): Candidate[] {
   return probe.records.flatMap((record) => {
     const resolution = resolveHeader(record.fields);
-    return resolution.ok
-      ? [{ delimiter: probe.delimiter, record, columns: resolution.columns }]
-      : [];
+    if (!resolution.ok) return [];
+    const { columns, weightUnit } = resolution;
+    return [{ delimiter: probe.delimiter, record, columns, ...(weightUnit && { weightUnit }) }];
   });
 }
 
 function noHeaderFault(probes: readonly Probe[]): LayoutFault {
+  // A row that names all three columns, but one of them twice or the weight in a unit we cannot
+  // use, is the header the user meant. Line 1 may be a title above it, or split on the wrong
+  // delimiter, and describing that would call every column missing.
+  const [misnamed] = probes.flatMap(({ records }) => records.flatMap(misnamedHeader));
+  if (misnamed) return misnamed;
+
   // Fall back to describing the comma reading, since that is the format we ask for.
   const [comma] = probes;
   if (comma?.error) return { kind: 'parse-error', error: comma.error };
@@ -109,6 +123,12 @@ function noHeaderFault(probes: readonly Probe[]): LayoutFault {
     fields: first.fields,
     fault: resolution.ok ? undefined : resolution.fault,
   };
+}
+
+function misnamedHeader(record: CsvRecord): LayoutFault[] {
+  const resolution = resolveHeader(record.fields);
+  if (resolution.ok || resolution.fault.kind === 'missing') return [];
+  return [{ kind: 'bad-header', fields: record.fields, fault: resolution.fault }];
 }
 
 function takeRecords(text: string, delimiter: CsvDelimiter, limit: number): CsvRecord[] {

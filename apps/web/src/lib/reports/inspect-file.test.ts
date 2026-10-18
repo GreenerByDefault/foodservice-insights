@@ -49,6 +49,17 @@ describe('inspectFile', () => {
     });
   });
 
+  test('yields the weight unit a CSV header names', async () => {
+    const file = aFile('product,date,Weight (kg)\nbeef,2026-01-05,1\n');
+
+    await expect(inspectFile(file)).resolves.toEqual({
+      ok: true,
+      months: ['2026-01'],
+      weightUnit: 'kg',
+      upload: { csvFile: file },
+    });
+  });
+
   test('rejects an oversized file without reading it', async () => {
     const text = 'x'.repeat(MAX_UPLOAD_FIELD_BYTES + 1);
 

@@ -11,19 +11,34 @@ pages name it ("Organization settings"), while their tabs keep the short label (
 empty list gets a card with one sentence and the next action, as in `invites/invite-offers.svelte`
 and `reports-list/reports-list.svelte`.
 
-Two findings from exploring the code shaped the upload form:
+The upload form rests on two findings from exploring the code:
 - **"Leave the weight off" is taken to mean leave the *unit* off the weight.** The weight column is
   required at every layer.
-- **GBD's own sample distributor export is rejected today.**
-  `python/lab/test_data/raw_data/sample_raw_purchasing.csv` names its columns `Weight (lbs)` and
-  `Product Description`, and neither is recognized. As decided, the reader will accept both and take
-  the weight unit from the header.
+- **A weight header may now name its unit.** The CSV reader accepts `Weight (lbs)`, `weight_kg`,
+  `Weight (in pounds)` and the like, plus `Product description` and `Item description` as product
+  aliases. `FileInspection.weightUnit` (from `lib/reports/inspect-file.ts`) carries the unit when
+  the header names one and is absent otherwise. A header in ounces, grams, tons or tonnes is
+  rejected by name rather than as a missing column, even below a title row.
 
-What's left is one PR, the upload form. It regenerates only its own screenshots.
+The server is already authoritative about the unit: `lib/reports/submission.ts` rejects a form
+whose Weight unit disagrees with the header, with `invalid_metadata` and *"Your file's weight
+column is in lb, but the form says kg. Choose lb and upload again."* Locking the radio below is so
+the user never sees that message, not what keeps weights in the right unit.
+
+GBD's sample distributor export, `python/lab/test_data/raw_data/sample_raw_purchasing.csv`, has a
+real header on line 6 (`Weight (lbs)`, `Product Description`), which now reads. Its line 1 is a
+second, machine-written header (`date,product,total_amount,weight_lbs,…`) that also reads, so the
+file as committed is rejected with *"Lines 1 and 6 each look like a header row…"*. Delete line 1 of
+a copy to try it in the app.
+
+What's left is one PR: rewrite the upload form on top of that, lock the radio to the file's unit,
+and regenerate only `new-report/*` screenshots.
 
 ---
 
 ## PR 1: Upload form, with clear instructions and friendlier file checks
+
+Builds on `FileInspection.weightUnit`.
 
 ### Form wording (`reports/new/upload-form.svelte`)
 Weight unit moves out of "Report details" and into a reorganized **"Purchasing data"** fieldset,
@@ -53,49 +68,17 @@ The other fieldsets:
 - "Diners or meals served" is unchanged. `.claude/plans/optional-diner-and-meal-counts.md` will
   change that fieldset.
 
-### Accept a unit in the weight header, and "Product description" (`lib/reports/csv/`)
-**`read/columns.ts`**
-- Weight headers:
-  - Recognize `weight` or `product weight` followed by a lb or kg unit, after
-    `normalizeHeaderName`:
-    - shapes: `Weight (lbs)`, `Weight lbs`, `weight_kg`, `Weight (in pounds)`
-    - unit tokens: lb, lbs, pound(s), kg, kgs, kilo(s), kilogram(s)
-  - `resolveHeader` returns the unit the header names, as `weightUnit?: UnitSystem`.
-- Add `product description` and `item description` as product aliases.
-  - Trade-off: a file with both a "Product" and a "Product description" column becomes ambiguous
-    and is rejected. That matches how "Item" plus "Description" is already handled.
-- Update the file's header comment. It argues for a tiny alias list. That still holds, because
-  these additions name the same thing and none of them is spend or a count.
-
-**Units we can't use.** A weight header naming any other unit (oz, ounces, g, grams, ton or tons)
-gets a new `HeaderFault`, in place of "missing". `describe/file.ts` turns it into:
-*"Your weight column "Weight (oz)" is in ounces. Convert the weights to lb or kg, and name the
-column "Weight"."*
-
-**Carry the unit through to the form**
-- From `read/layout.ts`, to `normalize.ts` (`CsvNormalization`), to `lib/reports/inspect-file.ts`
-  (`FileInspection`).
-- `excel/sheets.ts` already calls `resolveHeader`, so workbook sheet picking gets the new names for
-  free.
-
-**In the form**
+### Lock the unit to the file's header
 - When the file's header names a unit:
   - Weight unit is set to that unit.
   - The other radio is disabled, so a mismatch can't be entered.
   - The hint becomes *"Set by your file's "Weight (lbs)" column."*
 - Replacing the file resets all of this.
 
-**On the server.** `lib/reports/submission.ts` re-checks after `normalizeCsv`. It is authoritative,
-like every other check. A mismatch is rejected with `invalid_metadata`:
-*"Your file's weight column is in lb, but the form says kg. Choose lb and upload again."*
-
-The Python worker is unaffected, because `write.ts` always writes the header `product,date,weight`.
-
 ### Wording fixes in the same flow
 - `reports/new/monthly-counts.svelte`: "1 of 1 months still need a count" gets correct grammar.
   - Examples: *"1 of 1 month still needs a count"* and *"2 of 4 months still need a count"*.
   - The noun follows the total, and the verb follows how many are missing.
-- `lib/reports/csv/describe/rows.ts`: "recognise" becomes "recognize" in two rules.
 - `lib/reports/submission.ts`: the fallback "Check these fields: countsBasis, unitSystem." names
   fields by their form labels instead:
   - Report name
@@ -108,29 +91,16 @@ The Python worker is unaffected, because `write.ts` always writes the header `pr
 - `lib/reports/monthly-coverage.ts`: show months as "January 2026", not `2026-01`, using the
   existing `formatMonth` in `monthly-counts.ts`. The machine-readable `rejectionDetail` stays as it
   is.
-- `lib/reports/csv/README.md:59`: stop saying semicolons and Windows-1252 are rejected, because the
-  code accepts both. Mention unit-bearing weight headers.
 
 ### Tests
-- `read/columns.test.ts`:
-  - each unit header shape, for lb and kg
-  - an unsupported unit
-  - the product-description aliases
-  - the new ambiguity
-- `describe/file.test.ts`: the unsupported-unit message.
-- `normalize.test.ts` / `inspect-file.test.ts`: `weightUnit` comes through. Add a test that the GBD
-  lab sample's header row (`Date,Product Description,Total Amount ($),Weight (lbs),Sales,,`) is
-  accepted with `lb`.
-- `submission.test.ts`:
-  - the mismatch rejection
-  - field labels (line 108)
+- `submission.test.ts`: field labels (line 108).
 - `monthly-coverage` tests.
 - `upload-form.svelte.test.ts`:
   - hint texts (the `hints` block)
   - months-progress strings
   - the radio is set and the other disabled for a file with a unit header
   - it resets on Replace
-- `monthly-counts.svelte.test.ts`, `rows.test.ts`.
+- `monthly-counts.svelte.test.ts`.
 - `e2e/new-report/new-report.e2e.ts`:
   - the `kg` radio needs `exact` or the full label
   - the three "… months still need a count" assertions
@@ -144,7 +114,6 @@ The Python worker is unaffected, because `write.ts` always writes the header `pr
 - Hand self-contained `.svelte` edits to the `svelte-file-editor` subagent, or run
   `svelte-autofixer` on each file.
 - Every page must still call `pageTitle(`, because `page-titles.test.ts` scans for it.
-- The `csv/` modules run in the browser too, so keep them free of server-only imports.
 
 ## Verification
 1. While iterating, run only the touched test files:
@@ -161,7 +130,6 @@ The Python worker is unaffected, because `write.ts` always writes the header `pr
    - check that nothing unrelated changed
 4. Run the gate in the background: `pnpm lint && pnpm check && pnpm test`. Report flaky tests
    rather than chasing them.
-5. Check by hand in the running app (`/run` or Playwright MCP):
-   - upload a copy of the lab sample CSV and confirm Weight unit locks to lb
-   - upload `Weight (oz)` and read the rejection
-   - upload `apps/web/sample-reports/valid.csv` and confirm both radios stay open
+5. Check by hand in the running app (`/run` or Playwright MCP): upload the lab sample with its
+   line 1 deleted and confirm Weight unit locks to lb; upload `apps/web/sample-reports/valid.csv`
+   and confirm both radios stay open.
