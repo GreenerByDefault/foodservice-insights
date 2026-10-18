@@ -21,7 +21,7 @@ export type TelemetryIdentity = {
   attemptId: AnalysisAttemptId;
   reportId: ReportId;
   organizationId: OrganizationId;
-  countsBasis: CountsBasis;
+  countsBasis: CountsBasis | null;
 };
 
 /** Insert all three tables in one transaction, so there are never half the facts. A retry after an

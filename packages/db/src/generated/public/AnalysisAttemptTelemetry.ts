@@ -20,7 +20,8 @@ export default interface AnalysisAttemptTelemetryTable {
 
   organizationId: ColumnType<OrganizationId, OrganizationId, OrganizationId>;
 
-  countsBasis: ColumnType<CountsBasis, CountsBasis, CountsBasis>;
+  /** A copy of the report's. NULL when the uploader chose not to give counts, and then so is co2e_kg_per_diner_or_meal. */
+  countsBasis: ColumnType<CountsBasis | null, CountsBasis | null, CountsBasis | null>;
 
   recordedAt: ColumnType<Date, Date | string | undefined, Date | string>;
 

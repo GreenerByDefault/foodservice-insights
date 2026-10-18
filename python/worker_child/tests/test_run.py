@@ -12,13 +12,14 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     InputSummary,
     InvalidInputError,
+    MonthlyCounts,
     NewCategorization,
     StageFinished,
     UnusableDataError,
     UpstreamApiError,
 )
 from gbd_foodservice_insights.testing import stub_analysis
-from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID, VALID_CATEGORIZATION_CACHE
+from support.contract_fixtures import VALID_ANALYSIS_ATTEMPT_ID, VALID_CATEGORIZATION_CACHE, read
 from worker_child.contract import layout, names
 from worker_child.contract.messages import parse_categorization_cache
 from worker_child.run import run
@@ -206,6 +207,31 @@ def test_hands_analyze_the_categorization_cache(run_directory: Path) -> None:
     assert [request.categorization_cache for request in received] == [
         parse_categorization_cache(VALID_CATEGORIZATION_CACHE)
     ]
+
+
+@pytest.mark.parametrize(
+    ("manifest", "counts"),
+    [
+        (
+            "run.json",
+            MonthlyCounts("meals", {"2025-01": 12040, "2025-02": 11360, "2025-03": 12890}),
+        ),
+        ("run.no-counts.json", None),
+    ],
+)
+def test_hands_analyze_the_manifest_counts(
+    run_directory: Path, manifest: str, counts: MonthlyCounts | None
+) -> None:
+    (run_directory / layout.MANIFEST).write_text(read("valid", manifest), encoding="utf-8")
+    received: list[AnalysisRequest] = []
+
+    def analyze(request: AnalysisRequest, *, report_progress, report_telemetry):
+        received.append(request)
+        return stub_analysis(request)
+
+    run(run_directory, analyze=analyze)
+
+    assert [request.counts for request in received] == [counts]
 
 
 def test_writes_a_contract_violation_when_the_categorization_cache_is_missing(

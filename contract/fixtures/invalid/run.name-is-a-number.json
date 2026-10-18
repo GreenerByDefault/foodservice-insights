@@ -4,12 +4,14 @@
     "name": 42,
     "siteName": null,
     "organizationName": "Acme Foodservice",
-    "countsBasis": "meals",
     "unitSystem": "lb",
-    "monthlyCounts": {
-      "2025-01": 12040,
-      "2025-02": 11360,
-      "2025-03": 12890
+    "counts": {
+      "basis": "meals",
+      "monthly": {
+        "2025-01": 12040,
+        "2025-02": 11360,
+        "2025-03": 12890
+      }
     }
   }
 }

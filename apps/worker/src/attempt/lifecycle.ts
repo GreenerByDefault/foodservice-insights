@@ -68,8 +68,9 @@ export type AttemptLog = {
 export type PreparedAttempt = AttemptLog & {
   organizationId: OrganizationId;
   reportId: ReportId;
-  /** For the telemetry, which needs it to read `co2e_kg_per_diner_or_meal` and outlives the report. */
-  countsBasis: CountsBasis;
+  /** For the telemetry, which needs it to read `co2e_kg_per_diner_or_meal` and outlives the report.
+   * Null when the report has no counts. */
+  countsBasis: CountsBasis | null;
   runDirectory: string;
   child: RunningChild;
 };
@@ -158,7 +159,7 @@ export async function startAttempt(
       log,
       organizationId: inputs.organizationId,
       reportId: inputs.reportId,
-      countsBasis: inputs.report.countsBasis,
+      countsBasis: inputs.report.counts?.basis ?? null,
       runDirectory,
       child,
     };

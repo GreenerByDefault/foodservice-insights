@@ -19,10 +19,11 @@ export default interface ReportTable {
 
   siteName: ColumnType<string | null, string | null, string | null>;
 
-  countsBasis: ColumnType<CountsBasis, CountsBasis, CountsBasis>;
+  /** Whether monthly_counts counts diners or meals. NULL when the uploader chose not to give counts. */
+  countsBasis: ColumnType<CountsBasis | null, CountsBasis | null, CountsBasis | null>;
 
-  /** Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis. */
-  monthlyCounts: ColumnType<unknown, unknown, unknown>;
+  /** Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis. NULL when the uploader chose not to give counts. */
+  monthlyCounts: ColumnType<unknown | null, unknown | null, unknown | null>;
 
   unitSystem: ColumnType<UnitSystem, UnitSystem, UnitSystem>;
 

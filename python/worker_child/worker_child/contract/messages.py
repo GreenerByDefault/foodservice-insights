@@ -12,6 +12,7 @@ from gbd_foodservice_insights.analysis import (
     CachedCategorization,
     CategorizationSummary,
     InputSummary,
+    MonthlyCounts,
     NewCategorization,
     ReportSummary,
     cost_micro_usd,
@@ -27,7 +28,6 @@ from worker_child.contract.names import (
     STAGES,
     UNIT_SYSTEMS,
     ChildFailureReason,
-    CountsBasis,
     LlmOperation,
     Stage,
     UnitSystem,
@@ -46,9 +46,8 @@ class ReportInputs:
     name: str | None
     site_name: str | None
     organization_name: str
-    counts_basis: CountsBasis
     unit_system: UnitSystem
-    monthly_counts: Mapping[str, int]
+    counts: MonthlyCounts | None  # `None` when the uploader chose not to give counts
 
 
 @dataclass(frozen=True)
@@ -76,6 +75,7 @@ def parse_run_manifest(text: str) -> RunManifest:
     root = parse_object("run.json", text)
     analysis_attempt_id = root.matching("analysisAttemptId", UUID_PATTERN)
     report = root.nested("report")
+    counts = report.nullable_nested("counts")
 
     manifest = RunManifest(
         analysis_attempt_id=analysis_attempt_id,
@@ -83,15 +83,23 @@ def parse_run_manifest(text: str) -> RunManifest:
             name=report.nullable_string("name"),
             site_name=report.nullable_string("siteName"),
             organization_name=report.string("organizationName"),
-            counts_basis=report.literal("countsBasis", COUNTS_BASES),
             unit_system=report.literal("unitSystem", UNIT_SYSTEMS),
-            monthly_counts=report.counts("monthlyCounts", MONTH_PATTERN),
+            counts=None if counts is None else _monthly_counts(counts),
         ),
     )
 
     report.done()
     root.done()
     return manifest
+
+
+def _monthly_counts(counts: Fields) -> MonthlyCounts:
+    parsed = MonthlyCounts(
+        basis=counts.literal("basis", COUNTS_BASES),
+        monthly=counts.counts("monthly", MONTH_PATTERN),
+    )
+    counts.done()
+    return parsed
 
 
 def parse_categorization_cache(text: str) -> tuple[CachedCategorization, ...]:
@@ -327,11 +335,8 @@ def _categorization_payload(
 
 def _report_payload(summary: ReportSummary) -> dict[str, Any]:
     _require_quantity("report.totalCo2eKg", summary.total_co2e_kg)
-    # Every manifest carries counts until the contract accepts a report without them.
-    per_head = summary.co2e_kg_per_diner_or_meal
-    if per_head is None:
-        raise ContractError("report.co2eKgPerDinerOrMeal is required")
-    _require_quantity("report.co2eKgPerDinerOrMeal", per_head)
+    if summary.co2e_kg_per_diner_or_meal is not None:
+        _require_quantity("report.co2eKgPerDinerOrMeal", summary.co2e_kg_per_diner_or_meal)
     _require_percentage("report.plantPctByWeight", summary.plant_pct_by_weight)
     if summary.plant_protein_pct_by_weight is not None:
         _require_percentage("report.plantProteinPctByWeight", summary.plant_protein_pct_by_weight)

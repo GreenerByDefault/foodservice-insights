@@ -1,5 +1,6 @@
 import math
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,8 @@ from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisRequest,
     InvalidInputError,
+    MonthlyCounts,
+    ReportSummary,
     UnusableDataError,
     UpstreamApiError,
 )
@@ -23,8 +26,12 @@ from worker_child.testing import (
     parse_scenario,
 )
 
+COUNTS = MonthlyCounts("meals", {"2025-01": 12040})
 
-def _request(tmp_path: Path, report_name: str | None) -> AnalysisRequest:
+
+def _request(
+    tmp_path: Path, report_name: str | None, counts: MonthlyCounts | None = COUNTS
+) -> AnalysisRequest:
     return AnalysisRequest(
         run_id="test-run",
         input_csv=tmp_path / "input.csv",
@@ -32,7 +39,7 @@ def _request(tmp_path: Path, report_name: str | None) -> AnalysisRequest:
         report_name=report_name,
         site_name=None,
         organization_name="Acme Foodservice",
-        counts=None,
+        counts=counts,
         unit_system="lb",
         categorization_cache=(),
     )
@@ -171,6 +178,24 @@ def test_every_scenario_reports_the_stub_telemetry_first(tmp_path: Path) -> None
         )
 
     assert tuple(reported) == STUB_TELEMETRY
+
+
+def test_a_run_without_counts_reports_no_per_head_figure(tmp_path: Path) -> None:
+    reported = []
+
+    with pytest.raises(RuntimeError):
+        build_analyze()(
+            _request(tmp_path, "!crash", counts=None),
+            report_progress=lambda: None,
+            report_telemetry=reported.append,
+        )
+
+    assert tuple(reported) == tuple(
+        replace(record, co2e_kg_per_diner_or_meal=None)
+        if isinstance(record, ReportSummary)
+        else record
+        for record in STUB_TELEMETRY
+    )
 
 
 # ----------------------------------------------------------------------------------------------

@@ -810,7 +810,7 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_telemetry" (
     "analysis_attempt_id" "uuid" NOT NULL,
     "report_id" "uuid" NOT NULL,
     "organization_id" "uuid" NOT NULL,
-    "counts_basis" "public"."counts_basis" NOT NULL,
+    "counts_basis" "public"."counts_basis",
     "recorded_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "input_rows" integer,
     "input_kilograms" double precision,
@@ -843,10 +843,11 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_telemetry" (
     CONSTRAINT "analysis_attempt_telemetry_match_types_sum_to_unique_products" CHECK (((("cache_raw_name_products" + "cache_cleaned_name_products") + "llm_matched_products") = "input_unique_products")),
     CONSTRAINT "analysis_attempt_telemetry_pdf_duration_requires_report" CHECK ((("pdf_duration_ms" IS NULL) OR ("report_duration_ms" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_peak_memory_kib_positive" CHECK (("peak_memory_kib" > 0)),
+    CONSTRAINT "analysis_attempt_telemetry_per_diner_iff_report_and_counts" CHECK ((("co2e_kg_per_diner_or_meal" IS NULL) = (("total_co2e_kg" IS NULL) OR ("counts_basis" IS NULL)))),
     CONSTRAINT "analysis_attempt_telemetry_percentages_in_range" CHECK (((("plant_pct_by_weight" >= (0)::double precision) AND ("plant_pct_by_weight" <= (100)::double precision)) AND (("plant_protein_pct_by_weight" >= (0)::double precision) AND ("plant_protein_pct_by_weight" <= (100)::double precision)))),
     CONSTRAINT "analysis_attempt_telemetry_plant_protein_requires_report" CHECK ((("plant_protein_pct_by_weight" IS NULL) OR ("total_co2e_kg" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_quantities_non_negative" CHECK ((("input_kilograms" >= (0)::double precision) AND ("categorized_kilograms" >= (0)::double precision) AND ("total_co2e_kg" >= (0)::double precision) AND ("co2e_kg_per_diner_or_meal" >= (0)::double precision))),
-    CONSTRAINT "analysis_attempt_telemetry_report_all_or_none" CHECK (("num_nulls"("total_co2e_kg", "co2e_kg_per_diner_or_meal", "plant_pct_by_weight") = ANY (ARRAY[0, 3]))),
+    CONSTRAINT "analysis_attempt_telemetry_report_all_or_none" CHECK (("num_nulls"("total_co2e_kg", "plant_pct_by_weight") = ANY (ARRAY[0, 2]))),
     CONSTRAINT "analysis_attempt_telemetry_report_duration_requires_categorize" CHECK ((("report_duration_ms" IS NULL) OR ("categorize_duration_ms" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_report_requires_categorization" CHECK ((("total_co2e_kg" IS NULL) OR ("categorized_rows" IS NOT NULL))),
     CONSTRAINT "analysis_attempt_telemetry_xlsx_duration_requires_pdf" CHECK ((("xlsx_duration_ms" IS NULL) OR ("pdf_duration_ms" IS NOT NULL)))
@@ -860,6 +861,13 @@ ALTER TABLE "public"."analysis_attempt_telemetry" OWNER TO "postgres";
 --
 
 COMMENT ON TABLE "public"."analysis_attempt_telemetry" IS 'One row per analysis attempt, written by the worker after the verdict on every ending the child left a telemetry document for. Each column group (input, categorization, report, and each stage time) fills in as its stage finishes, so a killed run keeps a prefix. Outlives the attempt, report and organization it names, and holds no personal data.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_telemetry"."counts_basis"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_telemetry"."counts_basis" IS 'A copy of the report''s. NULL when the uploader chose not to give counts, and then so is co2e_kg_per_diner_or_meal.';
 
 
 --
@@ -1211,11 +1219,12 @@ CREATE TABLE IF NOT EXISTS "public"."report" (
     "created_by_user_id" "uuid",
     "name" "text" NOT NULL,
     "site_name" "text",
-    "counts_basis" "public"."counts_basis" NOT NULL,
-    "monthly_counts" "jsonb" NOT NULL,
+    "counts_basis" "public"."counts_basis",
+    "monthly_counts" "jsonb",
     "unit_system" "public"."unit_system" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "deleted_at" timestamp with time zone,
+    CONSTRAINT "report_counts_all_or_none" CHECK ((("counts_basis" IS NULL) = ("monthly_counts" IS NULL))),
     CONSTRAINT "report_deleted_at_after_created_at" CHECK ((("deleted_at" IS NULL) OR ("deleted_at" >= "created_at"))),
     CONSTRAINT "report_monthly_counts_is_object" CHECK ((("jsonb_typeof"("monthly_counts") = 'object'::"text") AND ("monthly_counts" <> '{}'::"jsonb")))
 );
@@ -1224,10 +1233,17 @@ CREATE TABLE IF NOT EXISTS "public"."report" (
 ALTER TABLE "public"."report" OWNER TO "postgres";
 
 --
+-- Name: COLUMN "report"."counts_basis"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."report"."counts_basis" IS 'Whether monthly_counts counts diners or meals. NULL when the uploader chose not to give counts.';
+
+
+--
 -- Name: COLUMN "report"."monthly_counts"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN "public"."report"."monthly_counts" IS 'Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis.';
+COMMENT ON COLUMN "public"."report"."monthly_counts" IS 'Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis. NULL when the uploader chose not to give counts.';
 
 
 --

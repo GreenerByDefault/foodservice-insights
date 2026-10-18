@@ -6,7 +6,6 @@ from gbd_foodservice_insights.analysis import (
     AnalysisOutcome,
     AnalysisRequest,
     CachedCategorization,
-    MonthlyCounts,
 )
 from gbd_foodservice_insights.analysis import analyze as default_analyze
 
@@ -82,7 +81,7 @@ def _build_request(
         report_name=manifest.report.name,
         site_name=manifest.report.site_name,
         organization_name=manifest.report.organization_name,
-        counts=MonthlyCounts(manifest.report.counts_basis, manifest.report.monthly_counts),
+        counts=manifest.report.counts,
         unit_system=manifest.report.unit_system,
         categorization_cache=categorization_cache,
     )

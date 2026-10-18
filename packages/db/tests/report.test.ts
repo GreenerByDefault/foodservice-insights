@@ -42,6 +42,25 @@ describe('report', () => {
     await expectConstraintViolation(insert, 'report_monthly_counts_is_object');
   });
 
+  test('stores a report without counts', async () => {
+    const report = await withRollback(DATABASE, (transaction) =>
+      insertReport(transaction, { countsBasis: null, monthlyCounts: null }),
+    );
+
+    expect([report.countsBasis, report.monthlyCounts]).toEqual([null, null]);
+  });
+
+  test.each([
+    ['a basis without counts', { countsBasis: 'meals', monthlyCounts: null }],
+    ['counts without a basis', { countsBasis: null }],
+  ] as const)('rejects %s', async (_description, overrides) => {
+    const insert = withRollback(DATABASE, async (transaction) => {
+      await insertReport(transaction, overrides);
+    });
+
+    await expectConstraintViolation(insert, 'report_counts_all_or_none');
+  });
+
   test('is deleted with its organization', async () => {
     const remaining = await withRollback(DATABASE, async (transaction) => {
       const { organization } = await insertOrganization(transaction);

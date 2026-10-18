@@ -104,7 +104,6 @@ function screenHeadline(report: ReportPageData): string {
 <UploadDetails
   inputFile={current.inputFile}
   unitSystem={current.report.unitSystem}
-  countsBasis={current.report.countsBasis}
-  monthlyCounts={current.report.monthlyCounts}
+  counts={current.report.counts}
   newReportHref={current.newReportHref}
 />

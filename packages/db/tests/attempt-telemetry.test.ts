@@ -115,6 +115,13 @@ describe('analysis_attempt_telemetry', () => {
     expect(row).toEqual(storedTelemetry(row, {}));
   });
 
+  test('stores a finished run without counts, and so no per-diner figure', async () => {
+    const overrides = { countsBasis: null, co2eKgPerDinerOrMeal: null };
+    const row = await insertTelemetry(overrides);
+
+    expect(row).toEqual(storedTelemetry(row, overrides));
+  });
+
   test('accepts percentages at both ends of the range', async () => {
     const overrides = { plantPctByWeight: 100, plantProteinPctByWeight: 0 };
     const row = await insertTelemetry(overrides);
@@ -168,6 +175,20 @@ describe('analysis_attempt_telemetry', () => {
       await expectConstraintViolation(
         insertTelemetry(overrides),
         `analysis_attempt_telemetry_${group}_all_or_none`,
+      );
+    });
+
+    test.each<[string, TelemetryOverrides]>([
+      ['no per-diner figure, with counts', { co2eKgPerDinerOrMeal: null }],
+      ['a per-diner figure, without counts', { countsBasis: null }],
+      [
+        'a per-diner figure, without the rest of the report',
+        { ...NO_REPORT, co2eKgPerDinerOrMeal: 1.75 },
+      ],
+    ])('rejects %s', async (_case, overrides) => {
+      await expectConstraintViolation(
+        insertTelemetry(overrides),
+        'analysis_attempt_telemetry_per_diner_iff_report_and_counts',
       );
     });
 

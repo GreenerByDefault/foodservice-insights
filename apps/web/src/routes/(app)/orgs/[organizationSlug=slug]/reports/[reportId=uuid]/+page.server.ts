@@ -75,6 +75,12 @@ export type Attempt =
 
 export type MonthlyCount = { month: string; count: number };
 
+export type ReportCounts = {
+  basis: CountsBasis;
+  /** Oldest month first. */
+  monthly: MonthlyCount[];
+};
+
 export type ReportPageData = {
   organizationSlug: string;
   report: {
@@ -83,9 +89,8 @@ export type ReportPageData = {
     siteName: string | null;
     creator: Creator;
     unitSystem: UnitSystem;
-    countsBasis: CountsBasis;
-    /** Oldest month first. */
-    monthlyCounts: MonthlyCount[];
+    /** Null when the uploader chose not to give counts. */
+    counts: ReportCounts | null;
   };
   newReportHref: string;
   pollHref: string;
@@ -103,7 +108,7 @@ type ReportRow = {
   reportName: string;
   siteName: string | null;
   unitSystem: UnitSystem;
-  countsBasis: CountsBasis;
+  countsBasis: CountsBasis | null;
   monthlyCounts: unknown;
   creatorDisplayName: string | null;
   /** Null exactly when there is no joined user — email is guaranteed for any real one (see
@@ -197,8 +202,11 @@ export async function _loadReport(
             ? { displayName: row.creatorDisplayName, email: row.creatorEmail }
             : null,
           unitSystem: row.unitSystem,
-          countsBasis: row.countsBasis,
-          monthlyCounts: toMonthlyCounts(row.monthlyCounts),
+          // `report_counts_all_or_none` sets both columns or neither.
+          counts:
+            row.countsBasis === null
+              ? null
+              : { basis: row.countsBasis, monthly: toMonthlyCounts(row.monthlyCounts) },
         },
         newReportHref: newReportHref(params.organizationSlug),
         pollHref: reportPollHref(params.organizationSlug, row.reportId),
