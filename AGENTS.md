@@ -48,7 +48,8 @@ Run the checks for the stack you changed, from the repo root, before saying a ch
 | Python | `just lint && just check && just test` |
 
 A change that typechecks but has not been run is not verified. Report what you actually ran;
-if something is failing or you skipped a step, say so.
+if something is failing or you skipped a step, say so. A test that fails and then passes
+unchanged is a flake: name it in your report, but don't stop to fix it unless asked.
 
 Run Playwright's `--repeat-each` with `--workers=1` to avoid copies of one test colliding in the database.
 
@@ -108,12 +109,17 @@ If not, write it. If so, the comment is a second copy of something that will dri
 - Prefer the standard library. When that is not possible, consider using third-party
   libraries, but usually prefer first-party code if it's simple to write because of supply
   chain security being such a pain.
+- Don't bind a local that only renames something already named, like
+  `products = categorized.unique_products_df`; inline the access instead. A local that names a
+  computed value, or adds meaning, is fine. Tests get more slack for arrange-step locals.
 
 ### Testing philosophy
 
 - We deeply value tests to make it easier for us to maintain and extend the app. Whenever
   adding new functionality, you should generally add tests.
-- We care about our tests being fast, concurrent, and maintainable.
+- We care about our tests being fast, concurrent, and maintainable. When proposing something
+  that adds test time, estimate wall clock as per-unit cost × count ÷ workers, give local and CI
+  separately (CI has fewer cores).
 - Don't re-test something that already carries its own guarantee — the standard library, a
   third-party dependency, or a first-party leaf module with its own exhaustive tests. Trust that contract and put the test at the integration point instead:
   does *this* code call it correctly, handle the edges it exposes, and compose it with the rest

@@ -42,6 +42,7 @@ token_verifications = 1000
 max_frequency = "1s"
 double_confirm_changes = false
 
+# The dev stack's templates; see its config.toml before adding one.
 [auth.email.template.magic_link]
 subject = "Your Foodservice Insights sign-in code"
 content_path = "../supabase-dev/supabase/templates/sign-in-code.html"
