@@ -48,9 +48,9 @@ const ANSWERED_INVITE_ACTIONS: InviteAuditAction[] = [
   'invite.expired',
 ];
 
-/** Found through the audit rows, not by address: an invite is addressed to the email the user had
- * then, which `audit_event` ties to their id and which they may have changed since. Left behind,
- * the invite would put that address back beside the id. */
+/** Delete the `organization_invite` rows this user accepted, declined or let expire, so the
+ * address they were sent to is not left beside the user's id in `audit_event`. Pending invites
+ * stay: nothing ties them to this user's id, and they are an admin's live invitation. */
 async function deleteAnsweredInvites(
   transaction: Transaction<Database>,
   userId: UserId,
@@ -58,6 +58,8 @@ async function deleteAnsweredInvites(
   await transaction
     .deleteFrom('organizationInvite')
     .where('id', 'in', (eb) =>
+      // Via the audit rows, not `email`: the invite holds the address it was sent to, which the
+      // user may have changed since.
       eb
         .selectFrom('auditEvent')
         .select('targetId')

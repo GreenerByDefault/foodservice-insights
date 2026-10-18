@@ -96,7 +96,6 @@ describe('audit_event', () => {
 });
 
 describe('audit_event_actor_user_id', () => {
-  // Account deletion looks up a user's audit rows by actor, and the table only grows.
   test('indexes the actor, which no foreign key does here', async () => {
     const definition = await withRollback(DATABASE, async (transaction) => {
       const { rows } = await sql<{ definition: string | null }>`
