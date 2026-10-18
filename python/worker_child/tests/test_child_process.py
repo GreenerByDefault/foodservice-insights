@@ -98,12 +98,19 @@ def kill_group_if_alive(process: subprocess.Popen[bytes]) -> None:
 def test_a_successful_analysis_exits_zero_and_writes_the_contracts_result(
     run_directory: Path,
 ) -> None:
-    process = spawn_child({}, run_directory)
+    process = spawn_child(
+        {"newCategorizations": [{"product": "Beef", "cleanedName": None, "category": "Beef"}]},
+        run_directory,
+    )
 
     stdout, _ = process.communicate(timeout=CHILD_TIMEOUT_SECONDS)
 
     assert process.returncode == names.EXIT_WROTE_RESULT
     assert stdout == b""
+    assert read_json(run_directory / layout.NEW_CATEGORIZATIONS) == {
+        "analysisAttemptId": VALID_ANALYSIS_ATTEMPT_ID,
+        "rows": [{"product": "Beef", "cleanedName": None, "category": "Beef"}],
+    }
     assert read_json(run_directory / layout.RESULT)["analysisAttemptId"] == (
         VALID_ANALYSIS_ATTEMPT_ID
     )

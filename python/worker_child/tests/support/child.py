@@ -26,6 +26,7 @@ from gbd_foodservice_insights.analysis import (
     AnalysisOutcome,
     AnalysisRequest,
     InvalidInputError,
+    NewCategorization,
     ReportProgress,
     ReportTelemetry,
     UnusableDataError,
@@ -67,6 +68,7 @@ class Scenario:
     hang: bool = False
     spawn_grandchild: bool = False
     telemetry: bool = False  # report `STUB_TELEMETRY`
+    new_categorizations: tuple[NewCategorization, ...] = ()
 
 
 def parse_scenario(data: Mapping[str, Any]) -> Scenario:
@@ -77,6 +79,10 @@ def parse_scenario(data: Mapping[str, Any]) -> Scenario:
         hang=data.get("hang", False),
         spawn_grandchild=data.get("spawnGrandchild", False),
         telemetry=data.get("telemetry", False),
+        new_categorizations=tuple(
+            NewCategorization(row["product"], row["cleanedName"], row["category"])
+            for row in data.get("newCategorizations", ())
+        ),
     )
 
 
@@ -108,6 +114,7 @@ def build_analyze(scenario: Scenario) -> Analyze:
             write_pdf=layout.PDF_FILE_NAME not in scenario.without_files,
             write_xlsx=layout.XLSX_FILE_NAME not in scenario.without_files,
             progress_calls=0,  # already reported above
+            new_categorizations=scenario.new_categorizations,
         )
 
     return analyze

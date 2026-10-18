@@ -21,6 +21,7 @@ from gbd_foodservice_insights.analysis import (
     InputSummary,
     InvalidInputError,
     LlmCall,
+    NewCategorization,
     ReportSummary,
     StageFinished,
     Telemetry,
@@ -397,6 +398,7 @@ def test_analyze_golden_deliverables(tmp_path: Path, monkeypatch: pytest.MonkeyP
     outcome = analyze(request, llm=llm)
 
     assert llm.calls == []
+    assert outcome.new_categorizations == ()
     actual = _jsonable(
         {"pdf": pdf_inputs, "workbook": pd.read_excel(outcome.xlsx, sheet_name=None)}
     )
@@ -617,6 +619,31 @@ def test_a_cached_product_skips_the_llm(tmp_path: Path, fake_report: FakeReport)
 
     assert llm.calls == [("clean", "Pork Loin"), ("match", "pork loin")]
     assert fake_report.rows["category"].tolist() == ["Cheese", "Pork (pig meat)"]
+
+
+def test_hands_back_exactly_the_products_the_llm_categorized(
+    tmp_path: Path, fake_report: FakeReport
+) -> None:
+    request = _request(
+        tmp_path,
+        categorization_cache=(CachedCategorization("House Blend 7", "Cheese", "house blend"),),
+    )
+    request.input_csv.write_text(
+        input_csv_text(
+            [
+                ("House Blend 7", "2025-01-15", 1.0),
+                ("Pork Loin!", "2025-01-15", 1.0),
+                ("Dish Soap", "2025-01-15", 1.0),
+            ]
+        )
+    )
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    assert outcome.new_categorizations == (
+        NewCategorization("Pork Loin!", "pork loin", "Pork (pig meat)"),
+        NewCategorization("Dish Soap", "dish soap", "No Matches Found"),
+    )
 
 
 # ----------------------------------------------------------------------
