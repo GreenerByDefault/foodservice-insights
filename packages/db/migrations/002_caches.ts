@@ -4,6 +4,9 @@ import { updatedAtTrigger, verifiedAtTrigger } from './_shared.ts';
 // The caches the categorization pipeline and the lab look answers up in before asking an LLM.
 // Each table is its own review queue: anything a run or the lab suggests lands unverified, and
 // is used by nobody until a human verifies it in Supabase Studio.
+//
+// No foreign keys, to reports or anything else: a verified answer must outlive the report whose
+// run suggested it, so `suggested_by` names that attempt as text.
 
 export async function up(database: Kysely<any>): Promise<void> {
   await functions(database);
