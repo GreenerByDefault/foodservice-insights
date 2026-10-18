@@ -78,7 +78,8 @@ def get_previously_classified_entrees() -> pd.DataFrame:
         )
         return _empty_previously_classified_entrees()
 
-    df = pd.read_csv(path)
+    # Only an empty cell is missing, so a product named `NA` or `None` stays one.
+    df = pd.read_csv(path, dtype=str, keep_default_na=False, na_values=[""])
     required_cols = {"product", "entree_classification"}
     missing_cols = required_cols - set(df.columns)
     if missing_cols:

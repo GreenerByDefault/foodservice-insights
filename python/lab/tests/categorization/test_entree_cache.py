@@ -68,6 +68,23 @@ def test_get_previously_classified_entrees_backfills_missing_cleaned_column(tmp_
     assert "cleaned_item_names" in df.columns
 
 
+def test_get_previously_classified_entrees_keeps_null_like_products(tmp_path):
+    entree_path = tmp_path / "entree.csv"
+    entree_path.write_text(
+        "product,entree_classification,cleaned_item_names\nNA,entree,\nNone,side/add-on,none\n"
+    )
+
+    with patch.object(
+        entree_cache, "get_previously_classified_entrees_location", return_value=entree_path
+    ):
+        df = get_previously_classified_entrees()
+
+    assert df.astype(object).where(df.notna(), None).to_dict("records") == [
+        {"product": "NA", "entree_classification": "entree", "cleaned_item_names": None},
+        {"product": "None", "entree_classification": "side/add-on", "cleaned_item_names": "none"},
+    ]
+
+
 def test_save_historical_entree_classifications_persists_cleaned_names(tmp_path):
     entree_path = tmp_path / "entree.csv"
     pd.DataFrame(
