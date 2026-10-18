@@ -32,6 +32,7 @@ import {
   dbMsAgo,
   findOrInsertAppUser,
   insertAnalysisAttempt,
+  insertAnalysisAttemptFinding,
   insertAppUser,
   insertInputFile,
   insertReport,
@@ -142,6 +143,28 @@ async function buildSucceeded(
   });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
   await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
+  // Worded as the real checks word them, so the notice is shown with copy of a realistic length.
+  await insertAnalysisAttemptFinding(tx, attempt.id, {
+    position: 0,
+    qualityCheck: 'per_product_weight_bounds',
+    message:
+      'Found 3 lines with a weight above zero but under 0.1 lb, or over 2,000 lb, which usually ' +
+      'means a unit mistake. For example, Whole Milk 1 Gal at 4,800 lb, above the upper bound ' +
+      'of 2,000 lb.',
+    sampleValues: [
+      'Whole Milk 1 Gal at 4,800 lb, above the upper bound of 2,000 lb.',
+      'Russet Potatoes 50 Lb Bag at 2,650 lb, above the upper bound of 2,000 lb.',
+      'Ground Cinnamon at 0.02 lb, below the lower bound of 0.1 lb.',
+    ],
+  });
+  await insertAnalysisAttemptFinding(tx, attempt.id, {
+    position: 1,
+    qualityCheck: 'month_over_month_total_volatility',
+    message:
+      'Found 1 month where the total pounds changed by more than 50% from the month before. ' +
+      'Large swings like this often mean a month is missing, partial, or counted twice.',
+    sampleValues: ['Feb 2026: 6,120 lb against 14,380 lb in Jan 2026 (-57%).'],
+  });
   return reportId;
 }
 

@@ -97,6 +97,10 @@ it was stopped and offering to delete it.
 Buttons to download the input file, the result PDF, and the result Excel sheet, plus potentially
 some metadata. The page does not render charts; they live in the PDF.
 
+When the data quality checks raised warnings, the page lists them above the downloads, worded as
+the PDF words them, so users take the results with a grain of salt before sharing them. A report
+with no warnings shows no notice.
+
 ### User email
 
 The user receives an email when the analysis completes.

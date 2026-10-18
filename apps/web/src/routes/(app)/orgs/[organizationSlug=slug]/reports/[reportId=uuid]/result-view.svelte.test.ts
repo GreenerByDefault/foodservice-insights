@@ -18,6 +18,7 @@ describe('ResultView', () => {
       finishedAt: FINISHED_AT,
       now: NOW,
       files: FILES,
+      findings: [],
       organizationSlug: ORGANIZATION_SLUG,
       reportId: REPORT_ID,
       reportName: REPORT_NAME,
