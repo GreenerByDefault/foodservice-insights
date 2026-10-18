@@ -62,7 +62,7 @@ const progressId = `${id}-progress`;
   {#if !months}
     <!-- Dashed, like the drop zone, to mark a space that fills in once a file is chosen. -->
     <p class="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-      Choose a file above, and each month it covers will appear here.
+      Choose a file above. Then you can enter a count here for each month it covers.
     </p>
   {/if}
 

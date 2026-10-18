@@ -376,8 +376,9 @@ async function backToForm() {
     <Field.Set aria-describedby={countsIntroId}>
       <Field.Legend>{FIELD_LABELS.countsBasis}</Field.Legend>
       <Field.Description id={countsIntroId}>
-        A count for each month lets your report show emissions per diner or per meal, so you can
-        compare it with other sites. Use whichever you already keep track of.
+        Give a count for each month, such as 1,200 diners in March. Your report will then show
+        emissions per diner or per meal, so you can compare your site with sites of other sizes.
+        Count diners or meals, whichever you already track.
       </Field.Description>
 
       <!-- No name of its own: the field set's legend already asks the question, and naming the
@@ -402,8 +403,8 @@ async function backToForm() {
         <div class="flex gap-3 rounded-md border bg-muted/40 p-3">
           <InfoIcon class="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <Field.Description id={noCountsNoteId} class="text-foreground">
-            Your report will show totals only. Totals grow with the number of people a site serves,
-            so they can't be compared directly with other sites.
+            Your report will show totals only. Bigger sites have bigger totals, so you won't be able
+            to compare your totals directly with other sites.
           </Field.Description>
         </div>
       {:else}

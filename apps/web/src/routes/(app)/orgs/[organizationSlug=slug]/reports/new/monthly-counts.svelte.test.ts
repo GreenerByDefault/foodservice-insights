@@ -67,7 +67,11 @@ describe('MonthlyCounts', () => {
     const screen = await render(MonthlyCounts, { months: undefined, basis: 'people', counts });
 
     await expect
-      .element(screen.getByText('Choose a file above, and each month it covers will appear here.'))
+      .element(
+        screen.getByText(
+          'Choose a file above. Then you can enter a count here for each month it covers.',
+        ),
+      )
       .toBeInTheDocument();
     await expect.element(screen.getByRole('spinbutton')).not.toBeInTheDocument();
   });

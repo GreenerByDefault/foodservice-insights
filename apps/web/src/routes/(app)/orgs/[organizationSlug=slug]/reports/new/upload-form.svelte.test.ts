@@ -241,7 +241,9 @@ describe('UploadForm', () => {
 
       await expect
         .element(
-          screen.getByText('Choose a file above, and each month it covers will appear here.'),
+          screen.getByText(
+            'Choose a file above. Then you can enter a count here for each month it covers.',
+          ),
         )
         .toBeInTheDocument();
       await expect.element(screen.getByLabelText('Choose a CSV or Excel file')).toBeInTheDocument();
@@ -302,7 +304,7 @@ describe('UploadForm', () => {
       await expect
         .element(screen.getByRole('group', { name: 'Diners or meals served' }))
         .toHaveAccessibleDescription(
-          'A count for each month lets your report show emissions per diner or per meal, so you can compare it with other sites. Use whichever you already keep track of.',
+          'Give a count for each month, such as 1,200 diners in March. Your report will then show emissions per diner or per meal, so you can compare your site with sites of other sizes. Count diners or meals, whichever you already track.',
         );
       // Before any file is chosen, so the user knows which site to count before going to find it.
       await expect
@@ -427,7 +429,7 @@ describe('UploadForm', () => {
 
   describe('skipping counts', () => {
     const NOTE =
-      "Your report will show totals only. Totals grow with the number of people a site serves, so they can't be compared directly with other sites.";
+      "Your report will show totals only. Bigger sites have bigger totals, so you won't be able to compare your totals directly with other sites.";
 
     function countsBasisGroup(screen: Awaited<ReturnType<typeof render>>) {
       return screen.getByRole('group', { name: 'Diners or meals served' }).getByRole('radiogroup');
