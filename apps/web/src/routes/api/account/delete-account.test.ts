@@ -1,13 +1,15 @@
-import type { Database, UserId } from '@gbd/db';
+import type { Database, OrganizationId, OrganizationInviteStatus, UserId } from '@gbd/db';
 import {
   insertAppUserWithEmail,
   insertOrganization,
+  insertOrganizationInvite,
   insertOrganizationMember,
   insertReportWithAttempt,
   withRollback,
 } from '@gbd/db/testing';
 import type { Transaction } from 'kysely';
 import { afterEach, beforeEach, describe, expect, type MockInstance, test, vi } from 'vitest';
+import { type InviteAuditAction, recordAuditEvent } from '#lib/server/audit.js';
 import { database } from '#lib/server/db.js';
 import { emailer } from '#lib/server/email.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
@@ -85,6 +87,84 @@ describe('_deleteAccount', () => {
 
       expect(response.status).toBe(204);
       expect(await userExists(transaction, user.id)).toBe(false);
+    });
+  });
+
+  describe('invites', () => {
+    async function inviteIdsIn(
+      transaction: Transaction<Database>,
+      organizationId: OrganizationId,
+    ): Promise<string[]> {
+      const rows = await transaction
+        .selectFrom('organizationInvite')
+        .select('id')
+        .where('organizationId', '=', organizationId)
+        .execute();
+      return rows.map((row) => row.id);
+    }
+
+    test('the ones the user answered are deleted, whatever address they went to', async () => {
+      await withRollback(database(), async (transaction) => {
+        const user = await insertAppUserWithEmail(transaction);
+        const { organization } = await insertOrganization(transaction);
+        const answers: {
+          action: InviteAuditAction;
+          status: OrganizationInviteStatus;
+          email: string;
+        }[] = [
+          { action: 'invite.accepted', status: 'accepted', email: user.email },
+          { action: 'invite.declined', status: 'declined', email: user.email },
+          { action: 'invite.expired', status: 'expired', email: 'old-address@example.com' },
+        ];
+        const answered = await Promise.all(
+          answers.map(async ({ action, status, email }) => {
+            const invite = await insertOrganizationInvite(transaction, {
+              organizationId: organization.id,
+              email,
+              status,
+            });
+            await recordAuditEvent(transaction, {
+              action,
+              actor: { userId: user.id },
+              target: { type: 'invite', id: invite.id, organizationId: organization.id },
+            });
+            return invite;
+          }),
+        );
+        expect(await inviteIdsIn(transaction, organization.id)).toHaveLength(answered.length);
+
+        await _deleteAccount(transaction, { user });
+
+        expect(await inviteIdsIn(transaction, organization.id)).toEqual([]);
+      });
+    });
+
+    test("a pending one to the user's address stays, as does one someone else answered", async () => {
+      await withRollback(database(), async (transaction) => {
+        const user = await insertAppUserWithEmail(transaction);
+        const other = await insertAppUserWithEmail(transaction);
+        const { organization } = await insertOrganization(transaction);
+        const pending = await insertOrganizationInvite(transaction, {
+          organizationId: organization.id,
+          email: user.email,
+        });
+        const answeredByOther = await insertOrganizationInvite(transaction, {
+          organizationId: organization.id,
+          email: other.email,
+          status: 'accepted',
+        });
+        await recordAuditEvent(transaction, {
+          action: 'invite.accepted',
+          actor: { userId: other.id },
+          target: { type: 'invite', id: answeredByOther.id, organizationId: organization.id },
+        });
+
+        await _deleteAccount(transaction, { user });
+
+        expect((await inviteIdsIn(transaction, organization.id)).sort()).toEqual(
+          [pending.id, answeredByOther.id].sort(),
+        );
+      });
     });
   });
 
