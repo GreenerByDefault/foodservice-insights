@@ -6,6 +6,11 @@ import type { ChildCommand } from './child/spawn.ts';
 import type { WorkerDefaultableFields } from './config.ts';
 import { INVOCATION } from './contract/names.ts';
 
+/** How the worker analyzes a report. The root `README.md` § Analysis modes says when to pick each.
+ * - `live`: the real analysis, categorized by OpenAI. What production runs.
+ * - `mock-llm`: the real analysis, with a keyword list standing in for OpenAI.
+ * - `stubbed`: a fake analysis that finishes in seconds, for working on the report lifecycle.
+ * - `off`: no worker is started. */
 export type WorkerMode = 'stubbed' | 'mock-llm' | 'live' | 'off';
 
 const WORKER_MODES: readonly WorkerMode[] = ['stubbed', 'mock-llm', 'live', 'off'];

@@ -1,5 +1,5 @@
-// Temporary: part of the one-time go-live import of GBD's cache CSVs
-// (.claude/plans/caches-to-supabase.md). This directory is deleted once that import is checked.
+// Temporary: part of the go-live import of GBD's cache CSVs
+// (.claude/plans/caches-to-supabase.md). This directory is deleted after the final import.
 //
 // Which database the import writes to. Deliberately not `src/env.ts`'s `DATABASE`, which every
 // other script shares: there, whatever `DB_CONNECTION_STRING` holds is the target, and a run
@@ -16,6 +16,11 @@
 // Either way, a connection string with a query parameter is refused. node-postgres lets one
 // override what this file checks: `?host=` redirects the connection away from the hostname, and
 // `?sslmode=` replaces the CA.
+//
+// `--mirror` deletes every row of each table it imports, verified or not, and production allows
+// it. That is safe only while this script lives: until the final import, nobody reviews
+// production's rows, which are the interim import's and unreviewed suggestions (the plan's § Go
+// live on the interim copy). After it, a verified row may be a reviewer's edit.
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,17 +34,11 @@ export type Connection = { connectionString: string; sslCa: string | undefined }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
-/** `--mirror` deletes verified rows, which in production may be a reviewer's edits, and imports
- * around refused rows, which in production go back to whoever owns the CSV. */
-export function targetFor({
-  production,
-  mirror,
-}: {
-  production: boolean;
-  mirror: boolean;
-}): Target {
-  if (production && mirror) throw new Error('--mirror is for a local database only');
-  return production ? 'production' : 'local';
+/** Only a local `--mirror` leaves refused rows out rather than refusing to run, so that a laptop's
+ * cache matches the CSV as reading it did. In production a refused row goes back to whoever owns
+ * the CSV. */
+export function importsAroundRefusedRows(target: Target, { mirror }: { mirror: boolean }): boolean {
+  return mirror && target === 'local';
 }
 
 export async function connectionFor(target: Target): Promise<Connection> {

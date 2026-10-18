@@ -7,7 +7,7 @@
  * up to `BACKOFF_CAP_MS`. */
 export const BASE_POLL_INTERVAL_MS = 10_000;
 
-/** `stubbed` mode fakes the whole lifecycle and speeds up the worker config with
+/** `WORKER_MODE=stubbed` fakes the whole lifecycle and speeds up the worker config with
  * `STUBBED_OVERRIDES` in `apps/worker/src/modes.ts`. So, we can show results on screen
  * much faster and aren't worried about pegging a prod server */
 const STUBBED_POLL_INTERVAL_MS = 1_000;
@@ -21,7 +21,7 @@ export const FAILURES_BEFORE_NOTICE = 2;
 /** The interval to poll the report page at for a given `WORKER_MODE`.
  *
  * Only `stubbed` gets the fast interval. `mock-llm` is meant to feel like production, cadence
- * included, and `live`/`off` *are* production or off — matching `apps/worker/src/modes.ts`'s own
+ * included, and `live` (real OpenAI) and `off` *are* production or off — matching `apps/worker/src/modes.ts`'s own
  * reasoning for which modes get `STUBBED_OVERRIDES`. An unset or unrecognised mode falls back to
  * the production interval.
  */

@@ -1,5 +1,5 @@
-// Temporary: part of the one-time go-live import of GBD's cache CSVs
-// (.claude/plans/caches-to-supabase.md). This directory is deleted once that import is checked.
+// Temporary: part of the go-live import of GBD's cache CSVs
+// (.claude/plans/caches-to-supabase.md). This directory is deleted after the final import.
 //
 // Pure functions from CSV records to rows each table's checks accept. A row the pipeline could
 // still use after an obvious fix is fixed; a row nobody could use is skipped; a row only a human

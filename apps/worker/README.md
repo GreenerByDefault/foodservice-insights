@@ -29,9 +29,9 @@ Beyond the vars every package reads from `.env`, it needs:
 | `WORKER_MODE` | Which `analyze` the child runs — see below |
 | `WORKER_ID` | Optional. Defaults to a value derived from the host and process |
 | `WORKER_MAX_CONCURRENT_ATTEMPTS` | Optional. Overrides `maxConcurrentAttempts` |
-| `PLATFORM_SHUTDOWN_GRACE_MS` | The host's shutdown grace, which `drainGraceMs` is derived from. Required by `live`; optional otherwise |
+| `PLATFORM_SHUTDOWN_GRACE_MS` | The host's shutdown grace, which `drainGraceMs` is derived from. Required by `WORKER_MODE=live`; optional otherwise |
 | `WORKER_DRAIN_GRACE_MS` | Optional. Overrides the derived `drainGraceMs` |
-| `CACHE_DB_CONNECTION_STRING` | Optional. Points the categorization cache's reads and suggestions at another database than `DB_CONNECTION_STRING`'s: on a laptop, the hosted project as `cache_client`. Only `live` honors it; `stubbed` and `mock-llm` log a warning and use their own. Production leaves it unset |
+| `CACHE_DB_CONNECTION_STRING` | Optional. Points the categorization cache's reads and suggestions at another database than `DB_CONNECTION_STRING`'s: on a laptop, the hosted project as `cache_client`. Only `WORKER_MODE=live` honors it; `stubbed` and `mock-llm` log a warning and use their own. Production leaves it unset |
 
 `createWorkerConfig` in [`src/config.ts`](src/config.ts) is the only way to obtain a checked
 `WorkerConfig` — every tunable, and the relations enforced between them, is documented there
@@ -44,12 +44,12 @@ fast local loop needs different timings than production, which config profile to
 For what each mode gives you and when to pick it, see the root
 [`README.md`](../../README.md#analysis-modes).
 
-| `WORKER_MODE` | Runs | Timings |
-| --- | --- | --- |
-| `mock-llm` | `python -m worker_child.mock_llm` | Production |
-| `live` | `python -m worker_child` | Production |
-| `stubbed` | `python -m worker_child.testing` | Fast, so `!hang` is killed while you watch |
-| `off` | Nothing | — |
+| `WORKER_MODE` | Analysis | Runs | Timings |
+| --- | --- | --- | --- |
+| `mock-llm` | Real, with a keyword list instead of OpenAI | `python -m worker_child.mock_llm` | Production |
+| `live` | Real, categorized by OpenAI; what production runs | `python -m worker_child` | Production |
+| `stubbed` | Fake, finishing in seconds | `python -m worker_child.testing` | Fast, so `!hang` is killed while you watch |
+| `off` | None | Nothing | — |
 
 ## Layout
 
