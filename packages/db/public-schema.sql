@@ -860,7 +860,8 @@ CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_quality_check" (
     "quality_check" "public"."quality_check" NOT NULL,
     "status" "public"."diagnostic_status" NOT NULL,
     "findings" integer NOT NULL,
-    CONSTRAINT "analysis_attempt_quality_check_findings_positive" CHECK (("findings" >= 1))
+    CONSTRAINT "analysis_attempt_quality_check_findings_positive" CHECK (("findings" >= 1)),
+    CONSTRAINT "analysis_attempt_quality_check_status_is_warning_or_error" CHECK (("status" = ANY (ARRAY['warning'::"public"."diagnostic_status", 'error'::"public"."diagnostic_status"])))
 );
 
 
@@ -870,7 +871,7 @@ ALTER TABLE "public"."analysis_attempt_quality_check" OWNER TO "postgres";
 -- Name: TABLE "analysis_attempt_quality_check"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE "public"."analysis_attempt_quality_check" IS 'How many findings each quality check reported at each status, for an attempt whose report was built. Success rows are kept, so a firing rate has a denominator. Outlives the attempt, report and organization it describes, and holds no personal data.';
+COMMENT ON TABLE "public"."analysis_attempt_quality_check" IS 'How many warning and error findings each quality check reported, for an attempt whose report was built. No rows means every check passed. Outlives the attempt, report and organization it describes, and holds no personal data.';
 
 
 --

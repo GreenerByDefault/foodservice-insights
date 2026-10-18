@@ -15,7 +15,7 @@ export type AnalysisAttemptQualityCheckStatus = DiagnosticStatus & {
 
 /**
  * Represents the table public.analysis_attempt_quality_check
- * How many findings each quality check reported at each status, for an attempt whose report was built. Success rows are kept, so a firing rate has a denominator. Outlives the attempt, report and organization it describes, and holds no personal data.
+ * How many warning and error findings each quality check reported, for an attempt whose report was built. No rows means every check passed. Outlives the attempt, report and organization it describes, and holds no personal data.
  */
 export default interface AnalysisAttemptQualityCheckTable {
   analysisAttemptId: ColumnType<AnalysisAttemptId, AnalysisAttemptId, AnalysisAttemptId>;
