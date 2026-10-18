@@ -26,7 +26,8 @@ export const WORKER_DATABASE: Kysely<Database> = initializeDatabase({
   log: WORKER_LOG,
 });
 
-/** The handle for `CACHE_DB_CONNECTION_STRING`, which only a laptop's `live` worker sets, as
+/** The handle for `CACHE_DB_CONNECTION_STRING`, which only a laptop's
+ * `WORKER_MODE=live` worker sets, as
  * `cache_client` on the hosted project.
  *
  * Two connections and none kept while idle, because everyone who holds the role shares its 10

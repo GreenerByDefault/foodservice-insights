@@ -34,13 +34,6 @@ without it. `.env.example` ships a working `SITE_PASSWORD`; if you change it, ke
 minimum length in [`site-password.ts`](apps/web/src/lib/server/auth/site-password.ts), or sign-in
 errors.
 
-Optionally, get the `previously_categorized_items.csv` cache from Greener by Default and load it
-into your local database, once per machine; without it, every product goes to the LLM:
-
-```sh
-pnpm --filter @gbd/db temporary-go-live-cache-import --products <csv> --mirror --write
-```
-
 ### Start it
 
 If the databases have stopped, for example after a computer restart, start them first:
@@ -77,9 +70,36 @@ page checks for a result.
 | `WORKER_MODE` | What you get | Use it for |
 | --- | --- | --- |
 | `mock-llm` (default) | The real analysis, with a real PDF and workbook. A keyword list categorizes products instead of OpenAI, so products it does not recognize are left uncategorized. No API key needed. | Demos with the sample data, and most development |
-| `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. | Real procurement data |
+| `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. Point it at [production's cache](#the-categorization-cache). | Real procurement data |
 | `stubbed` | A fake analysis that finishes in seconds. Its PDF and workbook are placeholders that will not open. The report name drives failure scenarios such as `!slow` and `!fail:<reason>`; see [`testing.py`](python/worker_child/worker_child/testing.py) for the full list. | Working on the report lifecycle and its error states |
 | `off` | No worker, so reports stay queued. | UI work that doesn't need a result |
+
+### The categorization cache
+
+The worker looks each product up in a cache of categorizations that a person has verified, and
+sends only the rest to the LLM. Yours is in your local database, and starts empty. With
+`WORKER_MODE=live` (the real analysis, categorized by OpenAI), point it at production's instead, so your runs start from Greener by Default's answers:
+
+1. Ask Greener by Default for the `cache_client` connection string, and treat it like
+   `OPENAI_API_KEY`. It can only read the cache and suggest rows to it.
+2. Put it in `.env` as `CACHE_DB_CONNECTION_STRING`, beside `WORKER_MODE=live`, in the form
+   `.env.example` shows: its `sslrootcert` is the absolute path to this repo's `supabase-ca.crt`.
+3. Restart the worker. Its `Worker started` line names the cache database as
+   `cache_client@db.<project-ref>.supabase.co:5432/postgres`, not `worker`.
+
+Each product your runs send to the LLM then lands in production's cache as a suggestion, which a
+person verifies in Supabase Studio before any run uses it.
+
+- **Comment the line out while changing the categorization prompt or model.** Otherwise the
+  experiment's answers become the first suggestion for every product it sees, and block the real
+  model's.
+- **Never put this string in `DB_CONNECTION_STRING`.** Your worker would claim production's
+  reports.
+- `WORKER_MODE=mock-llm` and `stubbed` ignore it with a warning, so their keyword and fake
+  answers never reach the shared cache, and use your local one.
+
+Without the string, you can load a CSV copy of the cache into your local database with the
+[temporary go-live import](packages/db/scripts/temporary-go-live-cache-import/README.md).
 
 ### Signing in for real
 
@@ -291,8 +311,7 @@ Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
 Which to run when:
 
-- After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`,
-  then the cache import above if you have the CSV.
+- After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`.
 - For tests, `test:e2e` and `test:screenshots` clone a fresh, migrated database per run and seed it
   themselves. The vitest tiers migrate the shared test database and never truncate it.
 

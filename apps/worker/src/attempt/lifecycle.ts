@@ -51,8 +51,8 @@ export type AttemptDependencies = Pick<
   'workerId' | 'runRoot' | 'childCommand' | 'killGraceMs' | 'transientRetryWaitsMs'
 > & {
   db: DatabaseExecutor;
-  /** The only handle the categorization cache's queries use. `db` itself, unless a laptop's `live`
-   * worker set `CACHE_DB_CONNECTION_STRING`. */
+  /** The only handle the categorization cache's queries use. `db` itself, unless a laptop's
+   * `WORKER_MODE=live` worker set `CACHE_DB_CONNECTION_STRING`. */
   cacheDb: DatabaseExecutor;
   store: BlobStore;
   /** The worker's own. Each attempt's lines go through a child of it: `PreparedAttempt.log`. */

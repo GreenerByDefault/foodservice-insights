@@ -1,10 +1,10 @@
-// Temporary: part of the one-time go-live import of GBD's cache CSVs
-// (.claude/plans/caches-to-supabase.md). This directory is deleted once that import is checked.
+// Temporary: part of the go-live import of GBD's cache CSVs
+// (.claude/plans/caches-to-supabase.md). This directory is deleted after the final import.
 //
 // Every import row lands verified. A conflicting row that is still unverified, such as a worker's
 // harvested suggestion, is overwritten with the golden value; a verified one is left alone, so a
-// re-run never clobbers a reviewer's edit. A local `--mirror` run instead empties each table
-// first, so the table becomes exactly the file.
+// re-run never clobbers a reviewer's edit. A `--mirror` run instead empties each table first, so
+// the table becomes exactly the file.
 
 import { type Kysely, type RawBuilder, sql } from 'kysely';
 import type { Database, DatabaseExecutor } from '../../src/schema.ts';

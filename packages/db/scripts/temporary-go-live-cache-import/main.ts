@@ -1,6 +1,5 @@
-// Temporary: the one-time go-live import of GBD's cache CSVs. README.md says how to run it; this
-// directory is deleted once that import is checked. See target.ts for how --production differs
-// from a local run.
+// Temporary: the go-live import of GBD's cache CSVs. README.md says how to run it; this directory
+// is deleted after the final import. See target.ts for how --production differs from a local run.
 
 import { readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
@@ -20,7 +19,13 @@ import {
   UNIT_COLUMNS,
 } from './clean.ts';
 import { readCsv } from './csv.ts';
-import { ask, connectionFor, describeConnectionString, targetFor } from './target.ts';
+import {
+  ask,
+  connectionFor,
+  describeConnectionString,
+  importsAroundRefusedRows,
+  type Target,
+} from './target.ts';
 import {
   type ImportCounts,
   importInOneTransaction,
@@ -49,7 +54,7 @@ const { values: args } = parseArgs({
 });
 
 async function main(): Promise<number> {
-  const target = targetFor(args);
+  const target: Target = args.production ? 'production' : 'local';
   const imports = planImports();
   if (imports.length === 0) {
     console.error('Pass at least one of --products, --entrees and --units.');
@@ -57,7 +62,7 @@ async function main(): Promise<number> {
   }
   for (const planned of imports) printCleaning(planned);
   if (imports.some(({ cleaned }) => cleaned.refused.length > 0)) {
-    if (!args.mirror) {
+    if (!importsAroundRefusedRows(target, args)) {
       console.error('\nRefused: fix the rows above in the CSV, then run this again.');
       return 1;
     }
@@ -85,8 +90,9 @@ async function main(): Promise<number> {
         printCounts(imports, counts);
         if (!args.write) return false;
         if (target === 'local') return true;
+        const change = args.mirror ? 'replace every row of these tables in' : 'write these rows to';
         const answer = await ask(
-          `\nType COMMIT to write these rows to ${description}. Anything else rolls back: `,
+          `\nType COMMIT to ${change} ${description}. Anything else rolls back: `,
         );
         return answer === 'COMMIT';
       },

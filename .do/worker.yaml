@@ -52,10 +52,11 @@ workers:
         window: FIVE_MINUTES
 
     envs:
-      # Not `live` until the categorization caches are in Supabase
-      # (`.claude/plans/caches-to-supabase.md` § Go-live), which also adds `OPENAI_API_KEY`.
       - key: WORKER_MODE
-        value: mock-llm
+        value: live
+      - key: OPENAI_API_KEY
+        type: SECRET
+        value: ${OPENAI_API_KEY}
       - key: PLATFORM_SHUTDOWN_GRACE_MS
         value: "600000"
 

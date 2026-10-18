@@ -14,10 +14,10 @@ This plan moves all three into Postgres, with one rule: **a row is used only onc
 verified it in Supabase Studio.** The worker parent materializes the verified product rows into
 each run directory at claim time, so a long-lived worker always runs the latest review; the child
 returns what its LLM categorized and the parent inserts those rows unverified; the lab, and a
-developer's `live` worker, read the same verified rows and suggest to the same table through a
+developer's `WORKER_MODE=live` worker (the real analysis, categorized by OpenAI), read the same verified rows and suggest to the same table through a
 database role that can do nothing else. The analysis library never touches the database.
 
-Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
+Facts that shape the design (the tree as of 2026-10-18, and what GBD has said):
 
 - **The library is already a reader.** #400 deleted every product-side write;
   `categorize_unique_products` takes a `CategorizationCache` (#423) built by `from_frame`, which
@@ -32,9 +32,9 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   per-claim query is the simplest way to always see the latest verified rows.
 - **The worker's own database handle** (`WORKER_DATABASE` in `apps/worker/src/db.ts`, from
   `DB_CONNECTION_STRING`) is the dev stack locally. So, without more, a developer's
-  `pnpm dev:worker` in `live` mode would read an empty local cache and bury its real OpenAI
+  `pnpm dev:worker` with `WORKER_MODE=live` would read an empty local cache and bury its real OpenAI
   categorizations in a database nobody reviews. `live` on a laptop is the same model and the
-  same prompts as production; `mock-llm` is a keyword fake whose answers must never reach a
+  same prompts as production; `mock-llm` (the real analysis, a keyword list instead of OpenAI) is a keyword fake whose answers must never reach a
   shared cache.
 - **The worker has a separate handle for the cache.** `AttemptDependencies.cacheDb` (threaded from `WorkerDependencies.cacheDb` in
   `createWorker`) is the only handle the cache queries may use. `resolveWorkerMode` takes
@@ -58,8 +58,9 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   stacks also run with `[api] enabled = false`, so PostgREST is not a path for the lab either.
 - **One connection string serves everything, as `postgres`**, and it is the string the Supabase
   dashboard hands out: full access. Nothing in this repo has yet connected to the hosted project
-  as anything else. `cache_client` is the first custom role, and only the local stacks have it.
-- **The tables and the role exist on `main`, but not yet in production.**
+  as anything else. `cache_client` is the first custom role, and nobody has logged in as it on
+  the hosted project, where it has no password yet.
+- **The tables and the role exist on `main`**, and reach production through `deploy.yml` (below).
   `packages/db/migrations/002_caches.ts` creates `product_categorization`,
   `entree_classification` and `unit_weight`, the `set_verified_at()` trigger and `cache_client`;
   `public-schema.sql` has their columns and checks, and `tests/caches.test.ts` asserts every
@@ -93,7 +94,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   refuses fails the run with no files left behind, then writes it before `result.json`.
   `CategorizedProducts.new_categorizations` holds the `match_type == "llm"`
   products with that frame's cleaned names, and is the one definition of "new" for the worker and
-  the lab's push (PR 3); `analyze()` passes it through as `AnalysisOutcome.new_categorizations`,
+  the lab's push (PR 2); `analyze()` passes it through as `AnalysisOutcome.new_categorizations`,
   default `()`, which `stub_analysis` takes as a keyword. The child test double's scenario
   carries it as `newCategorizations`. The library's row types are `CachedCategorization`
   (`categorization/cache.py`) and `NewCategorization` (`categorization/pipeline.py`), both
@@ -111,6 +112,12 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   than throw. Every successful run, `mock-llm` included, now suggests its LLM's answers to
   whichever database `cacheDb` is. The TypeScript fake child's `result` step writes the
   document, `newCategorizations` defaulting to none, unless `withoutNewCategorizations`.
+- **The production worker has never harvested, and its next deploy sets `WORKER_MODE=live`.** Its last deploy
+  (2026-10-16, `509f916b`) reads the cache per claim but predates #622 and #627, so production's
+  tables should hold no harvested rows; the interim import's `deleted` count confirms it.
+  `.do/worker.yaml` now sets `WORKER_MODE` to `live`, with `OPENAI_API_KEY` from the `production`
+  GitHub Environment through `deploy.yml`, so the next dispatched deploy is both the first `live`
+  fleet and the first that harvests.
 - **Hosted Supabase facts, from its docs on 2026-10-11.** A custom role is an ordinary
   `CREATE ROLE … LOGIN PASSWORD` that the SQL editor, running as `postgres`, may issue —
   Supabase's own roles post creates one that way; `postgres` is not a superuser but has the
@@ -129,18 +136,27 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   whitespace; 2 contain newlines and 703 contain quotes; the longest is 435 characters; 106
   categories are blank and a few more are misspelled. The entree file has no whitespace problems;
   the weights file has 7 blank weights and 4 units with surrounding whitespace. A data scientist
-  is sending an updated copy with new entries and some cleaning; the go-live import runs on that,
+  is sending an updated copy with new entries and some cleaning; the final import runs on that,
   so these counts will move. A local dry run of the import on the 2026-09-27 copy keeps 38,201
   rows, rewrites 6 whose category differs from a known one only in case, skips the 106 blank
   categories and 371 earlier repeats (11 with a different category), and refuses 14 rows across
   8 unknown categories (`na`, `Mlik`, `Plan-Based Mayo`, `Plant-Based Butter`, `Plant-Based
   Chocolate`, `Plant-Based Cream`, `Coconut milk`, `Stone Fruit`), which go back to the data
   scientist.
+- **The interim copy is the 2026-09-27 copy, cleaned on 2026-10-18 by the cache's own rules.**
+  Products are stripped; blank categories and earlier repeats of a product are dropped; the six
+  case-only categories are corrected; `Mlik` becomes `Milk (Cow's milk)` and `Coconut milk`
+  becomes `Almond/Coconut Milk`; and the other 12 refused rows are dropped. That is exactly what
+  the import would load from the 2026-09-27 copy, plus those two rows: 38,203 products, with the
+  entree and weight files unchanged at 1,989 and 893. Checked against a replica of `clean.ts`,
+  every row of all three files imports, with nothing skipped, rewritten or refused. No product
+  spans lines once stripped. Eric holds the copy.
 - **A temporary go-live import script is on `main`**, in
   `packages/db/scripts/temporary-go-live-cache-import/` and nowhere else, so it never becomes a
-  sync tool: until go-live it is how a developer loads the local cache (§ The dress rehearsal),
-  § Go-live step 2 runs it once against production, following the directory's `README.md`, and
-  PR 2 deletes it. It loads any of the three CSVs
+  sync tool: until the final import it is how a developer loads the local cache (§ Go live on
+  the interim copy), § Go-live runs it twice against production, following the directory's
+  `README.md` — on the interim copy, then on the final one — and PR 3 deletes it. It loads any
+  of the three CSVs
   as verified rows in one transaction, `import:<file>` in `suggested_by`, cleaning products as
   `from_frame` does and refusing a category outside the YAML's `cool_food_pledge_name`s (what
   `category_names()` returns, not the short `name`) unless it differs only in case. Its upsert
@@ -152,14 +168,19 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   ignores the environment, needs a person at a terminal, reads the `postgres` connection string
   from a prompt that does not echo it, verifies TLS against `supabase-ca.crt`, and commits only after that person reads the counts and
   types `COMMIT`. A dry run of every local CSV on 2026-10-13 still refused the 14 rows above.
-  Until go-live it is also the local loader: `--mirror`, which `--production` rejects before
-  reading anything, deletes every row of each table it imports inside the same transaction and
-  imports around refused rows, listing them, so the local tables become exactly the file's
-  usable rows; its counts gain `deleted` (§ The dress rehearsal). A dry run of the same CSVs
-  with `--mirror` on 2026-10-13 would have loaded 38,201, 1,989 and 893 rows.
-- **GBD's final CSVs are a week or two away** (as of 2026-10-13). Everything in this plan except
-  touching production lands before then, as a dress rehearsal against each developer's local
-  database (§ The dress rehearsal).
+  `--mirror` deletes every row of each table it imports inside the same transaction, and its
+  counts gain `deleted`; production's `COMMIT` prompt then says it replaces every row. Locally it
+  imports around refused rows, listing them, so the local tables become exactly the file's usable
+  rows; in production a refused row still stops it (`importsAroundRefusedRows` in `target.ts`,
+  whose header says why production may delete). A dry run of the 2026-09-27 CSVs with `--mirror`
+  on 2026-10-13 would have loaded 38,201, 1,989 and 893 rows.
+- **GBD's final CSVs are still a week or two away** (as of 2026-10-18), and until production
+  holds a cache the fleet cannot run `live`. Only GBD staff use the site until the final import,
+  so production goes live now on the interim copy, and the final import replaces it (§ Go live
+  on the interim copy).
+- **The root `README.md` documents the hosted cache.** § The categorization cache gives a
+  developer's steps and rules, and `.env.example`'s `CACHE_DB_CONNECTION_STRING` comment points
+  there. They work once § Go-live step 4 hands out the strings.
 - **Two data scientists run the lab locally and will keep doing so.** They rely heavily on AI
   agents when writing code, so any credential they hold is one an agent may misuse. Their
   current copies of the caches are already behind GBD's.
@@ -218,7 +239,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **The child writes `output/new-categorizations.json` before `result.json`**: the products the
   LLM categorized this run, with the LLM's cleaned name and its answer, `No Matches Found`
   included — negative results are most of the cache: the `match_type == "llm"` products, which
-  the lab pushes too (PR 3). *Rejected: harvesting cleaned-name-history hits
+  the lab pushes too (PR 2). *Rejected: harvesting cleaned-name-history hits
   too.* The pipeline already trusts those without review; suggesting them would fill the queue
   with rows nobody needs to look at, at the price of one name-cleaning call per run.
   *Rejected: carrying the rows inside `result.json`.* A table does not belong in a document the
@@ -251,7 +272,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   attempts. *Rejected: pulling the verified rows into the dev database and pushing harvests
   back.* A second mechanism, and a local run's suggestions would sit unreviewed until someone
   remembered to push.
-- **Honored only in `live`.** In `mock-llm` and `stubbed` the worker ignores the variable and
+- **Honored only with `WORKER_MODE=live`.** In `mock-llm` and `stubbed` the worker ignores the variable and
   logs one startup WARNING naming it: a keyword categorization in a shared cache would block
   the real LLM's suggestion for that product forever, since the first suggestion wins. Those
   modes keep the cache in the local database, read and written, which is what the by-hand check
@@ -263,9 +284,8 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   lab holds one credential, and a harvested row's `suggested_by` carries the worker id after
   the attempt id, so a reviewer can tell a laptop's run from the fleet's — a laptop's attempt id
   is not in production's `analysis_attempt`.
-- **What an app developer who never opens the lab does**, and what the root `README.md`
-  § Analysis modes says once production holds the cache (PR 2; until then, § The dress
-  rehearsal):
+- **What an app developer who never opens the lab does**, which the root `README.md` § The
+  categorization cache gives as steps:
   1. Ask whoever holds dashboard access (Eric, until the **Open** on who verifies is
      settled) for the composed `cache_client` string, delivered the way `OPENAI_API_KEY` is,
      never in a chat that an agent or a log can read.
@@ -288,7 +308,7 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **A developer changing the categorization prompt or model unsets the variable first.** An
   experiment's answers would otherwise become the first suggestion for every product they
   touch and block the real model's suggestion until a reviewer deletes them, which is the lab's
-  `push_suggestions=False` case (PR 3) on the worker side. With the variable unset, the
+  `push_suggestions=False` case (PR 2) on the worker side. With the variable unset, the
   experiment's cache is the local database. The README says this beside step 2.
 - **The string is one shared password.** Everyone who holds `cache_client` holds the same one,
   so revoking a single person means `ALTER ROLE cache_client PASSWORD` and handing the new string
@@ -338,14 +358,14 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
   assumes a Postgres role with their own token as the password, with an expiry and IP allowlist. It needs the person to
   be a dashboard member, which on Free and Pro means Developer and so the SQL editor anyway, and
   its plan availability is undocumented. Worth revisiting if GBD is ever on Team.
-- **The hosted path is unproven, so prove it before migrating production** (§ Go-live step
-  1), in ten minutes against the real project with a throwaway role: `CREATE ROLE smoke LOGIN
+- **The hosted path is unproven, so prove it before handing out a string** (§ Go-live step
+  4), in ten minutes against the real project with a throwaway role: `CREATE ROLE smoke LOGIN
   PASSWORD …` in the SQL editor, `GRANT SELECT` on an existing table, then from a laptop `psql`
   to the direct host as `smoke`, with TLS; confirm a `SELECT` works and an `UPDATE` and a
   `SELECT` from `report` fail with `42501`; then `DROP ROLE`. `002_caches` grants no `USAGE ON
   SCHEMA public`, because `PUBLIC` holds it on both local stacks; if the smoke test's `SELECT`
-  fails on the schema rather than the table, add that grant in a new migration before migrating
-  production.
+  fails on the schema rather than the table, add that grant in a new migration, and let it reach
+  production before handing out the string.
 - **The lab reads the worker's `CACHE_DB_CONNECTION_STRING`, never `DB_CONNECTION_STRING`.**
   For the data scientists it is `cache_client` on the direct host, with TLS — the string above;
   a developer uses one string for the lab and `pnpm dev:worker` alike, or points it at the local
@@ -378,54 +398,67 @@ Facts that shape the design (the tree as of 2026-10-11, and what GBD has said):
 - **The analysis library stays free of any database client.** `psycopg` is a lab dependency
   only; the lab is where the sync code lives.
 
-### The dress rehearsal: local first, production at go-live
+### Go live on the interim copy; the final import replaces it
 
-The code is ready before GBD's final CSVs are, so PR 1 lands first and every process runs
-against the local database; § Go-live, then PRs 2 and 3, follow once the files arrive.
+Production goes live on the interim copy (§ Context), and everything but deleting the import
+lands before GBD's final files: the strings go out once the smoke test passes, and the lab's PRs
+merge when they are ready.
 
-- **Until go-live, the CSV is the human copy and the local database is loaded from it.** A
-  developer keeps GBD's three files and runs the import with `--mirror --write`; the product no
-  longer reads the CSV. After go-live the arrow reverses: the hosted table is the
-  source, and a CSV is only ever a pulled snapshot.
-
-  | Process | Until go-live | After |
-  | --- | --- | --- |
-  | Worker parent | the local database, through its own handle; `CACHE_DB_CONNECTION_STRING` unset, which is production's configuration | the hosted project: the fleet through its own handle, a laptop's `live` worker through the variable |
-  | Lab, a developer rehearsing it | the variable at the dev stack as `postgres`; `pull` writes the lab's CSV paths | the hosted project as `cache_client` |
-  | Lab, a data scientist | the variable unset; the file on disk, as today | the hosted project as `cache_client` |
-
-- **`--mirror`, local only, makes the tables exactly the CSV's usable rows**, which is what the
+- **Go live on the interim copy rather than wait for the final one.** Its rows are GBD's own
+  answers, cleaned only by rules the cache applies anyway, so a report on it is what a report on
+  the CSV gave the lab. What the final copy adds, new entries and the data scientist's
+  cleaning, matters for clients, not for GBD staff checking the site. *Rejected: waiting for
+  the final files* (this plan's earlier draft). It blocked `live` on a delivery date outside our
+  control.
+- **The interim cleaning decides nothing a person did not.** Two categories are typos with one
+  possible meaning, so they are fixed. The 12 rows whose category is not in the YAML and has no
+  single match are dropped, so the LLM answers for them. *Rejected: mapping those to `No Matches
+  Found` or a near category.* A dropped row costs an LLM call per run, but a guessed verified row
+  is used silently. The 20,008 cleaned names equal to their product are left for the data
+  scientist.
+- **Both production imports delete every row of the three tables, then load their copy, in one
+  transaction.** That is `--mirror`, which production takes. The interim import deletes whatever
+  a deploy harvested before it; the final one deletes the interim rows, every harvest and push
+  since, and any Studio edit. So the tables become exactly the file's usable rows, and the count
+  check stays "the file's rows minus the reported skips". In production a refused row still
+  stops the import.
+  *Rejected: a plain re-import.* Its upsert leaves every verified row alone, so it would replace
+  nothing the interim import loaded. *Rejected: deleting only verified rows, keeping the
+  interim's harvests as the review queue.* The count check gains an unknown term, and a lost
+  suggestion costs one LLM call. *Rejected: a `DELETE` in the SQL editor, then a plain import.*
+  Between the two every report runs on an empty cache, and a failed import leaves it empty.
+- **Until the final import, unverified rows are ignored.** The product never reads them, and
+  nobody reviews or verifies them in Studio, since the final import deletes them. Review starts
+  after it.
+- **The strings go out before the final import.** The fleet needs no custom role, but developers
+  and data scientists use the hosted cache as soon as the smoke test passes (§ Go-live step 4).
+  Whatever they suggest before the final import is deleted by it, which costs an LLM call per
+  product the next time it is seen. *Rejected: holding the strings until the final import*
+  (this plan's previous draft). It saves only those calls, and blocks the lab's PRs.
+- **From go-live on, the hosted table is the source**, and a CSV is a pulled snapshot or the
+  local loader's input. A developer's `live` worker reads it through `CACHE_DB_CONNECTION_STRING`
+  (README § The categorization cache), and the lab pulls it once a data scientist holds the
+  string (PR 1). Without the string, a developer's cache is their local database: empty, unless
+  they load a CSV with the import's local `--mirror --write`, until PR 3 deletes it.
+- **Locally, `--mirror` makes the tables exactly the CSV's usable rows**, which is what the
   product got from reading the file. In the import's one transaction, it deletes every row of
-  each table it imports, unverified harvests included, before inserting; and it skips a refused
-  row, still listing it, rather than stopping. Without it the
-  rehearsal breaks twice: the 2026-09-27 copy's 14 refused rows stop the whole import, although
-  `from_frame` drops the same rows with a WARNING today; and a re-import of a changed CSV leaves
-  every changed row alone as already verified and keeps every row the file dropped, so the
-  local cache drifts from the human copy. `--production` rejects it: there a refused row goes
-  back to the data scientist, and a verified row may be a reviewer's edit.
-  Both forms are idempotent: without `--mirror` a second run writes nothing; with it, a second
-  run deletes and reinserts the same rows.
-  *Rejected: hand-fixing the 14 rows in each developer's copy.* The copies drift, and GBD's
-  final file is coming anyway. *Rejected: a `TRUNCATE` in the README instead.* One more command
-  to get wrong, and a dry run would not show it.
-- **One import serves every worktree, and anything that empties the dev database empties the
-  cache.** Worktrees share `supabase-dev`, so the import runs once per machine. A fresh clone,
-  `pnpm truncate` and `scripts/supabase db reset` need it again, beside `pnpm migrate` and
-  `pnpm seed:identity`. A developer who skips it is a fresh clone: every product goes to the
-  LLM, and nothing breaks.
-- **Docs say only what works today.** The root README gives the import command, and names it in
-  the after-a-reset line. § Local development's four developer steps, which hand out a
-  production string, wait for PR 2; the lab README's hosted string waits for PR 3.
+  each table it imports, unverified harvests included, before inserting; and locally it skips a
+  refused row, still listing it, rather than stopping. Without it a local import breaks twice: a
+  copy with a refused row, like the 2026-09-27 one, stops the whole import, although
+  `from_frame` drops the same rows with a WARNING; and a re-import of a changed CSV leaves every
+  changed row alone as already verified and keeps every row the file dropped, so the local cache
+  drifts from the human copy. Both forms are idempotent: without `--mirror` a second run writes
+  nothing; with it, a second run deletes and reinserts the same rows.
+  *Rejected: a `TRUNCATE` in the README instead.* One more command to get wrong, and a dry run
+  would not show it.
 - **`pull` overwrites the lab's CSV paths.** A developer rehearsing the lab keeps GBD's
   originals elsewhere, which is where the import reads them from: a pulled file holds the
   database's rows, without the skipped and refused ones.
-- **PR 3 waits for go-live step 4.** It ends the lab's automatic entree-file append, and until
-  a data scientist has a database to push to, that is only a loss: a repeat serving run re-asks
-  Gemini for every product the file would have gained, and can label it differently than last
-  time. PR 1 is safe now, since with the variable unset the lab is unchanged.
-- **A production worker deployed during the rehearsal is no worse off than today.** A CI-built
-  image has had no cache since the CSV was gitignored; it now reads an empty production table
-  instead, and suggests into it, which the import later promotes.
+- **PR 2 waits for the data scientists to hold the string**, not for the final import. It ends
+  the lab's automatic entree-file append, and until a data scientist has a database to push to,
+  that is only a loss: a repeat serving run re-asks Gemini for every product the file would have
+  gained, and can label it differently than last time. PR 1 is safe any time, since with the
+  variable unset the lab is unchanged.
 
 ### Open-source contributors
 
@@ -446,15 +479,16 @@ settles where runbooks live.
 
 ## The PRs
 
-Each PR is either TypeScript or Python, never both, and each is safe to merge alone.
+Each PR is either TypeScript or Python, never both, and each is safe to merge alone. Going live
+needs none of them.
 
 | PR | Stack | Needs | What a production run does differently |
 | --- | --- | --- | --- |
 | 1 — the lab pulls | Python | — | nothing |
-| 2 — go-live for developers | `packages/db`, docs | § Go-live step 2 | nothing |
-| 3 — the lab pushes | Python | 1, § Go-live step 4 | nothing |
+| 2 — the lab pushes | Python | 1, § Go-live step 4 | nothing |
+| 3 — delete the import | `packages/db`, docs | § Go-live step 5 | nothing |
 
-PR 1 finishes the dress rehearsal. PRs 2 and 3 are go-live, each merged at its step.
+Whichever of PRs 2 and 3 lands last deletes this plan.
 
 ## PR 1 — the lab pulls
 
@@ -506,32 +540,15 @@ PR 1 finishes the dress rehearsal. PRs 2 and 3 are go-live, each merged at its s
     the lab too, and gains the dev-stack-as-`postgres` form the lab rehearses with.
   - `python/lab/README.md` gains `just pull-caches`. It says that leaving the variable unset
     keeps today's behaviour and that a pull overwrites the three files. It keeps the "handed out
-    privately" paragraph until PR 3.
+    privately" paragraph until PR 2.
 - Rehearse: point the variable at the dev stack as `postgres` after a `--mirror` import. A pull
   writes three files whose row counts match the import's, and a categorize run on `test_data/`
   reads them.
 
-## PR 2 — go-live for developers: delete the import, hand out the hosted cache
+## PR 2 — the lab pushes, and stops writing its files
 
-This PR lands as soon as § Go-live step 2's checks pass.
-
-- It deletes `packages/db/scripts/temporary-go-live-cache-import/` and `@gbd/db`'s
-  `temporary-go-live-cache-import` script.
-- The root `README.md`'s import paragraph and after-a-reset mention become § Analysis modes'
-  `live` row. That row points to a short subsection with § Local development's four developer
-  steps and the prompt-experiment rule.
-- It removes this PR, the Context bullets about the script, and § The dress rehearsal from this
-  plan.
-
-*Rejected: keeping it as a seeding tool.* Nobody outside GBD has the CSVs, and a fresh clone
-works with an empty cache. A developer who wants real rows points `CACHE_DB_CONNECTION_STRING`
-at the hosted project. A CSV that turns up later can be loaded by restoring the script from git
-history.
-
-## PR 3 — the lab pushes, and stops writing its files
-
-This PR merges at § Go-live step 4, not before (§ The dress rehearsal). Rehearse it beforehand
-against the dev stack as `postgres`.
+This PR merges once the data scientists hold the string (§ Go-live step 4), not before (§ Go
+live on the interim copy). Rehearse it beforehand against the dev stack as `postgres`.
 
 - `cache_sync.py`: `push_product_categorizations(connection, frame, suggested_by)`,
   `push_entree_classifications` and `push_unit_weights`.
@@ -568,7 +585,22 @@ against the dev stack as `postgres`.
     the next pull brings the verified rows down.
   - `REQUIREMENTS.md` § Product categorization cache names the lab's two caches under the same
     rule.
-- This PR deletes this plan.
+- If PR 3 has landed, this PR deletes this plan.
+
+## PR 3 — delete the import
+
+This PR lands once the final import's checks pass (§ Go-live step 5).
+
+- It deletes `packages/db/scripts/temporary-go-live-cache-import/`, `@gbd/db`'s
+  `temporary-go-live-cache-import` script, and the root `README.md`'s link to it at the end of
+  § The categorization cache.
+- If PR 2 has landed, it deletes this plan. Otherwise it removes this PR, the Context bullets
+  about the script and the interim copy, and § Go live on the interim copy.
+
+*Rejected: keeping it as a seeding tool.* Nobody outside GBD has the CSVs, and a fresh clone
+works with an empty cache. A developer who wants real rows points `CACHE_DB_CONNECTION_STRING`
+at the hosted project. A CSV that turns up later can be loaded by restoring the script from git
+history.
 
 ## Failure paths
 
@@ -590,53 +622,63 @@ against the dev stack as `postgres`.
 | All 10 of `cache_client`'s connections are in use | the next connection fails with `53300`; the production web and worker are unaffected |
 | A notebook leaves a connection idle for 10 minutes | the server closes it; the next lab command opens a new one |
 | Data scientist runs without `CACHE_DB_CONNECTION_STRING` | today's behaviour on today's file, plus a WARNING with the file's age |
-| Before go-live, a developer has not imported since a fresh clone, `truncate` or `db reset` | an empty local cache: every product goes to the LLM, as with no CSV today |
-| Before go-live, the human copy changes | the next `--mirror` import makes the local tables match it; without `--mirror`, changed rows are left alone and counted as already verified |
-| `--mirror` with `--production` | refused before anything is read |
+| `--mirror` with `--production` | deletes every row of each table it imports, in the import's transaction; a refused row still stops it |
+| A reviewer verifies or edits a row before the final import | the final import deletes it |
+| The worker is deployed before the interim import | every product goes to the LLM, and its suggestions land unverified; the import's `--mirror` deletes them |
+| `OPENAI_API_KEY` missing from the `production` Environment | the worker deploy fails before submitting anything, and the fleet keeps running its previous deploy |
 
 ## Go-live
 
-`deploy.yml`'s migrate step applies `002_caches` with the first deploy after the hosted project is
-set up. Each hand-run step below connects directly, with `DB_CONNECTION_STRING` set for the one
-command, carrying `sslmode=verify-full&sslrootcert=…` the way a hand-composed string does (§ A role
-that can read and suggest).
+`deploy.yml`'s migrate step applies `002_caches` with every web deploy, and the import fails
+loudly on a missing table. The import's `--production` prompts for the direct-connection
+`postgres` string and verifies TLS itself (its `README.md`); a hand-run `psql` connects directly
+with `sslmode=verify-full&sslrootcert=…`, the way a hand-composed string does (§ A role that can
+read and suggest).
 
-1. Run the smoke test in § A role that can read and suggest; then `pnpm --filter @gbd/db
-   migrate` against prod, which reports no pending migrations once a deploy has applied `002`;
-   `ALTER ROLE cache_client PASSWORD '…'` in the SQL editor; compose your own
-   `CACHE_DB_CONNECTION_STRING` in the form § A role that can read and suggest gives, with that
-   password, and check it from a laptop with `psql`.
-2. From a workstation terminal, dry-run all three CSVs against prod in one run:
-   `pnpm --filter @gbd/db temporary-go-live-cache-import --products <csv> --entrees <csv>
-   --units <csv> --production`, pasting the direct-connection `postgres` string at the prompt.
-   Take any refused row or surprising skip back to the data scientist and repeat until the
-   report is clean; then run it again with `--write`, read the counts, and type `COMMIT`. Check
-   each table's count against the CSV's rows minus the reported skips, and spot-check a `No
-   Matches Found` row and a multi-line product in Studio.
-3. Merge a PR that sets `.do/worker.yaml`'s `WORKER_MODE` to `live` and adds `OPENAI_API_KEY` as a
-   secret, with the key stored in the `production` Environment first (`.do/README.md`). The
-   production worker runs `mock-llm` until then. Dispatch a worker deploy, so the fleet runs the
-   cache code against the imported table; any rows an
-   earlier deploy harvested were promoted by step 2's `DO UPDATE … WHERE NOT is_verified` if the
-   CSV knows them. Merge PR 2. From here, every developer's `live` worker runs with
-   `CACHE_DB_CONNECTION_STRING` set: hand each app developer the composed string the same way as
-   in step 4, and have them follow § Local development's steps. Their local tables keep the
-   rehearsal's rows, which `mock-llm` still reads.
-4. Merge PR 3; hand each data scientist the same composed string, checked with `psql`
-   first — the CA it points at is already in their checkout (if the project ever turns on
-   network restrictions, their addresses need allowing);
-   they set `CACHE_DB_CONNECTION_STRING`, pull once, and delete
-   their hand-copied files. `.worktreeinclude` keeps copying the pulled files into new
-   worktrees, now a convenience rather than the only way to get them.
+Now, on the interim copy:
+
+1. Store `OPENAI_API_KEY` in the `production` GitHub Environment (`.do/README.md`). Without it,
+   the next worker deploy fails before submitting anything.
+2. From a workstation terminal, dry-run all three files of the interim copy against prod in one
+   run: `pnpm --filter @gbd/db temporary-go-live-cache-import --production --mirror --products
+   <csv> --entrees <csv> --units <csv>`, pasting the string at the prompt. Before it prompts, it
+   should report every row of each file importing, with nothing skipped, rewritten or refused.
+   Expect nothing deleted, and 38,203, 1,989 and 893 inserted; a deleted row is a harvest
+   (§ Context). Run it again with `--write`, read the counts, and type `COMMIT`. Check each
+   table's count in Studio, and spot-check a `No Matches Found` row, a product with commas and
+   quotes, and the two corrected typos.
+3. Dispatch a worker deploy: the first since 2026-10-16, the first `live` fleet, and the first
+   that harvests. Upload `apps/web/sample-reports/valid.csv` on the production site: the report
+   completes, and its new products appear in Studio unverified, with `attempt:<uuid> <worker
+   id>` in `suggested_by`.
+4. Run the smoke test in § A role that can read and suggest; `ALTER ROLE cache_client PASSWORD
+   '…'` in the SQL editor; compose your own `CACHE_DB_CONNECTION_STRING` in the form § A role
+   that can read and suggest gives, with that password, and check it from a laptop with `psql`.
+   Hand each app developer the composed string the way `OPENAI_API_KEY` is, and have them follow
+   the root README's § The categorization cache. Once PR 1 has landed, hand each data scientist
+   the same string, checked with `psql` first — the CA it points at is already in their checkout
+   (if the project ever turns on network restrictions, their addresses need allowing); they set
+   `CACHE_DB_CONNECTION_STRING`, pull once, and delete their hand-copied files.
+   `.worktreeinclude` keeps copying the pulled files into new worktrees, now a convenience rather
+   than the only way to get them.
+
+When GBD's final files arrive:
+
+5. Dry-run the final copy against prod with `--production --mirror`. Take every refused row, and
+   any surprising skip, back to the data scientist and repeat until the report is clean.
+   `deleted` should be the interim rows plus every harvest and push since, and each table's
+   inserted count the file's rows minus the reported skips. Run it again with `--write`, read the
+   counts, and type `COMMIT`. Check each table's count in Studio, and spot-check a `No Matches
+   Found` row and, if the copy has one, a multi-line product. Then merge PR 3, and start
+   reviewing suggestions in Studio.
 
 ## Verification
 
 Each PR: `pnpm lint && pnpm check && pnpm test` and `just lint && just check && just test`, plus
 `just test-lab` for every Python PR, since the lab imports the library.
 
-The rehearsal, by hand, once PR 1 is in: a `--mirror --write` import of every local CSV
-reports the 14 refused rows as skipped and loads the rest; a second identical run ends with the
-same row counts; a `live` upload of `apps/web/sample-reports/valid.csv` with the variable unset
+The local loader, by hand, once PR 1 is in: a `--mirror --write` import of the interim copy
+loads 38,203, 1,989 and 893 rows; a second identical run ends with the same row counts; a `live` upload of `apps/web/sample-reports/valid.csv` with the variable unset
 starts from those rows, and its new products land unverified in the dev stack; `just pull-caches`
 with the variable at the dev stack writes three files whose row counts match the import's.
 
@@ -646,7 +688,7 @@ rows with `suggested_by = attempt:<id>`; in Studio, change one row's category to
 keyword fake would never answer and tick `is_verified`; a second upload of the same file reports
 that product under the new category in its workbook, which only a cache hit can explain (the
 child logs at WARNING, so the match-type counts are not visible from the worker). After
-go-live, on `live` with `CACHE_DB_CONNECTION_STRING` at the hosted project: a local upload's new products appear in
+§ Go-live step 4, on `live` with `CACHE_DB_CONNECTION_STRING` at the hosted project: a local upload's new products appear in
 production's Studio unverified, with the laptop's worker id in `suggested_by`, and the same
 variable under `mock-llm` logs the WARNING and its upload's suggestions land in the local
 database, not production's. On the lab:

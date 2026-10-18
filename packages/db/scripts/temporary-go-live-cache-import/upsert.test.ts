@@ -1,5 +1,5 @@
-// Temporary: part of the one-time go-live import of GBD's cache CSVs
-// (.claude/plans/caches-to-supabase.md). This directory is deleted once that import is checked.
+// Temporary: part of the go-live import of GBD's cache CSVs
+// (.claude/plans/caches-to-supabase.md). This directory is deleted after the final import.
 
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../../src/env.ts';
