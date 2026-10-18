@@ -408,7 +408,7 @@ async function backToForm() {
     {#if formState.status === 'outcome-unknown'}
       <p role="alert" class="text-sm text-destructive">
         We're not sure whether that upload went through. Check
-        <a class="underline" href={organizationHref(organizationSlug)}>your reports</a>
+        <a class="link" href={organizationHref(organizationSlug)}>your reports</a>
         before trying again.
       </p>
     {/if}

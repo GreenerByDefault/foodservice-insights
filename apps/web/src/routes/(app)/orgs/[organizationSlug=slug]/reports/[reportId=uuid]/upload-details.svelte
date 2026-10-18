@@ -28,10 +28,7 @@ const ROW_CLASS = 'flex flex-col gap-y-1 sm:col-span-2 sm:grid sm:grid-cols-subg
     <div class={ROW_CLASS}>
       <dt class="text-muted-foreground">File</dt>
       <dd class="min-w-0">
-        <a
-          class="inline-flex max-w-full items-center gap-1.5 underline hover:no-underline"
-          href={inputFile.href}
-        >
+        <a class="inline-flex max-w-full items-center gap-1.5 link" href={inputFile.href}>
           <FileSpreadsheetIcon class="size-4 shrink-0" aria-hidden="true" />
           <span class="truncate">{inputFile.originalFilename}</span>
         </a>
@@ -63,7 +60,7 @@ const ROW_CLASS = 'flex flex-col gap-y-1 sm:col-span-2 sm:grid sm:grid-cols-subg
 
   <p class="text-sm text-muted-foreground">
     Spot a mistake?
-    <a class="underline hover:no-underline" href={newReportHref}>Upload your file again</a>
+    <a class="link" href={newReportHref}>Upload your file again</a>
     with the right details.
   </p>
 </section>

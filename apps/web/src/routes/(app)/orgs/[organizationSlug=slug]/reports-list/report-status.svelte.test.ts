@@ -18,9 +18,11 @@ describe('ReportStatus', () => {
     expect(status.element().querySelector('svg')).not.toBeNull();
   });
 
-  test('succeeded reads as Ready', async () => {
+  test('succeeded reads as Ready, in the primary colour', async () => {
     const screen = await render(ReportStatus, { status: 'succeeded' });
-    await expect.element(screen.getByText('Ready')).toBeVisible();
+    const status = screen.getByText('Ready');
+    await expect.element(status).toBeVisible();
+    await expect.element(status).toHaveClass('text-primary');
   });
 
   test('failed reads as "Couldn\'t finish", in the destructive colour', async () => {

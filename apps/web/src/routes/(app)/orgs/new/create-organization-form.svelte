@@ -18,7 +18,7 @@ async function handleSubmit(name: string): Promise<'done' | OrganizationNameFail
 
 {#snippet unknownNotice()}
   We're not sure whether that went through. Check
-  <a class="underline" href="/orgs">your organizations</a>
+  <a class="link" href="/orgs">your organizations</a>
   before trying again.
 {/snippet}
 

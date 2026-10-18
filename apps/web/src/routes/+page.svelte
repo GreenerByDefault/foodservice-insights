@@ -39,7 +39,7 @@ const steps = [
 
   <main class="flex flex-1 flex-col">
     <section class="page-width flex flex-col items-start gap-6 py-16 sm:py-24">
-      <p class="text-sm font-medium text-muted-foreground">From Greener by Default</p>
+      <p class="text-sm font-medium text-primary">From Greener by Default</p>
       <h1 class="max-w-2xl text-4xl font-medium text-balance sm:text-5xl">
         See the climate impact of your food purchasing
       </h1>
@@ -50,14 +50,14 @@ const steps = [
       <Button href="/sign-in" size="lg" class="px-4">Get started</Button>
     </section>
 
-    <section class="flex-1 border-t bg-muted/40">
+    <section class="flex-1 bg-primary/5">
       <div class="page-width flex flex-col gap-8 py-16">
         <h2 class="text-2xl font-medium">How it works</h2>
         <ol class="grid gap-8 sm:grid-cols-3 sm:gap-6">
           {#each steps as step, index (step.title)}
             <li class="flex flex-col gap-2">
               <span
-                class="flex size-8 items-center justify-center rounded-full border bg-background text-sm font-medium"
+                class="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground"
                 aria-hidden="true"
               >
                 {index + 1}
@@ -73,7 +73,13 @@ const steps = [
 
   <footer class="border-t">
     <div class="page-width py-6">
-      <p class="text-sm text-muted-foreground">{APP_NAME} is a tool from Greener by Default.</p>
+      <p class="text-sm text-muted-foreground">
+        {APP_NAME}
+        is a tool from
+        <a class="link whitespace-nowrap" href="https://www.greenerbydefault.com"
+          >Greener by Default</a
+        >.
+      </p>
     </div>
   </footer>
 </div>
