@@ -58,6 +58,12 @@ def _rows_containing(frame: pd.DataFrame, key: str, prefix: str) -> list[dict[st
     return mine.astype(object).where(mine.notna(), None).to_dict("records")
 
 
+def _fake_connection() -> Any:
+    return SimpleNamespace(
+        info=SimpleNamespace(user="cache_client", host="db.example", port=5432, dbname="postgres")
+    )
+
+
 def test_pull_writes_the_verified_rows_for_the_loaders_to_read(
     test_database: psycopg.Connection, cache_files: tuple[Path, Path, Path]
 ) -> None:
@@ -137,26 +143,75 @@ def test_pull_writes_no_file_when_a_query_fails(
         return pd.DataFrame(columns=list(cache.columns.values()))
 
     monkeypatch.setattr(cache_sync, "_fetch_verified", _fetch_verified)
-    connection = SimpleNamespace(
-        info=SimpleNamespace(user="cache_client", host="db.example", port=5432, dbname="postgres")
-    )
 
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
-        cache_sync.pull(connection)  # ty: ignore[invalid-argument-type]
+        cache_sync.pull(_fake_connection())
 
     assert [path.read_text() for path in cache_files] == ["as it was\n"] * 3
 
 
+def test_pull_of_no_verified_rows_leaves_files_the_loaders_read_as_empty(
+    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path, Path]
+) -> None:
+    for path in cache_files:
+        path.write_text("stale\n")
+    monkeypatch.setattr(
+        cache_sync,
+        "_fetch_verified",
+        lambda _connection, cache: pd.DataFrame(columns=list(cache.columns.values())),
+    )
+
+    cache_sync.pull(_fake_connection())
+
+    assert load_categorization_cache().products.empty
+    entrees = get_previously_classified_entrees()
+    assert (entrees.empty, list(entrees.columns)) == (
+        True,
+        ["product", "entree_classification", "cleaned_item_names"],
+    )
+    weights = get_previously_classified_weights()
+    assert (weights.empty, list(weights.columns)) == (
+        True,
+        ["original_unit", "llm_cleaned_unit", "llm_extracted_weight", "example_products"],
+    )
+
+
+def test_pull_that_fails_mid_write_keeps_the_file_and_leaves_no_temporary(
+    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path, Path]
+) -> None:
+    products, _, _ = cache_files
+    products.write_text("as it was\n")
+
+    class _DiskFull:
+        def to_csv(self, file: Any, **_: Any) -> None:
+            file.write("half a")
+            raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(cache_sync, "_fetch_verified", lambda _connection, _cache: _DiskFull())
+
+    with pytest.raises(OSError, match="No space left on device"):
+        cache_sync.pull(_fake_connection())
+
+    assert sorted(path.name for path in products.parent.iterdir()) == [products.name]
+    assert products.read_text() == "as it was\n"
+
+
+@pytest.mark.parametrize("unset", [None, ""], ids=["absent", "empty"])
 def test_unset_warns_with_each_files_age(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
     cache_files: tuple[Path, Path, Path],
+    unset: str | None,
 ) -> None:
-    monkeypatch.delenv(VARIABLE, raising=False)
-    products, _, _ = cache_files
-    products.write_text("product,category,cleaned_item_names\n")
-    three_days_ago = time.time() - 3 * 86_400 - 60
-    os.utime(products, (three_days_ago, three_days_ago))
+    if unset is None:
+        monkeypatch.delenv(VARIABLE, raising=False)
+    else:
+        monkeypatch.setenv(VARIABLE, unset)
+    products, entrees, _ = cache_files
+    for path, days in ((products, 3), (entrees, 1)):
+        path.write_text("header\n")
+        modified = time.time() - days * 86_400 - 60
+        os.utime(path, (modified, modified))
     caplog.set_level(logging.WARNING, logger=cache_sync.__name__)
 
     cache_sync.pull_caches_if_configured()
@@ -167,7 +222,7 @@ def test_unset_warns_with_each_files_age(
             logging.WARNING,
             "CACHE_DB_CONNECTION_STRING is not set, so this run uses the cache files on disk as "
             "they are: previously_categorized_items.csv is 3 days old; "
-            "previously_classified_entrees.csv is missing; "
+            "previously_classified_entrees.csv is 1 day old; "
             "previously_classified_weights.csv is missing. "
             "See python/lab/README.md § Working on a client.",
         )
