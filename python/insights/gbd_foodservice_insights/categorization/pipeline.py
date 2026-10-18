@@ -36,19 +36,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class CategorizedProducts:
-    cleaned_df: pd.DataFrame  # the input rows, with product stripped
-    unique_products_df: pd.DataFrame  # one row per product, with its category and match_type
-    unrecognized_llm_answers: int  # per unique cleaned name sent to the LLM, not per product
-
-
-@dataclass(frozen=True)
 class NewCategorization:
     """A product the LLM categorized this run, as a suggestion for the cache."""
 
     product: str
     cleaned_name: str | None
     category: str  # "No Matches Found" included
+
+
+@dataclass(frozen=True)
+class CategorizedProducts:
+    cleaned_df: pd.DataFrame  # the input rows, with product stripped
+    unique_products_df: pd.DataFrame  # one row per product, with its category and match_type
+    unrecognized_llm_answers: int  # per unique cleaned name sent to the LLM, not per product
+    new_categorizations: tuple[NewCategorization, ...]
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,21 @@ def categorize_unique_products(
         cleaned_df=df,
         unique_products_df=unique_products_df,
         unrecognized_llm_answers=unrecognized_llm_answers,
+        new_categorizations=_new_categorizations(unique_products_df),
+    )
+
+
+def _new_categorizations(unique_products_df: pd.DataFrame) -> tuple[NewCategorization, ...]:
+    """The products the LLM categorized. Cleaned-name-history hits are left out: the pipeline
+    already trusts them without review, so suggesting them would only fill the review queue."""
+    from_llm = unique_products_df[unique_products_df["match_type"] == MATCH_TYPE_LLM]
+    return tuple(
+        NewCategorization(
+            product=row.product,
+            cleaned_name=row.cleaned_item_names,
+            category=row.category,
+        )
+        for row in from_llm.itertuples(index=False)
     )
 
 

@@ -10,6 +10,7 @@ from gbd_foodservice_insights.categorization.llm import LLM_CONCURRENCY
 from gbd_foodservice_insights.categorization.pipeline import (
     CategorizationSummary,
     CategorizedProducts,
+    NewCategorization,
     categorize_unique_products,
     summarize_categorization,
 )
@@ -97,6 +98,7 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
 
     # Both unique products were reused via their cleaned name; the LLM categorizer never ran.
     assert [operation for operation, _ in llm.calls] == ["clean", "clean"]
+    assert categorized.new_categorizations == ()
     assert_frame_equal(
         categorized.unique_products_df,
         pd.DataFrame(
@@ -187,6 +189,15 @@ def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFi
                 ],
             }
         ),
+    )
+    # Only the LLM's products, "No Matches Found" included; the two raw-product cache hits are
+    # not suggested.
+    assert categorized.new_categorizations == (
+        NewCategorization("Cheddar Shred", "cheddar shred", "Cheese"),
+        NewCategorization("Salted Butter", "salted butter", "Butter"),
+        NewCategorization("Pork Loin", "pork loin", no_match),
+        NewCategorization("Mozzarella Block", "mozzarella block", "Cheese"),
+        NewCategorization("Cheesecake Slice", "cheesecake slice", no_match),
     )
     assert [r.getMessage() for r in caplog.records if r.name.endswith(".steps")] == [
         "2 of 5 LLM answers were not recognized; most common: [('pork', 1), ('None', 1)]",
@@ -307,6 +318,7 @@ def _pork_loin_categorized(match_type: str, row_products: Sequence[str]) -> Cate
             {"product": ["Pork Loin"], "category": ["Pork (pig meat)"], "match_type": [match_type]}
         ),
         unrecognized_llm_answers=0,
+        new_categorizations=(),
     )
 
 

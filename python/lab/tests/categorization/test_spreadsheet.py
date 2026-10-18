@@ -65,6 +65,7 @@ def test_categorize_spreadsheet_to_csvs_reads_xlsx_input(tmp_path):
             {"product": ["apple"], "category": ["Fruit"], "match_type": ["llm"]}
         ),
         unrecognized_llm_answers=0,
+        new_categorizations=(),
     )
 
     with patch.object(
@@ -112,6 +113,7 @@ def test_categorize_spreadsheet_to_csvs_writes_beside_the_input_by_default(tmp_p
             {"product": ["apple"], "category": ["Fruit"], "match_type": ["llm"]}
         ),
         unrecognized_llm_answers=0,
+        new_categorizations=(),
     )
 
     with patch.object(spreadsheet, "categorize_unique_products", return_value=categorized):
