@@ -70,6 +70,10 @@ transaction after the verdict, from the child's `telemetry.json`
 ([`apps/worker/src/attempt/telemetry.ts`](../../apps/worker/src/attempt/telemetry.ts)); nothing
 updates or deletes them.
 
+**`analysis_attempt_finding`** holds the data quality warnings a succeeded attempt's PDF lists, in
+the PDF's wording, so the report page can show them. It is not telemetry: the messages name the
+customer's products, so it has a cascading foreign key to `analysis_attempt` and goes with it.
+
 - **They carry the attempt, report and organization ids raw, with no foreign key to any of
   them.** Like `audit_event`, they outlive what they describe, so deleting an organization keeps
   its spend and coverage in the history. They hold no personal data; the reasoning is in

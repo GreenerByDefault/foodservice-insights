@@ -86,6 +86,10 @@ const TYPE_OVERRIDES = {
     quality_check: generatedType('public/QualityCheck', 'QualityCheck', true),
     status: generatedType('public/DiagnosticStatus', 'DiagnosticStatus', true),
   },
+  // `position` is in the primary key, so Kanel would brand it as an id. It is a plain number.
+  analysis_attempt_finding: {
+    position: 'number',
+  },
 };
 
 function getPropertyMetadata(property, details, generateFor, instantiatedConfig) {

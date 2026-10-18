@@ -708,6 +708,40 @@ COMMENT ON COLUMN "public"."analysis_attempt"."worker_git_sha" IS 'The commit th
 
 
 --
+-- Name: analysis_attempt_finding; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_finding" (
+    "analysis_attempt_id" "uuid" NOT NULL,
+    "position" integer NOT NULL,
+    "quality_check" "public"."quality_check" NOT NULL,
+    "status" "public"."diagnostic_status" NOT NULL,
+    "message" "text" NOT NULL,
+    "sample_values" "text"[] NOT NULL,
+    CONSTRAINT "analysis_attempt_finding_message_not_empty" CHECK (("message" <> ''::"text")),
+    CONSTRAINT "analysis_attempt_finding_position_non_negative" CHECK (("position" >= 0)),
+    CONSTRAINT "analysis_attempt_finding_sample_values_at_most_5" CHECK (("cardinality"("sample_values") <= 5)),
+    CONSTRAINT "analysis_attempt_finding_status_is_warning_or_error" CHECK (("status" = ANY (ARRAY['warning'::"public"."diagnostic_status", 'error'::"public"."diagnostic_status"])))
+);
+
+
+ALTER TABLE "public"."analysis_attempt_finding" OWNER TO "postgres";
+
+--
+-- Name: TABLE "analysis_attempt_finding"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."analysis_attempt_finding" IS 'The warning and error findings the customer''s PDF lists for a succeeded attempt, written in the same transaction as its success. No rows means no warnings. Messages name the customer''s products, so they are deleted with the attempt.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_finding"."position"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_finding"."position" IS 'Zero-based place in the PDF''s list, which is the order to show them in.';
+
+
+--
 -- Name: analysis_attempt_llm_usage; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -1314,6 +1348,14 @@ COMMENT ON COLUMN "public"."unit_weight"."suggested_by" IS 'Where the row came f
 
 
 --
+-- Name: analysis_attempt_finding analysis_attempt_finding_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."analysis_attempt_finding"
+    ADD CONSTRAINT "analysis_attempt_finding_pkey" PRIMARY KEY ("analysis_attempt_id", "position");
+
+
+--
 -- Name: analysis_attempt_llm_usage analysis_attempt_llm_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1809,6 +1851,14 @@ CREATE OR REPLACE TRIGGER "unit_weight_set_verified_at" BEFORE INSERT OR UPDATE 
 
 
 --
+-- Name: analysis_attempt_finding analysis_attempt_finding_analysis_attempt_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY "public"."analysis_attempt_finding"
+    ADD CONSTRAINT "analysis_attempt_finding_analysis_attempt_id_fkey" FOREIGN KEY ("analysis_attempt_id") REFERENCES "public"."analysis_attempt"("id") ON DELETE CASCADE;
+
+
+--
 -- Name: analysis_attempt_llm_usage analysis_attempt_llm_usage_analysis_attempt_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1953,6 +2003,15 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" TO "service_role";
+
+
+--
+-- Name: TABLE "analysis_attempt_finding"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "service_role";
 
 
 --
