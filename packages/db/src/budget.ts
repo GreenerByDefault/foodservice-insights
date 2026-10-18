@@ -70,6 +70,12 @@ export const MIGRATE_DB_LIMITS: DatabaseLimits = {
  * role in `tests/caches.test.ts`. Changing it takes a new migration. */
 export const CACHE_CLIENT_CONNECTION_LIMIT = 10;
 
+/** `metrics_reader`'s `CONNECTION LIMIT`, set by migration `009_metrics` and asserted against the
+ * role in `tests/metrics.test.ts`. On the hosted project only Grafana Cloud logs in as it, with a
+ * pool held below this so it waits for a free connection rather than being refused one; the spare
+ * is for a person checking the role by hand. Changing it takes a new migration. */
+export const METRICS_READER_CONNECTION_LIMIT = 5;
+
 const WEB_FLEET = WEB_INSTANCES * WEB_DB_LIMITS.maxConnections;
 const WORKER_FLEET = WORKER_INSTANCES * WORKER_DB_LIMITS.maxConnections;
 
@@ -85,6 +91,8 @@ export const CONNECTION_BUDGET = {
   migrate: MIGRATE_DB_LIMITS.maxConnections,
 
   cacheClient: CACHE_CLIENT_CONNECTION_LIMIT,
+
+  metricsReader: METRICS_READER_CONNECTION_LIMIT,
 
   // Auth's pool, set in the dashboard's Auth performance settings. Supabase's default is 10.
   auth: 5,

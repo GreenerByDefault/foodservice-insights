@@ -102,6 +102,9 @@ function getPropertyMetadata(property, details, generateFor, instantiatedConfig)
 module.exports = {
   connection: requireEnv('DB_CONNECTION_STRING'),
 
+  // Not `metrics`: Kanel keys every relation by its bare name across schemas, so
+  // `metrics.report` would collide with `public.report`. TypeScript never queries the views; their
+  // tests type rows with `sql<Row>`, and `metrics-schema.sql` is their record.
   schemas: ['public', 'auth'],
 
   outputPath: OUTPUT_PATH,

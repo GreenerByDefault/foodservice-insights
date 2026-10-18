@@ -708,6 +708,43 @@ COMMENT ON COLUMN "public"."analysis_attempt"."worker_git_sha" IS 'The commit th
 
 
 --
+-- Name: report; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."report" (
+    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
+    "organization_id" "uuid" NOT NULL,
+    "created_by_user_id" "uuid",
+    "name" "text" NOT NULL,
+    "site_name" "text",
+    "counts_basis" "public"."counts_basis",
+    "monthly_counts" "jsonb",
+    "unit_system" "public"."unit_system" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "deleted_at" timestamp with time zone,
+    CONSTRAINT "report_counts_all_or_none" CHECK ((("counts_basis" IS NULL) = ("monthly_counts" IS NULL))),
+    CONSTRAINT "report_deleted_at_after_created_at" CHECK ((("deleted_at" IS NULL) OR ("deleted_at" >= "created_at"))),
+    CONSTRAINT "report_monthly_counts_is_object" CHECK ((("jsonb_typeof"("monthly_counts") = 'object'::"text") AND ("monthly_counts" <> '{}'::"jsonb")))
+);
+
+
+ALTER TABLE "public"."report" OWNER TO "postgres";
+
+--
+-- Name: COLUMN "report"."counts_basis"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."report"."counts_basis" IS 'Whether monthly_counts counts diners or meals. NULL when the uploader chose not to give counts.';
+
+
+--
+-- Name: COLUMN "report"."monthly_counts"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."report"."monthly_counts" IS 'Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis. NULL when the uploader chose not to give counts.';
+
+
+--
 -- Name: analysis_attempt_finding; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -1241,43 +1278,6 @@ ALTER TABLE "public"."rejected_upload" OWNER TO "postgres";
 --
 
 COMMENT ON TABLE "public"."rejected_upload" IS 'An upload that failed validation and never became a report.';
-
-
---
--- Name: report; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."report" (
-    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
-    "organization_id" "uuid" NOT NULL,
-    "created_by_user_id" "uuid",
-    "name" "text" NOT NULL,
-    "site_name" "text",
-    "counts_basis" "public"."counts_basis",
-    "monthly_counts" "jsonb",
-    "unit_system" "public"."unit_system" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "deleted_at" timestamp with time zone,
-    CONSTRAINT "report_counts_all_or_none" CHECK ((("counts_basis" IS NULL) = ("monthly_counts" IS NULL))),
-    CONSTRAINT "report_deleted_at_after_created_at" CHECK ((("deleted_at" IS NULL) OR ("deleted_at" >= "created_at"))),
-    CONSTRAINT "report_monthly_counts_is_object" CHECK ((("jsonb_typeof"("monthly_counts") = 'object'::"text") AND ("monthly_counts" <> '{}'::"jsonb")))
-);
-
-
-ALTER TABLE "public"."report" OWNER TO "postgres";
-
---
--- Name: COLUMN "report"."counts_basis"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN "public"."report"."counts_basis" IS 'Whether monthly_counts counts diners or meals. NULL when the uploader chose not to give counts.';
-
-
---
--- Name: COLUMN "report"."monthly_counts"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN "public"."report"."monthly_counts" IS 'Month to diner or meal count, keyed YYYY-MM. Which of the two is counts_basis. NULL when the uploader chose not to give counts.';
 
 
 --
@@ -2006,6 +2006,15 @@ GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" 
 
 
 --
+-- Name: TABLE "report"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "service_role";
+
+
+--
 -- Name: TABLE "analysis_attempt_finding"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -2205,15 +2214,6 @@ GRANT INSERT("suggested_by") ON TABLE "public"."product_categorization" TO "cach
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."rejected_upload" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."rejected_upload" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."rejected_upload" TO "service_role";
-
-
---
--- Name: TABLE "report"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "anon";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "authenticated";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."report" TO "service_role";
 
 
 --

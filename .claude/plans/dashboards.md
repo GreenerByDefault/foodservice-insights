@@ -113,17 +113,17 @@ quality rows. Without that, a second run would double every telemetry panel.
 
 ## PR 1 — the product dashboard
 
-Needs `metrics-pipeline.md` PR 5, so the panel check covers these panels from the start.
+Needs `metrics-pipeline.md` PR 4, so the panel check covers these panels from the start.
 
 - `product` gains its starting panels beside the pipeline's reports per week. No migration: the
   base views and the synthetic history already cover them.
 
 ## PR 2 — the telemetry views, and the cost dashboard
 
-Needs `metrics-pipeline.md` PR 5. Independent of PR 1.
+Needs `metrics-pipeline.md` PR 4. Independent of PR 1.
 
 - The views from Decisions, in the next migration. Each gets its tests. The conventions test
-  allowlists `requested_model` and `served_model` with their reasons.
+  allowlists `requested_model` and `served_model` in `IDENTIFIER_TEXT_COLUMNS`, with their reasons.
 - The generator and the replace from Decisions. The plan's pure test gains that both
   `counts_basis` values occur, and the replace test gains the telemetry case.
 - `cost`, with its starting panels.

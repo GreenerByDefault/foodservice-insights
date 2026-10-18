@@ -10,6 +10,7 @@ For how the database fits into the wider system, see [`ARCHITECTURE.md`](../../A
 | Question | File |
 | --- | --- |
 | What exists right now, constraints and all? | [`public-schema.sql`](public-schema.sql) (generated file) |
+| What do the product metrics views look like? | [`metrics-schema.sql`](metrics-schema.sql) (generated file) |
 | What does GoTrue's own schema look like? | [`auth-schema.sql`](auth-schema.sql) (generated file) |
 | What can I query, and with what types? | [`src/generated/`](src/generated/) |
 | What does the database reject? | [`tests/`](tests/) |
@@ -54,6 +55,8 @@ Classify a failure with `isTransientDatabaseError` or `isPermanentDatabaseError`
   `analysis_attempt_quality_check` under it, records what each attempt cost and found. It outlives
   the attempt, for reasons in [`migrations/003_attempt_telemetry.ts`](migrations/003_attempt_telemetry.ts).
 - **Audit.** `audit_event` is an append-only trail of key auth events.
+- **Metrics.** The `metrics` schema holds views for dashboards and alerts, read only by the
+  `metrics_reader` role. The reasoning is in [`migrations/009_metrics.ts`](migrations/009_metrics.ts).
 
 ## Conventions
 
@@ -64,6 +67,9 @@ Classify a failure with `isTransientDatabaseError` or `isPermanentDatabaseError`
   database rejects the violation.
 - **Every table has a primary key and every foreign key has an index**, so rows are cleaned up
   quickly when the referenced row is deleted.
+- **Every `metrics` view has a test in [`tests/metrics.test.ts`](tests/metrics.test.ts), and
+  exposes no free text** — ids, timestamps, enums and numbers only, so `metrics_reader` is safe to
+  hand to a dashboard or an agent. That file enforces the second rule by column type.
 - **New queries should be checked with `EXPLAIN ANALYZE`** before landing, per
   [Use The Index, Luke](https://use-the-index-luke.com) — this is what "queries are optimized" in
   [`REQUIREMENTS.md`](../../REQUIREMENTS.md#performance) means in practice.
