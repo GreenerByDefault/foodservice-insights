@@ -1,3 +1,4 @@
+import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
 import type { UsersId } from '../src/generated/auth/Users.ts';
@@ -91,5 +92,19 @@ describe('audit_event', () => {
     });
 
     await expectConstraintViolation(remove, 'audit_event_is_append_only');
+  });
+});
+
+describe('audit_event_actor_user_id', () => {
+  // Account deletion looks up a user's audit rows by actor, and the table only grows.
+  test('indexes the actor, which no foreign key does here', async () => {
+    const definition = await withRollback(DATABASE, async (transaction) => {
+      const { rows } = await sql<{ definition: string | null }>`
+        SELECT pg_get_indexdef(to_regclass('public.audit_event_actor_user_id')) AS definition
+      `.execute(transaction);
+      return rows[0]?.definition ?? 'no such index';
+    });
+
+    expect(definition).toMatch(/^CREATE INDEX .* \(actor_user_id\)$/);
   });
 });
