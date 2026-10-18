@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { findRepoRoot } from '@gbd/core/env';
 import { describe, expect, test } from 'vitest';
-import { MAX_CACHE_KEY_BYTES } from '../../src/types.ts';
+import { MAX_CACHE_KEY_BYTES } from '../../src/constraints.ts';
 import {
   CATEGORIES_YAML_PATH,
   categoryVocabulary,

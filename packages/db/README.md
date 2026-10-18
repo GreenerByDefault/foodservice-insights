@@ -100,8 +100,8 @@ Design reasoning:
   [`ARCHITECTURE.md`](../../ARCHITECTURE.md#auth).
 - **The hourly and weekly report limits in [`REQUIREMENTS.md`](../../REQUIREMENTS.md#abuse-limits)
   are windowed, not cumulative, so no counter column can cap them.**
-  [`report-rate-limit.ts`](src/report-rate-limit.ts) exports `lockReportRateLimit`, an advisory
-  lock the app takes instead; see its doc comment for why.
+  [`rate-limits.ts`](src/rate-limits.ts) exports `lockReportRateLimit`, an advisory
+  lock the app takes instead; see its header for why.
 
 ## Conventions
 

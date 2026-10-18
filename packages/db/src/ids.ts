@@ -1,3 +1,8 @@
+import type { InputFileId } from './generated/public/InputFile.ts';
+import type { RejectedUploadId } from './generated/public/RejectedUpload.ts';
+import type { ReportId } from './generated/public/Report.ts';
+import type { ResultFileId } from './generated/public/ResultFile.ts';
+
 /** UUID v7, per RFC 9562 §5.7: 48 bits of Unix milliseconds, then 74 random bits.
  *
  * Deliberately a second implementation of the `uuidv7()` SQL function in
@@ -36,4 +41,22 @@ export function uuidV7(): string {
 /** The milliseconds `uuidV7` embedded, for tests and debugging. Meaningless for a v4 id. */
 export function uuidV7Timestamp(uuid: string): number {
   return Number.parseInt(uuid.slice(0, 8) + uuid.slice(9, 13), 16);
+}
+
+// `input_file` and `result_file` ids are random v4 rather than v7; the reasoning is on
+// `input_file.id` in `migrations/001_initial_schema.ts`.
+export function newInputFileId(): InputFileId {
+  return crypto.randomUUID() as InputFileId;
+}
+
+export function newResultFileId(): ResultFileId {
+  return crypto.randomUUID() as ResultFileId;
+}
+
+export function newReportId(): ReportId {
+  return uuidV7() as ReportId;
+}
+
+export function newRejectedUploadId(): RejectedUploadId {
+  return uuidV7() as RejectedUploadId;
 }

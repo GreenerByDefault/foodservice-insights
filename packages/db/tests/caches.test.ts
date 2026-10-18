@@ -4,6 +4,7 @@
 import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { CACHE_CLIENT_CONNECTION_LIMIT } from '../src/budget.ts';
+import { MAX_CACHE_KEY_BYTES } from '../src/constraints.ts';
 import { DATABASE } from '../src/env.ts';
 import {
   POSTGRES_CODE_INSUFFICIENT_PRIVILEGE,
@@ -17,7 +18,6 @@ import {
   insertUnitWeight,
 } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
-import { MAX_CACHE_KEY_BYTES } from '../src/types.ts';
 
 type Insert = (
   transaction: Transaction<Database>,

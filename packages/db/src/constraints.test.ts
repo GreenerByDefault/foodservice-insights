@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { requireConstraint } from './invariants.ts';
+import { requireConstraint } from './constraints.ts';
 
 describe('requireConstraint', () => {
   test('returns a non-null value unchanged', () => {

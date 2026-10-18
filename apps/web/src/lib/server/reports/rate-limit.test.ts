@@ -1,5 +1,5 @@
 /** Locking and windowing already have exhaustive coverage in `@gbd/db`'s
- * `report-rate-limit.test.ts` — this file only covers this module's own logic on top.
+ * `rate-limits.test.ts` — this file only covers this module's own logic on top.
  */
 
 import {

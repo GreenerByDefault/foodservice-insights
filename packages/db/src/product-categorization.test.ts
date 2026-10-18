@@ -1,13 +1,13 @@
 import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
-import { DATABASE } from '../src/env.ts';
+import { DATABASE } from './env.ts';
 import {
   insertSuggestedProductCategorizations,
   listVerifiedProductCategorizations,
-} from '../src/product-categorization.ts';
-import type { Database } from '../src/schema.ts';
-import { insertProductCategorization } from '../src/testing/fixtures.ts';
-import { withRollback } from '../src/testing/transactions.ts';
+} from './product-categorization.ts';
+import type { Database } from './schema.ts';
+import { insertProductCategorization } from './testing/fixtures.ts';
+import { withRollback } from './testing/transactions.ts';
 
 /** Verified rows from other tests' committed data may exist, so every assertion looks only at
  * rows with this run's prefix. */
