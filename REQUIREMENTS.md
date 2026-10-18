@@ -237,9 +237,6 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
   cost, product counts, stage times, which quality checks fired, and its report's headline
   figures: kilograms bought, CO2e and plant share. It holds no names, product text, file names or
   user IDs.
-- A user can email GBD to request a hard delete. GBD admins do it with a script or in the
-  Supabase UI (TBD which approach), and that removes the organization's analysis telemetry
-  too.
 
 ### Account recovery
 

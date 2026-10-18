@@ -20,6 +20,8 @@ export default interface PublicSchema {
 
   rejectedUpload: RejectedUploadTable;
 
+  analysisAttemptTelemetry: AnalysisAttemptTelemetryTable;
+
   analysisAttemptQualityCheck: AnalysisAttemptQualityCheckTable;
 
   appUser: AppUserTable;
@@ -37,8 +39,6 @@ export default interface PublicSchema {
   organizationInvite: OrganizationInviteTable;
 
   inputFile: InputFileTable;
-
-  analysisAttemptTelemetry: AnalysisAttemptTelemetryTable;
 
   analysisAttemptLlmUsage: AnalysisAttemptLlmUsageTable;
 

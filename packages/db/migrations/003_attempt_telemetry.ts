@@ -12,9 +12,10 @@ import { type CreateTableBuilder, type Kysely, sql } from 'kysely';
 // after its organization was deleted still records what the child spent.
 //
 // That is safe to keep because none of it is personal data: counts, tokens, kilograms, emissions,
-// check names, model ids and three uuids that resolve to nothing once the organization is gone.
-// No names, product text, file names or user ids. A hard delete GBD runs on request removes the
-// rows by `organization_id`; the cascade from the telemetry row takes the rest.
+// check names, model ids and three uuids. No names, product text, file names or user ids. The
+// rows stay attributable to the organization even once it is gone, since `audit_event` keeps its
+// id, and who created it, from `organization.created`; what they describe is a business, not a
+// person.
 
 export async function up(database: Kysely<any>): Promise<void> {
   await enums(database);
@@ -196,7 +197,7 @@ async function attemptTelemetry(database: Kysely<any>): Promise<void> {
     )
     .execute();
 
-  // For the hard-delete script, which finds an organization's rows with no FK to follow.
+  // For finding an organization's rows, with no FK to follow.
   await database.schema
     .createIndex('analysis_attempt_telemetry_organization_id')
     .on('analysis_attempt_telemetry')

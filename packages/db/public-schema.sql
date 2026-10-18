@@ -850,7 +850,7 @@ ALTER TABLE "public"."analysis_attempt_telemetry" OWNER TO "postgres";
 -- Name: TABLE "analysis_attempt_telemetry"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE "public"."analysis_attempt_telemetry" IS 'One row per analysis attempt, written by the worker after the verdict on every ending the child left a telemetry document for. Each column group (input, categorization, report, and each stage time) fills in as its stage finishes, so a killed run keeps a prefix. Outlives the attempt, report and organization it names, and holds no personal data; a requested hard delete removes it by organization_id.';
+COMMENT ON TABLE "public"."analysis_attempt_telemetry" IS 'One row per analysis attempt, written by the worker after the verdict on every ending the child left a telemetry document for. Each column group (input, categorization, report, and each stage time) fills in as its stage finishes, so a killed run keeps a prefix. Outlives the attempt, report and organization it names, and holds no personal data.';
 
 
 --
