@@ -1,7 +1,7 @@
 /** A database per Playwright run, cloned from a cached template.
  *
  * The problem this solves: several `pnpm test:e2e` runs, in different worktrees or the same one,
- * point at one database (`postgres` @ 65322) and truncate it out from under each other. Giving
+ * point at one database (`postgres`) and truncate it out from under each other. Giving
  * each run its own database sidesteps that; cloning from a template that is already migrated
  * makes a fresh database as cheap as the truncate it replaces.
  *
@@ -25,8 +25,8 @@
  * never comes to exist, so the next caller just builds again. `sweepStaleTemplateBuilds` is the
  * backstop that drops those abandoned staging databases.
  *
- * **Cloning.** `CREATE DATABASE ... TEMPLATE <name>` is a file copy — a few hundred milliseconds,
- * against the ~1s a truncate+migrate+seed chain costs today. It fails with `55006 object_in_use`
+ * **Cloning.** `CREATE DATABASE ... TEMPLATE <name>` is a file copy, cheaper than the
+ * truncate+migrate+seed chain it replaces. It fails with `55006 object_in_use`
  * if another clone of the same template is mid-copy at the same instant; `createRunDatabase`
  * retries once.
  *
@@ -52,9 +52,10 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { Client } from 'pg';
+import { Client, DatabaseError } from 'pg';
 import { initializeDatabase, shutdownDatabase } from '../client.ts';
 import { migrateToLatest } from '../migrate.ts';
+import { POSTGRES_CODE_OBJECT_IN_USE } from '../postgres-codes.ts';
 
 const TEMPLATE_PREFIX = 'fsi_test_tmpl_';
 const RUN_PREFIX = 'fsi_test_run_';
@@ -83,11 +84,6 @@ const RUN_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
  * no active connection, same as the run sweep, so this bound only has to be longer than the
  * slowest real build — not longer than the slowest possible one interrupted mid-step. */
 const BUILD_STALE_AFTER_MS = 30 * 60 * 1000;
-
-/** Postgres's code for "the database you asked to use as a template is being accessed by other
- * users" — the failure mode of two `CREATE DATABASE ... TEMPLATE` calls racing on the same
- * source at the same instant. */
-const POSTGRES_CODE_OBJECT_IN_USE = '55006';
 
 function migrationsDir(): string {
   return path.join(import.meta.dirname, '..', '..', 'migrations');
@@ -139,6 +135,19 @@ function superuserConnectionString(connectionString: string): string {
   return url.toString();
 }
 
+async function withMaintenanceClient<T>(
+  connectionString: string,
+  fn: (maintenance: Client) => Promise<T>,
+): Promise<T> {
+  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
+  await maintenance.connect();
+  try {
+    return await fn(maintenance);
+  } finally {
+    await maintenance.end();
+  }
+}
+
 function withDatabaseName(connectionString: string, databaseName: string): string {
   const url = new URL(connectionString);
   url.pathname = `/${databaseName}`;
@@ -162,9 +171,7 @@ export async function ensureTemplateDatabase(connectionString: string): Promise<
   const name = `${TEMPLATE_PREFIX}${await templateFingerprint()}`;
   const owner = appOwner(connectionString);
 
-  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
-  await maintenance.connect();
-  try {
+  return withMaintenanceClient(connectionString, async (maintenance) => {
     await maintenance.query('SELECT pg_advisory_lock($1)', [TEMPLATE_LOCK_KEY]);
     try {
       if (await databaseExists(maintenance, name)) return name;
@@ -173,9 +180,7 @@ export async function ensureTemplateDatabase(connectionString: string): Promise<
     } finally {
       await maintenance.query('SELECT pg_advisory_unlock($1)', [TEMPLATE_LOCK_KEY]);
     }
-  } finally {
-    await maintenance.end();
-  }
+  });
 }
 
 /** Build the template under a throwaway staging name and, only once the restore and migrations
@@ -248,14 +253,9 @@ export async function createRunDatabase(
   const name = `${RUN_PREFIX}${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
   const owner = appOwner(connectionString);
 
-  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
-  await maintenance.connect();
-  try {
-    await cloneWithRetry(maintenance, name, templateName, owner);
-  } finally {
-    await maintenance.end();
-  }
-
+  await withMaintenanceClient(connectionString, (maintenance) =>
+    cloneWithRetry(maintenance, name, templateName, owner),
+  );
   return { name, connectionString: withDatabaseName(connectionString, name) };
 }
 
@@ -269,33 +269,26 @@ async function cloneWithRetry(
   try {
     await maintenance.query(statement);
   } catch (error) {
-    if (!isObjectInUse(error)) throw error;
+    if (!(error instanceof DatabaseError && error.code === POSTGRES_CODE_OBJECT_IN_USE)) {
+      throw error;
+    }
     await new Promise((resolve) => setTimeout(resolve, 200));
     await maintenance.query(statement);
   }
-}
-
-function isObjectInUse(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === POSTGRES_CODE_OBJECT_IN_USE
-  );
 }
 
 /** Drop a run database. Safe to call on one that's already gone. Fails if a connection is still
  * attached — the caller closing its own pool first is what makes that fail loudly instead of
  * silently killing a query mid-flight. */
 export async function dropRunDatabase(connectionString: string, name: string): Promise<void> {
+  await withMaintenanceClient(connectionString, (maintenance) =>
+    dropOwnedDatabase(maintenance, name),
+  );
+}
+
+async function dropOwnedDatabase(maintenance: Client, name: string): Promise<void> {
   assertOwnedName(name);
-  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
-  await maintenance.connect();
-  try {
-    await maintenance.query(`DROP DATABASE IF EXISTS "${name}"`);
-  } finally {
-    await maintenance.end();
-  }
+  await maintenance.query(`DROP DATABASE IF EXISTS "${name}"`);
 }
 
 /** Drop every run database old enough that no still-running test could own it, and report which
@@ -308,27 +301,29 @@ export async function dropRunDatabase(connectionString: string, name: string): P
  * age bound that a live user always overrides — to fixture rows instead of databases.
  */
 export async function sweepStaleRunDatabases(connectionString: string): Promise<string[]> {
-  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
-  await maintenance.connect();
-  let stale: string[];
-  try {
+  return sweepIdleDatabases(connectionString, `${RUN_PREFIX}%`, isStaleRun);
+}
+
+/** Drop every database whose name is `LIKE` `pattern`, passes `isStale`, and has no
+ * `pg_stat_activity` rows, and report which ones it dropped. */
+async function sweepIdleDatabases(
+  connectionString: string,
+  pattern: string,
+  isStale: (name: string) => boolean,
+): Promise<string[]> {
+  return withMaintenanceClient(connectionString, async (maintenance) => {
     const { rows } = await maintenance.query<{ datname: string }>(
       `SELECT datname FROM pg_database WHERE datname LIKE $1`,
-      [`${RUN_PREFIX}%`],
+      [pattern],
     );
-    const candidates = rows.map(({ datname }) => datname).filter(isStale);
-    stale = [];
-    for (const name of candidates) {
-      if (await hasNoConnections(maintenance, name)) stale.push(name);
+    const dropped: string[] = [];
+    for (const { datname } of rows.filter(({ datname }) => isStale(datname))) {
+      if (!(await hasNoConnections(maintenance, datname))) continue;
+      await dropOwnedDatabase(maintenance, datname);
+      dropped.push(datname);
     }
-  } finally {
-    await maintenance.end();
-  }
-
-  for (const name of stale) {
-    await dropRunDatabase(connectionString, name);
-  }
-  return stale;
+    return dropped;
+  });
 }
 
 async function hasNoConnections(maintenance: Client, name: string): Promise<boolean> {
@@ -338,7 +333,7 @@ async function hasNoConnections(maintenance: Client, name: string): Promise<bool
   return rows.length === 0;
 }
 
-function isStale(name: string): boolean {
+function isStaleRun(name: string): boolean {
   const createdAt = Number(name.slice(RUN_PREFIX.length).split('_')[0]);
   if (Number.isNaN(createdAt)) return false;
   return Date.now() - createdAt > RUN_STALE_AFTER_MS;
@@ -356,19 +351,15 @@ export async function sweepStaleGoTrueUsers(
   connectionString: string,
   domain: string,
 ): Promise<number> {
-  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
-  await maintenance.connect();
-  try {
-    const { rowCount } = await maintenance.query(
+  const { rowCount } = await withMaintenanceClient(connectionString, (maintenance) =>
+    maintenance.query(
       `DELETE FROM auth.users
        WHERE split_part(email, '@', 2) = $1
          AND created_at < now() - make_interval(secs => $2)`,
       [domain, RUN_STALE_AFTER_MS / 1000],
-    );
-    return rowCount ?? 0;
-  } finally {
-    await maintenance.end();
-  }
+    ),
+  );
+  return rowCount ?? 0;
 }
 
 /** Drop every template staging database (`..._building_<timestamp>_<suffix>`) old enough and idle
@@ -380,27 +371,7 @@ export async function sweepStaleGoTrueUsers(
  * progress holds a live connection to its staging database for nearly all of its lifetime.
  */
 export async function sweepStaleTemplateBuilds(connectionString: string): Promise<string[]> {
-  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
-  await maintenance.connect();
-  let stale: string[];
-  try {
-    const { rows } = await maintenance.query<{ datname: string }>(
-      `SELECT datname FROM pg_database WHERE datname LIKE $1`,
-      [`${TEMPLATE_PREFIX}%_building_%`],
-    );
-    const candidates = rows.map(({ datname }) => datname).filter(isStaleBuild);
-    stale = [];
-    for (const name of candidates) {
-      if (await hasNoConnections(maintenance, name)) stale.push(name);
-    }
-    for (const name of stale) {
-      assertOwnedName(name);
-      await maintenance.query(`DROP DATABASE IF EXISTS "${name}"`);
-    }
-  } finally {
-    await maintenance.end();
-  }
-  return stale;
+  return sweepIdleDatabases(connectionString, `${TEMPLATE_PREFIX}%_building_%`, isStaleBuild);
 }
 
 function isStaleBuild(name: string): boolean {
@@ -418,19 +389,14 @@ function isStaleBuild(name: string): boolean {
  * never touches since another worktree's branch may be the only thing still using one.
  */
 export async function cleanAllTestDatabases(connectionString: string): Promise<string[]> {
-  const maintenance = new Client({ connectionString: superuserConnectionString(connectionString) });
-  await maintenance.connect();
-  let names: string[];
-  try {
+  return withMaintenanceClient(connectionString, async (maintenance) => {
     const { rows } = await maintenance.query<{ datname: string }>(
       `SELECT datname FROM pg_database WHERE datname LIKE 'fsi_test\\_%' ESCAPE '\\'`,
     );
-    names = rows.map(({ datname }) => datname);
+    const names = rows.map(({ datname }) => datname);
     for (const name of names) {
       await maintenance.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
     }
-  } finally {
-    await maintenance.end();
-  }
-  return names;
+    return names;
+  });
 }

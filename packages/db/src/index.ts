@@ -7,7 +7,6 @@ export {
   type DatabaseConfig,
   type DatabaseLimits,
   DEFAULT_LIMITS,
-  DEFAULT_SHUTDOWN_TIMEOUT_MS,
   initializeDatabase,
   shutdownDatabase,
 } from './client.ts';
@@ -27,12 +26,9 @@ export {
   newRejectedUploadId,
   newReportId,
   newResultFileId,
-  uuidV7,
 } from './ids.ts';
-export { migrateToLatest } from './migrate.ts';
 export {
   POSTGRES_CODE_CHECK_VIOLATION,
-  POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from './postgres-codes.ts';
 export {
@@ -52,7 +48,6 @@ export type {
   AnalysisAttemptId,
   AnalysisAttemptStatus,
   AnalysisFailureReason,
-  AuditEventId,
   CountsBasis,
   DiagnosticStatus,
   InputFileId,

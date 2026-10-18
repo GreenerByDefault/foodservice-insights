@@ -7,7 +7,6 @@ export type { UsersId as UserId } from './generated/auth/Users.ts';
 export type { AnalysisAttemptId } from './generated/public/AnalysisAttempt.ts';
 export type { default as AnalysisAttemptStatus } from './generated/public/AnalysisAttemptStatus.ts';
 export type { default as AnalysisFailureReason } from './generated/public/AnalysisFailureReason.ts';
-export type { AuditEventId } from './generated/public/AuditEvent.ts';
 export type { default as CountsBasis } from './generated/public/CountsBasis.ts';
 export type { default as DiagnosticStatus } from './generated/public/DiagnosticStatus.ts';
 export type { default as LlmOperation } from './generated/public/LlmOperation.ts';
