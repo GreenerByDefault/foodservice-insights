@@ -325,7 +325,7 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
     if narrative.quality_status != "pass":
         paragraphs.append(
             "Some data-quality notes apply to this analysis; they are listed in plain "
-            "language at the back of this report."
+            "language on the next page."
         )
     paragraphs.append(
         "The pages that follow show how the footprint breaks down by month, category and "
@@ -914,6 +914,11 @@ def write_report_pdf(
         create_executive_summary_page(
             pdf, _executive_narrative(report, client_name, quality_status)
         )
+        create_text_page(
+            pdf,
+            "Data Completeness & Quality",
+            quality_lines(report.findings, show_successes=show_quality_successes),
+        )
         create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
 
         for fig in charts.figures:
@@ -933,11 +938,6 @@ def write_report_pdf(
             "About This Report",
             methodology,
             bold_lines={line for line in methodology if line.endswith("?")},
-        )
-        create_text_page(
-            pdf,
-            "Data Completeness & Quality",
-            quality_lines(report.findings, show_successes=show_quality_successes),
         )
 
     logger.info("PDF report saved to %s", path)
