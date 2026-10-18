@@ -19,12 +19,11 @@ let { data }: PageProps = $props();
 <div class="flex max-w-prose flex-col gap-2">
   <p>
     Set up an organization for your school, university, hospital, company or other institution. One
-    organization can cover all your sites, and everyone you add to it can see and upload its
-    reports.
+    organization can cover all your sites. Everyone you add will be able to see and upload reports.
   </p>
   <p class="text-sm text-muted-foreground">
     Does your institution already use {APP_NAME}? Ask whoever set it up to invite
-    <span class="font-medium break-words">{data.user.email}</span>
+    <span class="font-medium wrap-break-word">{data.user.email}</span>
     instead.
   </p>
 </div>
