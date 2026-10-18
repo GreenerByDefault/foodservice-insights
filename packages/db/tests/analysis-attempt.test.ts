@@ -779,8 +779,8 @@ describe('analysis_attempt', () => {
   });
 
   describe('the reaping race', () => {
-    // The terminal-attempt tests above only approximate this: they prove an already-terminal row rejects an
-    // update, never that a *blocked* worker re-reads one.
+    // The terminal-attempt tests above only approximate this: they prove an already-terminal row
+    // rejects an update, never that a *blocked* worker re-reads one.
     const ORIGINAL_WORKER = 'worker-a';
     const REAPING_WORKER = 'worker-b';
 

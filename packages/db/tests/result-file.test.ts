@@ -43,8 +43,8 @@ describe('result_file', () => {
   test.each(['pdf' as const, 'xlsx' as const])('allows only one %s per attempt', async (kind) => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const attempt = await aSucceededAttempt(transaction);
-      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: kind });
-      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: kind });
+      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind });
+      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind });
     });
 
     await expectConstraintViolation(
