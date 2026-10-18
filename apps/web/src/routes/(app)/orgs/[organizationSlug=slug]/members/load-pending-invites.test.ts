@@ -1,13 +1,13 @@
 import { DB_NOW, dbMsAgo, insertOrganizationInvite, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
-import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
+import { insertOrganizationWithMembers } from '#lib/server/testing/organizations.js';
 import { _loadPendingInvites } from './+page.server.ts';
 
 describe('_loadPendingInvites', () => {
   test('lists pending invites newest first', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId } = await insertOrganizationWithMembers(transaction, []);
       const older = await insertOrganizationInvite(transaction, {
         organizationId,
         email: 'older@example.test',
@@ -46,7 +46,7 @@ describe('_loadPendingInvites', () => {
 
   test('a pending invite past its deadline is shown, marked expired', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId } = await insertOrganizationWithMembers(transaction, []);
       const expired = await insertOrganizationInvite(transaction, {
         organizationId,
         email: 'expired@example.test',
@@ -70,7 +70,7 @@ describe('_loadPendingInvites', () => {
 
   test('superseded and revoked invites are never shown', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId } = await insertOrganizationWithMembers(transaction, []);
       await insertOrganizationInvite(transaction, {
         organizationId,
         email: 'superseded@example.test',

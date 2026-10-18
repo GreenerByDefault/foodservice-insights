@@ -1,7 +1,7 @@
 import { insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
-import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/fixtures.js';
+import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/auth.js';
 import { _loadAllOrganizations } from './+page.server.ts';
 
 describe('_loadAllOrganizations', () => {

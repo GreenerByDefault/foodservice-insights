@@ -6,7 +6,7 @@ import * as mode from '#lib/auth/mode.js';
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import * as authorization from '#lib/server/auth/authorization.js';
 import * as identify from '#lib/server/auth/identify.js';
-import { anAuthContext } from '#lib/server/testing/fixtures.js';
+import { anAuthContext } from '#lib/server/testing/auth.js';
 import { SERVER_LOGS } from '#lib/server/testing/logs.js';
 import { getRequestEvent } from '$app/server';
 import type { RouteId } from '$app/types';

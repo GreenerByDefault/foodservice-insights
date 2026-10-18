@@ -6,7 +6,7 @@ import { database } from '#lib/server/db.js';
 import { sendInvite } from '#lib/server/email.js';
 import { HOURLY_INVITE_LIMIT } from '#lib/server/invites/limits.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
-import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
+import { insertOrganizationWithMembers } from '#lib/server/testing/organizations.js';
 import { _createInvite } from './+server.ts';
 
 // `sendInvite`'s own send path is `packages/email`'s job to prove; this only needs to know
@@ -24,7 +24,7 @@ beforeEach(() => {
 describe('_createInvite', () => {
   test('inserts a pending invite, records invite.created, and sends the invite email', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
 
       const response = await _createInvite(transaction, {
@@ -73,7 +73,7 @@ describe('_createInvite', () => {
 
   test('lowercases and trims the email before matching or writing it', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
 
       const response = await _createInvite(transaction, {
@@ -97,7 +97,7 @@ describe('_createInvite', () => {
 
   test('re-inviting an outstanding address supersedes the old row and extends the expiry', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
       const original = await insertOrganizationInvite(transaction, {
         organizationId,
@@ -133,7 +133,7 @@ describe('_createInvite', () => {
 
   test('inviting an address that already belongs to the organization answers 409 and writes nothing', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, [
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, [
         { role: 'member', email: 'Existing@Example.Test' },
       ]);
       const actor: Actor = { userId: admin, role: 'admin' };
@@ -161,7 +161,7 @@ describe('_createInvite', () => {
 
   test('the invite past the hourly limit answers 429 and writes nothing', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
       for (let i = 0; i < HOURLY_INVITE_LIMIT; i++) {
         await insertOrganizationInvite(transaction, {
@@ -194,7 +194,7 @@ describe('_createInvite', () => {
 
   test('an email the emailer cannot reach still answers 201, with emailSent: false', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
       vi.mocked(sendInvite).mockResolvedValueOnce(false);
 
@@ -224,7 +224,7 @@ describe('_createInvite', () => {
     // wiring check that the route actually calls it.
     test('an address that is not an email is a 400', async () => {
       await withRollback(database(), async (transaction) => {
-        const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+        const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
         const actor: Actor = { userId: admin, role: 'admin' };
 
         const response = await _createInvite(transaction, {

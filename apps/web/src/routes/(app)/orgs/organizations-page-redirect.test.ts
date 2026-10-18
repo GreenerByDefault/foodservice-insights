@@ -1,7 +1,8 @@
 import { insertOrganization, insertOrganizationInvite, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
-import { anAuthContext, anEmail, anOrganizationAccess } from '#lib/server/testing/fixtures.js';
+import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/auth.js';
+import { anEmail } from '#lib/server/testing/email.js';
 import { _organizationsPageRedirect } from './+page.server.ts';
 
 const IN_A_WEEK = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

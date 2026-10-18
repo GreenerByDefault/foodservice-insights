@@ -4,14 +4,14 @@ import { describe, expect, test } from 'vitest';
 import type { Actor } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
 import { auditEventsFor, expectedAuditEvent } from '#lib/server/testing/audit.js';
-import { anOrganizationWithMembers } from '#lib/server/testing/fixtures.js';
 import { statusOf } from '#lib/server/testing/http-error.js';
+import { insertOrganizationWithMembers } from '#lib/server/testing/organizations.js';
 import { _revokeInvite } from './+server.ts';
 
 describe('_revokeInvite', () => {
   test('revokes a pending invite and records invite.revoked', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
       const invite = await insertOrganizationInvite(transaction, {
         organizationId,
@@ -45,7 +45,7 @@ describe('_revokeInvite', () => {
 
   test('an invite that is not pending is a 404, and its status is unchanged', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
       const invite = await insertOrganizationInvite(transaction, {
         organizationId,
@@ -70,9 +70,9 @@ describe('_revokeInvite', () => {
 
   test('an invite id that does not belong to the organization is a 404', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
-      const other = await anOrganizationWithMembers(transaction, []);
+      const other = await insertOrganizationWithMembers(transaction, []);
       const invite = await insertOrganizationInvite(transaction, {
         organizationId: other.organizationId,
         email: 'invitee@example.test',
@@ -87,7 +87,7 @@ describe('_revokeInvite', () => {
 
   test('an id that matches no invite at all is a 404', async () => {
     await withRollback(database(), async (transaction) => {
-      const { organizationId, admin } = await anOrganizationWithMembers(transaction, []);
+      const { organizationId, admin } = await insertOrganizationWithMembers(transaction, []);
       const actor: Actor = { userId: admin, role: 'admin' };
       const inviteId = crypto.randomUUID() as OrganizationInviteId;
 

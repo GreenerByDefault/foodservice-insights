@@ -2,7 +2,7 @@ import type { OrganizationId } from '@gbd/db';
 import { insertAppUser, insertOrganization, withRollback } from '@gbd/db/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
-import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/fixtures.js';
+import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/auth.js';
 import { statusOf } from '#lib/server/testing/http-error.js';
 import {
   requireAuth,
