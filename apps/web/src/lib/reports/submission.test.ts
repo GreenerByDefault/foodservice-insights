@@ -43,7 +43,7 @@ describe('validateSubmission', () => {
         aSubmission({ countsBasis: 'none', monthlyCounts: null }),
       );
 
-      expect(outcome).toMatchObject({ ok: true, metadata: { counts: null } });
+      expect(outcome.ok && outcome.metadata.counts).toBeNull();
     });
 
     test('rejects monthly counts sent anyway, naming their field', async () => {

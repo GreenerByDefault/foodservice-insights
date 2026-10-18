@@ -85,7 +85,9 @@ describe('MonthlyCounts', () => {
         counts,
       });
 
-      await expect.element(screen.getByText('1 of 3 months filled in')).toBeInTheDocument();
+      await expect
+        .element(screen.getByRole('group', { name: 'Diners per month' }))
+        .toHaveAccessibleDescription(/1 of 3 months filled in$/);
 
       await screen.getByRole('spinbutton', { name: 'February 2026' }).fill('200');
       await expect.element(screen.getByText('2 of 3 months filled in')).toBeInTheDocument();

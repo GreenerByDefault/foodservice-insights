@@ -473,7 +473,7 @@ describe('UploadForm', () => {
       await expect
         .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
         .toHaveValue(100);
-      await expect.element(countsBasisGroup(screen)).not.toHaveAccessibleDescription(NOTE);
+      await expect.element(countsBasisGroup(screen)).toHaveAccessibleDescription('');
     });
 
     test('submits the none basis and no monthly counts, even with a month left blank', async () => {

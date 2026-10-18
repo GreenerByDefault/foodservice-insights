@@ -76,8 +76,9 @@ describe('ReportMetadataSchema', () => {
     test('carries meals through as the basis', () => {
       const result = parse({ countsBasis: 'meals' });
 
-      expect(result.output).toMatchObject({
-        counts: { basis: 'meals', monthly: { '2026-01': 120 } },
+      expect(result.success && result.output.counts).toEqual({
+        basis: 'meals',
+        monthly: { '2026-01': 120 },
       });
     });
 
@@ -90,7 +91,13 @@ describe('ReportMetadataSchema', () => {
     test('is accepted without monthly counts, as null counts', () => {
       const result = parse({ countsBasis: 'none', monthlyCounts: null });
 
-      expect(result).toMatchObject({ success: true, output: { counts: null } });
+      // Whole, so a `countsBasis` or `monthlyCounts` key the transform let through would fail it.
+      expect(result.output).toEqual({
+        name: 'Q1 procurement',
+        siteName: 'Main dining hall',
+        unitSystem: 'lb',
+        counts: null,
+      });
     });
 
     test('is rejected with monthly counts, naming that field', () => {
