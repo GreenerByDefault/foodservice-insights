@@ -11,7 +11,7 @@ import {
   insertOrganization,
   insertOrganizationMember,
   insertReport,
-} from '../src/testing/fixtures.ts';
+} from '../src/testing/fixtures/index.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
 
 describe('report', () => {

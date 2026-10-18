@@ -9,7 +9,7 @@ import {
   insertAnalysisAttemptFinding,
   insertOrganization,
   insertReport,
-} from '../src/testing/fixtures.ts';
+} from '../src/testing/fixtures/index.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
 describe('analysis_attempt_finding', () => {

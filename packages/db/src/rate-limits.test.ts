@@ -24,7 +24,7 @@ import {
   insertOrganization,
   insertOrganizationInvite,
   insertReport,
-} from './testing/fixtures.ts';
+} from './testing/fixtures/index.ts';
 import { withRollback } from './testing/transactions.ts';
 
 describe('lockInviteRateLimit', () => {

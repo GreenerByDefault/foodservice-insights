@@ -21,7 +21,7 @@ For how the database fits into the wider system, see [`ARCHITECTURE.md`](../../A
 
 - **SvelteKit route handlers** call `database()` from `#lib/server/db.js`.
 - **Everything outside the web app** imports `DATABASE` from `@gbd/db/env`.
-- **Tests** build rows with the fixtures in [`src/testing/fixtures.ts`](src/testing/fixtures.ts),
+- **Tests** build rows with the fixtures in [`src/testing/fixtures/`](src/testing/fixtures/),
   exported from `@gbd/db/testing`, rather than inserting rows directly.
 - **Tests that need two transactions at once** — anything about a lock, a block, or a second
   snapshot — use [`src/testing/concurrency.ts`](src/testing/concurrency.ts) instead of

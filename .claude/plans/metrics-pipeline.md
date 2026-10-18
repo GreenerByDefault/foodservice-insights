@@ -362,7 +362,8 @@ history, since the views read rows that already exist.
 
 - The fixtures gain the timestamp overrides the generator needs and lack today:
   `insertAppUser` takes `createdAt` and `emailConfirmedAt`, and `insertOrganization` and
-  `insertReport` take `createdAt` if they do not already. Each gets a case in `fixtures.test.ts`.
+  `insertReport` take `createdAt` if they do not already. Each gets a case in the
+  `.test.ts` beside its file under `src/testing/fixtures/`.
 - `packages/db/src/testing/history.ts`: the generator from Decisions, split into a pure
   `planSyntheticHistory(seed)`, which returns the rows to write with offsets from now rather
   than dates, and `insertSyntheticHistory(database)`, which writes a plan through the fixtures

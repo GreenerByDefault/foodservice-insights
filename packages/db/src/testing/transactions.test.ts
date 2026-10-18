@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../env.ts';
 import type { ReportId } from '../generated/public/Report.ts';
-import { insertReport } from './fixtures.ts';
+import { insertReport } from './fixtures/index.ts';
 import { withRollback } from './transactions.ts';
 
 async function findReport(id: ReportId) {

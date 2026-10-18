@@ -12,7 +12,7 @@ import {
   insertAnalysisAttempt,
   insertAppUser,
   insertReport,
-} from '../src/testing/fixtures.ts';
+} from '../src/testing/fixtures/index.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
 /** Text columns whose source has a pattern CHECK making them an identifier, keyed by

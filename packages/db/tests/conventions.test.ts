@@ -5,7 +5,7 @@
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
-import { insertOrganization, insertReport } from '../src/testing/fixtures.ts';
+import { insertOrganization, insertReport } from '../src/testing/fixtures/index.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
 describe('conventions', () => {

@@ -21,7 +21,7 @@ import {
   POSTGRES_CODE_QUERY_CANCELED,
 } from '../postgres-codes.ts';
 import type { Database, DatabaseExecutor } from '../schema.ts';
-import { insertOrganization } from './fixtures.ts';
+import { insertOrganization } from './fixtures/index.ts';
 
 /** How long a statement may wait on a lock before the harness gives up on it. Replaces the pool's
  * `idle_in_transaction_session_timeout`, which these transactions have to switch off.
