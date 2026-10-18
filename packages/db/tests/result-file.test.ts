@@ -1,41 +1,23 @@
 /** The pdf and xlsx a succeeded analysis attempt produces. */
 
+import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
-import type { AnalysisAttempt } from '../src/generated/public/AnalysisAttempt.ts';
 import type { Report } from '../src/generated/public/Report.ts';
 import { POSTGRES_CODE_UNIQUE_VIOLATION } from '../src/postgres-codes.ts';
+import type { Database } from '../src/schema.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   aChecksum,
   insertAnalysisAttempt,
   insertInputFile,
   insertReport,
+  insertResultFile,
 } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
 
-type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
-
 describe('result_file', () => {
-  async function aResultFile(
-    transaction: Transaction,
-    attemptId: AnalysisAttempt['id'],
-    kind: 'pdf' | 'xlsx',
-  ) {
-    return await transaction
-      .insertInto('resultFile')
-      .values({
-        analysisAttemptId: attemptId,
-        kind,
-        storageKey: `org/test/${crypto.randomUUID()}.${kind}`,
-        byteSize: 2048,
-        contentType: 'application/octet-stream',
-        checksumSha256: aChecksum(),
-      })
-      .execute();
-  }
-
-  async function aSucceededAttempt(transaction: Transaction, reportId?: Report['id']) {
+  async function aSucceededAttempt(transaction: Transaction<Database>, reportId?: Report['id']) {
     return await insertAnalysisAttempt(transaction, { reportId, status: 'succeeded' });
   }
 
@@ -61,8 +43,8 @@ describe('result_file', () => {
   test.each(['pdf' as const, 'xlsx' as const])('allows only one %s per attempt', async (kind) => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const attempt = await aSucceededAttempt(transaction);
-      await aResultFile(transaction, attempt.id, kind);
-      await aResultFile(transaction, attempt.id, kind);
+      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: kind });
+      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: kind });
     });
 
     await expectConstraintViolation(
@@ -75,7 +57,7 @@ describe('result_file', () => {
   test('is deleted with the attempt that produced it', async () => {
     const remaining = await withRollback(DATABASE, async (transaction) => {
       const attempt = await aSucceededAttempt(transaction);
-      await aResultFile(transaction, attempt.id, 'pdf');
+      await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
 
       await transaction.deleteFrom('analysisAttempt').where('id', '=', attempt.id).execute();
 
@@ -93,7 +75,7 @@ describe('result_file', () => {
     // checkDeferredConstraints also re-checks report_has_an_input_file, since insertReport
     // (which insertAnalysisAttempt falls back on) doesn't attach one — so every test below needs
     // its own report with an input file, not the bare one insertAnalysisAttempt would create.
-    async function aReportId(transaction: Transaction): Promise<Report['id']> {
+    async function aReportId(transaction: Transaction<Database>): Promise<Report['id']> {
       const report = await insertReport(transaction);
       await insertInputFile(transaction, { reportId: report.id });
       return report.id;
@@ -111,7 +93,7 @@ describe('result_file', () => {
     test('rejects succeeding with a pdf but no xlsx', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
         const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
-        await aResultFile(transaction, attempt.id, 'pdf');
+        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
         await checkDeferredConstraints(transaction);
       });
 
@@ -121,7 +103,7 @@ describe('result_file', () => {
     test('rejects succeeding with an xlsx but no pdf', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
         const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
-        await aResultFile(transaction, attempt.id, 'xlsx');
+        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
         await checkDeferredConstraints(transaction);
       });
 
@@ -131,8 +113,8 @@ describe('result_file', () => {
     test('passes once both are attached', async () => {
       await withRollback(DATABASE, async (transaction) => {
         const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
-        await aResultFile(transaction, attempt.id, 'pdf');
-        await aResultFile(transaction, attempt.id, 'xlsx');
+        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
+        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
 
         await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
       });

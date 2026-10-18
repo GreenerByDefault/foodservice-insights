@@ -1,7 +1,7 @@
 /** The auth side of the schema: users mirrored from `auth.users`, organizations, membership, and
  * invites. */
 
-import { sql } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import {
   MAX_DISPLAY_NAME_LENGTH,
@@ -16,6 +16,7 @@ import {
   POSTGRES_CODE_FOREIGN_KEY_VIOLATION,
   POSTGRES_CODE_UNIQUE_VIOLATION,
 } from '../src/postgres-codes.ts';
+import type { Database } from '../src/schema.ts';
 import {
   fixtureOrganizationName,
   insertFixtureOrganization,
@@ -28,10 +29,9 @@ import {
   insertAppUser,
   insertOrganization,
   insertOrganizationInvite,
+  insertOrganizationMember,
 } from '../src/testing/fixtures.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
-
-type Transaction = Parameters<Parameters<typeof withRollback>[1]>[0];
 
 describe('app_user', () => {
   test('is created by a trigger when auth.users gains a row', async () => {
@@ -278,20 +278,20 @@ describe('organization', () => {
 });
 
 describe('organization_member', () => {
-  describe('the at-least-one-admin rule', () => {
-    async function demote(
-      transaction: Transaction,
-      organizationId: OrganizationId,
-      userId: AppUser['id'],
-    ): Promise<void> {
-      await transaction
-        .updateTable('organizationMember')
-        .set({ role: 'member' })
-        .where('organizationId', '=', organizationId)
-        .where('userId', '=', userId)
-        .execute();
-    }
+  async function demote(
+    transaction: Transaction<Database>,
+    organizationId: OrganizationId,
+    userId: AppUser['id'],
+  ): Promise<void> {
+    await transaction
+      .updateTable('organizationMember')
+      .set({ role: 'member' })
+      .where('organizationId', '=', organizationId)
+      .where('userId', '=', userId)
+      .execute();
+  }
 
+  describe('the at-least-one-admin rule', () => {
     test('organization_has_a_member is deferred to commit; the admin trigger is not', async () => {
       // Not provocable from a single transaction: this is a property of each trigger's
       // definition, not of a row. `organization_has_a_member` has to stay deferred — the
@@ -321,11 +321,7 @@ describe('organization_member', () => {
         const { organization, admin } = await insertOrganization(transaction);
         // A plain member stays behind, so this is about losing the *admin* rather than about
         // emptying the organization, which is a different rule.
-        const survivor = await insertAppUser(transaction);
-        await transaction
-          .insertInto('organizationMember')
-          .values({ userId: survivor.id, organizationId: organization.id, role: 'member' })
-          .execute();
+        await insertOrganizationMember(transaction, { organizationId: organization.id });
 
         await transaction
           .deleteFrom('organizationMember')
@@ -354,25 +350,24 @@ describe('organization_member', () => {
         DATABASE,
         async (transaction, trash) => {
           const { organization, admin } = await insertFixtureOrganization(transaction, trash);
-          const second = await insertAppUser(transaction);
-          trash.user(second.id);
-          await transaction
-            .insertInto('organizationMember')
-            .values({ userId: second.id, organizationId: organization.id, role: 'admin' })
-            .execute();
-          return { organizationId: organization.id, first: admin, second };
+          const second = await insertOrganizationMember(transaction, {
+            organizationId: organization.id,
+            role: 'admin',
+          });
+          trash.user(second.userId);
+          return { organizationId: organization.id, first: admin.id, second: second.userId };
         },
         async ({ organizationId, first, second }) => {
           await withConcurrentTransactions(DATABASE, async (alpha, beta) => {
             // Not deferred, so this fires immediately: it takes the organization's row lock,
             // passes (the other admin is still standing), and alpha holds the lock until it
             // commits.
-            await demote(alpha.transaction, organizationId, first.id);
+            await demote(alpha.transaction, organizationId, first);
 
             // Beta's own demote is what blocks: its trigger wants the same row lock alpha is
             // holding, and won't get it until alpha commits.
             const blocked = await sendBlockingStatement(DATABASE, beta, alpha, (transaction) =>
-              demote(transaction, organizationId, second.id),
+              demote(transaction, organizationId, second),
             );
 
             await alpha.transaction.commit().execute();
@@ -393,7 +388,7 @@ describe('organization_member', () => {
             .where('organizationId', '=', organizationId)
             .where('role', '=', 'admin')
             .execute();
-          expect(admins.map((row) => row.userId)).toEqual([second.id]);
+          expect(admins.map((row) => row.userId)).toEqual([second]);
         },
       );
     });
@@ -402,18 +397,12 @@ describe('organization_member', () => {
       // Mirrors the order `_removeMember` and `_changeMemberRole` require in production.
       const demoted = withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);
-        const successor = await insertAppUser(transaction);
 
-        await transaction
-          .updateTable('organizationMember')
-          .set({ role: 'member' })
-          .where('organizationId', '=', organization.id)
-          .where('userId', '=', admin.id)
-          .execute();
-        await transaction
-          .insertInto('organizationMember')
-          .values({ userId: successor.id, organizationId: organization.id, role: 'admin' })
-          .execute();
+        await demote(transaction, organization.id, admin.id);
+        await insertOrganizationMember(transaction, {
+          organizationId: organization.id,
+          role: 'admin',
+        });
       });
 
       await expectConstraintViolation(demoted, 'organization_member_at_least_one_admin');
@@ -422,18 +411,12 @@ describe('organization_member', () => {
     test('permits handing the role over when the successor is promoted first', async () => {
       const roles = await withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);
-        const successor = await insertAppUser(transaction);
 
-        await transaction
-          .insertInto('organizationMember')
-          .values({ userId: successor.id, organizationId: organization.id, role: 'admin' })
-          .execute();
-        await transaction
-          .updateTable('organizationMember')
-          .set({ role: 'member' })
-          .where('organizationId', '=', organization.id)
-          .where('userId', '=', admin.id)
-          .execute();
+        await insertOrganizationMember(transaction, {
+          organizationId: organization.id,
+          role: 'admin',
+        });
+        await demote(transaction, organization.id, admin.id);
 
         return await transaction
           .selectFrom('organizationMember')
@@ -471,11 +454,7 @@ describe('organization_member', () => {
       // account.
       const remove = withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);
-        const survivor = await insertAppUser(transaction);
-        await transaction
-          .insertInto('organizationMember')
-          .values({ userId: survivor.id, organizationId: organization.id, role: 'member' })
-          .execute();
+        await insertOrganizationMember(transaction, { organizationId: organization.id });
 
         await transaction.deleteFrom('auth.users').where('id', '=', admin.id).execute();
       });
@@ -488,23 +467,19 @@ describe('organization_member', () => {
     test('does not count a superadmin as an organization’s admin', async () => {
       // Superadmins are admins everywhere but fill no organization's admin seat, so one cannot
       // be what keeps an organization compliant.
-      const demote = withRollback(DATABASE, async (transaction) => {
+      const demoted = withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);
         const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
-        await transaction
-          .insertInto('organizationMember')
-          .values({ userId: superadmin.id, organizationId: organization.id, role: 'member' })
-          .execute();
+        await insertOrganizationMember(transaction, {
+          organizationId: organization.id,
+          userId: superadmin.id,
+          role: 'member',
+        });
 
-        await transaction
-          .updateTable('organizationMember')
-          .set({ role: 'member' })
-          .where('organizationId', '=', organization.id)
-          .where('userId', '=', admin.id)
-          .execute();
+        await demote(transaction, organization.id, admin.id);
       });
 
-      await expectConstraintViolation(demote, 'organization_member_at_least_one_admin');
+      await expectConstraintViolation(demoted, 'organization_member_at_least_one_admin');
     });
 
     test('counts a superadmin as an organization’s admin when they hold the seat themselves', async () => {
@@ -515,17 +490,13 @@ describe('organization_member', () => {
       const roles = await withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);
         const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
-        await transaction
-          .insertInto('organizationMember')
-          .values({ userId: superadmin.id, organizationId: organization.id, role: 'admin' })
-          .execute();
+        await insertOrganizationMember(transaction, {
+          organizationId: organization.id,
+          userId: superadmin.id,
+          role: 'admin',
+        });
 
-        await transaction
-          .updateTable('organizationMember')
-          .set({ role: 'member' })
-          .where('organizationId', '=', organization.id)
-          .where('userId', '=', admin.id)
-          .execute();
+        await demote(transaction, organization.id, admin.id);
 
         return await transaction
           .selectFrom('organizationMember')

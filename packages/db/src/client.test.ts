@@ -16,127 +16,134 @@ import type { Database } from './schema.ts';
 
 loadLocalEnv();
 
-test('with no override, every field comes from DEFAULT_LIMITS', () => {
-  expect(buildPoolConfig({ connectionString: 'postgres://irrelevant' })).toEqual({
-    connectionString: 'postgres://irrelevant',
-    min: DEFAULT_LIMITS.minConnections,
-    max: DEFAULT_LIMITS.maxConnections,
-    connectionTimeoutMillis: DEFAULT_LIMITS.connectionTimeoutMs,
-    idleTimeoutMillis: DEFAULT_LIMITS.idleTimeoutMs,
-    maxLifetimeSeconds: DEFAULT_LIMITS.maxLifetimeSeconds,
-    allowExitOnIdle: false,
-    options:
-      `-c statement_timeout=${DEFAULT_LIMITS.statementTimeoutMs} ` +
-      `-c idle_in_transaction_session_timeout=${DEFAULT_LIMITS.idleInTransactionSessionTimeoutMs} ` +
-      `-c idle_session_timeout=${DEFAULT_LIMITS.idleSessionTimeoutMs} ` +
-      `-c lock_timeout=${DEFAULT_LIMITS.lockTimeoutMs}`,
-  });
-});
-
-// One override per field, each a value that appears nowhere else in DEFAULT_LIMITS — so a field
-// mapped to the wrong pg option, or a default that leaked through unmerged, shows up as the wrong
-// number rather than passing by coincidence.
-test('an override for every field reaches the matching pg option', () => {
-  expect(
-    buildPoolConfig({
+describe('buildPoolConfig', () => {
+  test('with no override, every field comes from DEFAULT_LIMITS', () => {
+    expect(buildPoolConfig({ connectionString: 'postgres://irrelevant' })).toEqual({
       connectionString: 'postgres://irrelevant',
-      limits: {
-        minConnections: 1,
-        maxConnections: 2,
-        connectionTimeoutMs: 3,
-        idleTimeoutMs: 4,
-        maxLifetimeSeconds: 5,
-        statementTimeoutMs: 6,
-        idleInTransactionSessionTimeoutMs: 7,
-        idleSessionTimeoutMs: 8,
-        lockTimeoutMs: 9,
-      },
-      applicationName: 'a process',
-    }),
-  ).toEqual({
-    connectionString: 'postgres://irrelevant',
-    min: 1,
-    max: 2,
-    connectionTimeoutMillis: 3,
-    idleTimeoutMillis: 4,
-    maxLifetimeSeconds: 5,
-    allowExitOnIdle: false,
-    options:
-      '-c statement_timeout=6 -c idle_in_transaction_session_timeout=7 ' +
-      '-c idle_session_timeout=8 -c lock_timeout=9',
-    application_name: 'a process',
+      min: DEFAULT_LIMITS.minConnections,
+      max: DEFAULT_LIMITS.maxConnections,
+      connectionTimeoutMillis: DEFAULT_LIMITS.connectionTimeoutMs,
+      idleTimeoutMillis: DEFAULT_LIMITS.idleTimeoutMs,
+      maxLifetimeSeconds: DEFAULT_LIMITS.maxLifetimeSeconds,
+      allowExitOnIdle: false,
+      options:
+        `-c statement_timeout=${DEFAULT_LIMITS.statementTimeoutMs} ` +
+        `-c idle_in_transaction_session_timeout=${DEFAULT_LIMITS.idleInTransactionSessionTimeoutMs} ` +
+        `-c idle_session_timeout=${DEFAULT_LIMITS.idleSessionTimeoutMs} ` +
+        `-c lock_timeout=${DEFAULT_LIMITS.lockTimeoutMs}`,
+    });
+  });
+
+  // One override per field, each a value that appears nowhere else in DEFAULT_LIMITS — so a field
+  // mapped to the wrong pg option, or a default that leaked through unmerged, shows up as the wrong
+  // number rather than passing by coincidence.
+  test('an override for every field reaches the matching pg option', () => {
+    expect(
+      buildPoolConfig({
+        connectionString: 'postgres://irrelevant',
+        limits: {
+          minConnections: 1,
+          maxConnections: 2,
+          connectionTimeoutMs: 3,
+          idleTimeoutMs: 4,
+          maxLifetimeSeconds: 5,
+          statementTimeoutMs: 6,
+          idleInTransactionSessionTimeoutMs: 7,
+          idleSessionTimeoutMs: 8,
+          lockTimeoutMs: 9,
+        },
+        applicationName: 'a process',
+      }),
+    ).toEqual({
+      connectionString: 'postgres://irrelevant',
+      min: 1,
+      max: 2,
+      connectionTimeoutMillis: 3,
+      idleTimeoutMillis: 4,
+      maxLifetimeSeconds: 5,
+      allowExitOnIdle: false,
+      options:
+        '-c statement_timeout=6 -c idle_in_transaction_session_timeout=7 ' +
+        '-c idle_session_timeout=8 -c lock_timeout=9',
+      application_name: 'a process',
+    });
+  });
+
+  test('a CA turns on TLS, verified against it', () => {
+    const { ssl } = buildPoolConfig({
+      connectionString: 'postgres://irrelevant',
+      sslCa: 'the PEM',
+    });
+    expect(ssl).toEqual({ ca: 'the PEM' });
+  });
+
+  // `.env.example` leaves `DB_SSL_CA` blank, which reaches here as `''`, not `undefined`.
+  test('an empty CA leaves TLS off', () => {
+    const config = buildPoolConfig({ connectionString: 'postgres://irrelevant', sslCa: '' });
+    expect(config).not.toHaveProperty('ssl');
   });
 });
 
-test('a CA turns on TLS, verified against it', () => {
-  const { ssl } = buildPoolConfig({ connectionString: 'postgres://irrelevant', sslCa: 'the PEM' });
-  expect(ssl).toEqual({ ca: 'the PEM' });
-});
-
-// `.env.example` leaves `DB_SSL_CA` blank, which reaches here as `''`, not `undefined`.
-test('an empty CA leaves TLS off', () => {
-  const config = buildPoolConfig({ connectionString: 'postgres://irrelevant', sslCa: '' });
-  expect(config).not.toHaveProperty('ssl');
-});
-
-// A real `destroy()` is too fast, locally, to reliably lose to any timeout worth setting — so
-// this stands in a handle whose `destroy()` hangs, the only way to observe the race at all.
-function neverDestroys(): Kysely<Database> {
-  return { destroy: () => new Promise<void>(() => undefined) } as unknown as Kysely<Database>;
-}
-
-test('a custom shutdownTimeoutMs overrides the default', async () => {
-  await expect(shutdownDatabase(neverDestroys(), 10)).rejects.toThrow(
-    'Database shutdown exceeded 10ms',
-  );
-});
-
-// `buildPoolConfig`'s `options` string is not type-checked by `pg` — a typo'd flag name there
-// would build without error and fail silently against a real server. This runs the assembled
-// string against one, so a bad flag would show up as the timeout never firing.
-test('a custom statementTimeoutMs is enforced by the real database', async () => {
-  const database = initializeDatabase({
-    connectionString: requireEnv('DB_CONNECTION_STRING'),
-    limits: { statementTimeoutMs: 100 },
-    log: 'console',
-  });
-
-  try {
-    const cancellation = await sql`select pg_sleep(1)`
-      .execute(database)
-      .catch((error: unknown) => error);
-
-    expect(cancellation).toBeInstanceOf(DatabaseError);
-    expect((cancellation as DatabaseError).code).toBe('57014'); // query_canceled
-
-    // The override didn't just disable statements entirely: a query well under the limit still
-    // succeeds.
-    await expect(sql`select 1`.execute(database)).resolves.toBeDefined();
-  } finally {
-    await shutdownDatabase(database);
+describe('shutdownDatabase', () => {
+  // A real `destroy()` is too fast, locally, to reliably lose to any timeout worth setting — so
+  // this stands in a handle whose `destroy()` hangs, the only way to observe the race at all.
+  function neverDestroys(): Kysely<Database> {
+    return { destroy: () => new Promise<void>(() => undefined) } as unknown as Kysely<Database>;
   }
+
+  test('a custom shutdownTimeoutMs overrides the default', async () => {
+    await expect(shutdownDatabase(neverDestroys(), 10)).rejects.toThrow(
+      'Database shutdown exceeded 10ms',
+    );
+  });
 });
 
-test('the lock timeout and application name reach the real session', async () => {
-  const database = initializeDatabase({
-    connectionString: requireEnv('DB_CONNECTION_STRING'),
-    limits: { lockTimeoutMs: 1_234 },
-    applicationName: 'client.test',
-    log: 'console',
+describe('initializeDatabase', () => {
+  // `buildPoolConfig`'s `options` string is not type-checked by `pg` — a typo'd flag name there
+  // would build without error and fail silently against a real server. This runs the assembled
+  // string against one, so a bad flag would show up as the timeout never firing.
+  test('a custom statementTimeoutMs is enforced by the real database', async () => {
+    const database = initializeDatabase({
+      connectionString: requireEnv('DB_CONNECTION_STRING'),
+      limits: { statementTimeoutMs: 100 },
+      log: 'console',
+    });
+
+    try {
+      const cancellation = await sql`select pg_sleep(1)`
+        .execute(database)
+        .catch((error: unknown) => error);
+
+      expect(cancellation).toBeInstanceOf(DatabaseError);
+      expect((cancellation as DatabaseError).code).toBe('57014'); // query_canceled
+
+      // The override didn't just disable statements entirely: a query well under the limit still
+      // succeeds.
+      await expect(sql`select 1`.execute(database)).resolves.toBeDefined();
+    } finally {
+      await shutdownDatabase(database);
+    }
   });
 
-  try {
-    const { rows } = await sql<{ lockTimeout: string; applicationName: string }>`
+  test('the lock timeout and application name reach the real session', async () => {
+    const database = initializeDatabase({
+      connectionString: requireEnv('DB_CONNECTION_STRING'),
+      limits: { lockTimeoutMs: 1_234 },
+      applicationName: 'client.test',
+      log: 'console',
+    });
+
+    try {
+      const { rows } = await sql<{ lockTimeout: string; applicationName: string }>`
       select current_setting('lock_timeout') as lock_timeout,
         current_setting('application_name') as application_name
     `.execute(database);
-    expect(rows).toEqual([{ lockTimeout: '1234ms', applicationName: 'client.test' }]);
-  } finally {
-    await shutdownDatabase(database);
-  }
-});
+      expect(rows).toEqual([{ lockTimeout: '1234ms', applicationName: 'client.test' }]);
+    } finally {
+      await shutdownDatabase(database);
+    }
+  });
 
-describe('a dropped connection', () => {
   test('an idle connection the server terminates is logged once, as a warning', async () => {
     const sink = collectingLogger();
     const database = initializeDatabase({
@@ -161,7 +168,9 @@ describe('a dropped connection', () => {
       await shutdownDatabase(database);
     }
   });
+});
 
+describe('logConnectionError', () => {
   test('anything not transient is logged as an error', () => {
     const sink = collectingLogger();
 
