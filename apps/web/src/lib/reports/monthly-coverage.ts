@@ -1,6 +1,7 @@
 /** The months a file has orders in, against the counts the form gave for them. */
 
 import type { MonthlyCounts, MonthsFromFile } from './metadata.ts';
+import { formatMonth } from './monthly-counts.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
 
 const monthListFormat = new Intl.ListFormat('en', { type: 'conjunction' });
@@ -15,7 +16,7 @@ export function monthsWithoutCounts(
   const those = uncounted.length === 1 ? 'that month' : 'those months';
   return {
     reason: 'invalid_metadata',
-    summary: `Your file has orders in ${monthListFormat.format(uncounted)}, but you did not give a count for ${those}.`,
+    summary: `Your file has orders in ${monthListFormat.format(uncounted.map(formatMonth))}, but you did not give a count for ${those}.`,
     rejectionDetail: `months in the file with no count: ${uncounted.join(', ')}`,
   };
 }

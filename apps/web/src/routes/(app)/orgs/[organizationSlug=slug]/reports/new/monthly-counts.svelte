@@ -23,6 +23,9 @@ const legend = $derived(countsHeading(basis));
 const groups = $derived(groupByYear(months));
 const showYearHeadings = $derived(groups.length > 1);
 const missing = $derived(missingMonthCount(counts, months));
+const progress = $derived(
+  `${missing} of ${months.length} ${months.length === 1 ? 'month' : 'months'} still ${missing === 1 ? 'needs' : 'need'} a count`,
+);
 // `MAX_MONTHS` is 120, so a single column still has to be usable for a decade of history.
 const gridClass = $derived(months.length <= 6 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2');
 const progressId = $props.id();
@@ -33,8 +36,7 @@ const progressId = $props.id();
   <!-- Live for now, though chatty: it speaks after each field once typing pauses. It is the only
        sense of progress through up to 120 fields. Revisit if it proves too noisy. -->
   <Field.Description id={progressId} aria-live="polite">
-    {missing}
-    of {months.length} months still need a count
+    {progress}
   </Field.Description>
 
   {#each groups as group (group.year)}

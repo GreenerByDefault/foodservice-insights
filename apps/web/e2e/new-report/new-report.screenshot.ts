@@ -14,7 +14,7 @@ test('the new report form, before any file is chosen', async ({ page, org }) => 
   await ensureHydrated(page);
 
   await expect(page.getByText('Choose a CSV or Excel file')).toBeVisible();
-  await expectScreenshots(page, 'empty.png');
+  await expectScreenshots(page, 'no-file.png');
 });
 
 // Spans two years, like the fixture this replaced, so the shot also exercises the year headings.
@@ -26,7 +26,7 @@ const CSV = [
   'beef,2026-02-05,12',
 ].join('\n');
 
-test('the new report form, with the monthly counts component partway filled in', async ({
+test('the new report form, asking for the weight unit, with the monthly counts partway filled in', async ({
   page,
   org,
 }) => {
@@ -42,8 +42,28 @@ test('the new report form, with the monthly counts component partway filled in',
   await page.getByRole('spinbutton', { name: 'December 2025' }).fill('115');
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('130');
 
-  await expect(page.getByText('1 of 4 months still need a count')).toBeVisible();
-  await expectScreenshots(page, 'filled.png');
+  await expect(page.getByText('1 of 4 months still needs a count')).toBeVisible();
+  await expectScreenshots(page, 'unit-asked.png');
+});
+
+// The name is long enough to truncate on mobile, beside the line the header's unit adds.
+const LONG_FILENAME = 'cedar-lane-catering-purchases-january-to-march-2026-all-sites.csv';
+
+test('the new report form, with the weight unit taken from the header', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
+  await ensureHydrated(page);
+
+  await chooseCsv(
+    page,
+    LONG_FILENAME,
+    ['Product,Date,Weight (lb)', 'beef,2026-01-05,12'].join('\n'),
+  );
+
+  await expect(page.getByText('Weights are in pounds, as the column name says.')).toBeVisible();
+  // The rest of the form is `unit-asked.png`'s.
+  await expectScreenshots(page, 'unit-from-header.png', {
+    clipBelow: page.getByRole('group', { name: 'Purchasing data' }),
+  });
 });
 
 // Every column at once, one distinct fault per row plus two rows whose dates prove opposite
@@ -93,7 +113,7 @@ test('the rejection view, with a file dense enough to trigger every kind of prob
 
   await expect(page.getByText('Showing 20 of 22 things to fix.', { exact: false })).toBeVisible();
   await expect(page.getByText('4 rows: 2–4, 9', { exact: false })).toBeVisible();
-  await expectScreenshots(page, 'rejection.png');
+  await expectScreenshots(page, 'rejection-every-kind.png');
 });
 
 // Every row has the same weight fault and nothing else wrong, so `everyRow` is true — the one

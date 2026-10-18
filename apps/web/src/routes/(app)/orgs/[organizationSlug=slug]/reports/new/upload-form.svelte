@@ -18,7 +18,13 @@ import {
   MAX_UPLOAD_FIELD_BYTES,
   MAX_UPLOAD_FIELD_MEGABYTES,
 } from '#lib/reports/limits.js';
-import { COUNTS_BASES, FIELD, UNIT_SYSTEMS } from '#lib/reports/metadata.js';
+import {
+  COUNTS_BASES,
+  FIELD,
+  FIELD_LABELS,
+  UNIT_NAMES,
+  UNIT_SYSTEMS,
+} from '#lib/reports/metadata.js';
 import { type CountDraft, reconcileDraft, serializeCounts } from '#lib/reports/monthly-counts.js';
 import { userFacingRejection, type UploadRejection } from '#lib/reports/rejection.js';
 import { uploadReport } from '#lib/reports/api/upload-report.js';
@@ -36,6 +42,8 @@ let { organizationSlug, rateLimitWarning }: Props = $props();
 // so swapping to the rejection view and back never loses what the user already typed.
 let upload: { csvFile: File; workbook?: File } | undefined = $state();
 let months: readonly string[] | undefined = $state();
+/** Set when the file's weight header names a unit, which then replaces the Weight unit question. */
+let fileWeightUnit: UnitSystem | undefined = $state();
 let counts: CountDraft = $state({});
 let name = $state('');
 let siteName = $state('');
@@ -65,6 +73,9 @@ let replaceButtonElement: HTMLButtonElement | HTMLAnchorElement | null = $state(
 
 let unitSystemElement: HTMLElement | null = $state(null);
 const id = $props.id();
+const fileIntroId = `${id}-file-intro`;
+const otherColumnsId = `${id}-other-columns`;
+const reportNameHintId = `${id}-report-name-hint`;
 const siteNameHintId = `${id}-site-name-hint`;
 const unitSystemHintId = `${id}-unit-system-hint`;
 const unitSystemErrorId = `${id}-unit-system-error`;
@@ -72,6 +83,8 @@ const unitSystemTitleId = `${id}-unit-system-title`;
 const countsMeaningId = `${id}-counts-meaning`;
 const countsScopeId = `${id}-counts-scope`;
 const countsBasisTitleId = `${id}-counts-basis-title`;
+
+const UNIT_WORDS: Record<UnitSystem, string> = { lb: 'pounds', kg: 'kilograms' };
 
 function fileRejectionMessage(reason: FileRejectedReason): string {
   switch (reason) {
@@ -105,11 +118,13 @@ async function inspectChosenFile(files: File[]) {
     formState = { status: 'rejected', rejection: userFacingRejection(inspection.rejection) };
     upload = undefined;
     months = undefined;
+    fileWeightUnit = undefined;
     return;
   }
 
   upload = inspection.upload;
   months = inspection.months;
+  fileWeightUnit = inspection.weightUnit;
   counts = reconcileDraft(counts, months);
   formState = { status: 'idle' };
   await tick();
@@ -120,6 +135,7 @@ async function inspectChosenFile(files: File[]) {
 async function replaceFile() {
   upload = undefined;
   months = undefined;
+  fileWeightUnit = undefined;
   fileError = undefined;
   formState = { status: 'idle' };
   await tick();
@@ -134,18 +150,18 @@ async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElemen
 
   // Two traps native validation can't see: the chosen file lives in component state, not the
   // drop zone's input (which is cleared after every pick and unmounted once a file is chosen), and
-  // a `RadioGroup` submits through a hidden input (`required` on it is a no-op). Both need a
-  // hand-written check, an inline message, and a manual focus — a failed submit otherwise gives
-  // the user no locator.
+  // `required` on a `RadioGroup` is a no-op. Both need a hand-written check, an inline message,
+  // and a manual focus — a failed submit otherwise gives the user no locator.
   const chosenUpload = upload;
+  const weightUnit = fileWeightUnit ?? unitSystem;
   fileError = chosenUpload ? undefined : 'Choose a CSV or Excel file to upload.';
-  unitSystemError = unitSystem ? undefined : 'Choose lb or kg.';
+  unitSystemError = weightUnit ? undefined : 'Choose pounds or kilograms.';
 
   if (!chosenUpload) {
     fileInputElement?.focus();
     return;
   }
-  if (!unitSystem) {
+  if (!weightUnit) {
     // The radiogroup root has no tabindex, so focusing it is a no-op.
     unitSystemElement?.querySelector<HTMLElement>('[role=radio]')?.focus();
     return;
@@ -161,6 +177,7 @@ async function handleSubmit(event: SubmitEvent & { currentTarget: HTMLFormElemen
   formData.set(FIELD.csvFile, chosenUpload.csvFile);
   // The original, for the server to store without ever opening it.
   if (chosenUpload.workbook) formData.set(FIELD.workbook, chosenUpload.workbook);
+  formData.set(FIELD.unitSystem, weightUnit);
   formData.set(FIELD.monthlyCounts, serialized);
 
   formState = { status: 'submitting' };
@@ -198,16 +215,53 @@ async function backToForm() {
       </Alert>
     {/if}
 
-    <Field.Set>
+    <Field.Set aria-describedby="{fileIntroId} {otherColumnsId}">
       <Field.Legend>Purchasing data</Field.Legend>
-      <Field.Description>
-        A CSV or Excel workbook of your food purchases, with three columns: product name, date
-        ordered, and weight. Up to {MAX_UPLOAD_FIELD_MEGABYTES}MB.
+      <Field.Description id={fileIntroId}>
+        Upload a spreadsheet of what you bought, as a CSV or Excel file up to
+        {MAX_UPLOAD_FIELD_MEGABYTES}MB. Its first row should name these three columns:
+      </Field.Description>
+      <table class="max-w-xl text-left text-sm text-muted-foreground">
+        <caption class="sr-only">
+          Columns your file needs
+        </caption>
+        <thead class="sr-only">
+          <tr>
+            <th scope="col">Column</th>
+            <th scope="col">What goes in it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row" class="py-1 pr-6 align-top font-normal">Product</th>
+            <td class="py-1 align-top">What you bought, such as Chicken breast.</td>
+          </tr>
+          <tr>
+            <th scope="row" class="py-1 pr-6 align-top font-normal">Date</th>
+            <td class="py-1 align-top">When you ordered it, such as 2026-01-05.</td>
+          </tr>
+          <tr>
+            <th scope="row" class="py-1 pr-6 align-top font-normal whitespace-nowrap">
+              Weight (lb)<br>or Weight (kg)
+            </th>
+            <td class="py-1 align-top">The weight as a plain number, such as 40 (not "40 lb").</td>
+          </tr>
+        </tbody>
+      </table>
+      <Field.Description id={otherColumnsId}>
+        Any other columns are fine. We ignore them.
       </Field.Description>
 
       {#if upload}
         <div class="flex items-center justify-between gap-4 rounded-md border p-3">
-          <p class="min-w-0 truncate font-medium">{upload.workbook?.name ?? upload.csvFile.name}</p>
+          <div class="min-w-0">
+            <p class="truncate font-medium">{upload.workbook?.name ?? upload.csvFile.name}</p>
+            {#if fileWeightUnit}
+              <p class="text-sm text-muted-foreground">
+                Weights are in {UNIT_WORDS[fileWeightUnit]}, as the column name says.
+              </p>
+            {/if}
+          </div>
           <Button
             bind:ref={replaceButtonElement}
             type="button"
@@ -246,13 +300,43 @@ async function backToForm() {
       {#if fileError}
         <Field.Error>{fileError}</Field.Error>
       {/if}
+
+      {#if months && !fileWeightUnit}
+        <Field.Field>
+          <Field.Title id={unitSystemTitleId}>{FIELD_LABELS.unitSystem}</Field.Title>
+          <Field.Description id={unitSystemHintId}>
+            Your weight column doesn't say whether it's in pounds or kilograms. Name it Weight (lb)
+            or Weight (kg) next time, and we won't need to ask.
+          </Field.Description>
+          <RadioGroup
+            bind:ref={unitSystemElement}
+            aria-labelledby={unitSystemTitleId}
+            aria-invalid={unitSystemError ? true : undefined}
+            aria-describedby={unitSystemError
+              ? `${unitSystemHintId} ${unitSystemErrorId}`
+              : unitSystemHintId}
+            value={unitSystem}
+            onValueChange={(value) => (unitSystem = value as UnitSystem)}
+          >
+            {#each UNIT_SYSTEMS as system (system)}
+              <Field.Label>
+                <RadioGroupItem value={system} />
+                {UNIT_NAMES[system]}
+              </Field.Label>
+            {/each}
+          </RadioGroup>
+          {#if unitSystemError}
+            <Field.Error id={unitSystemErrorId}>{unitSystemError}</Field.Error>
+          {/if}
+        </Field.Field>
+      {/if}
     </Field.Set>
 
     <Field.Set>
       <Field.Legend>Report details</Field.Legend>
 
       <Field.Field>
-        <Field.Label for={FIELD.name}>Report name</Field.Label>
+        <Field.Label for={FIELD.name}>{FIELD_LABELS.name}</Field.Label>
         <Input
           id={FIELD.name}
           name={FIELD.name}
@@ -260,12 +344,14 @@ async function backToForm() {
           maxlength={MAX_FREE_TEXT_LENGTH}
           required
           autocomplete="off"
+          aria-describedby={reportNameHintId}
           bind:value={name}
         />
+        <Field.Description id={reportNameHintId}>For example, Q1 2026 purchases.</Field.Description>
       </Field.Field>
 
       <Field.Field>
-        <Field.Label for="site-name">Site name (optional)</Field.Label>
+        <Field.Label for="site-name">{FIELD_LABELS.siteName} (optional)</Field.Label>
         <Input
           id="site-name"
           name={FIELD.siteName}
@@ -279,34 +365,6 @@ async function backToForm() {
           The specific location your file covers, such as one dining hall on a university campus.
           Leave blank if your file covers your whole organization.
         </Field.Description>
-      </Field.Field>
-
-      <Field.Field>
-        <Field.Title id={unitSystemTitleId}>Weight unit</Field.Title>
-        <Field.Description id={unitSystemHintId}>
-          The unit your file uses for weight.
-        </Field.Description>
-        <RadioGroup
-          bind:ref={unitSystemElement}
-          aria-labelledby={unitSystemTitleId}
-          name={FIELD.unitSystem}
-          aria-invalid={unitSystemError ? true : undefined}
-          aria-describedby={unitSystemError
-            ? `${unitSystemHintId} ${unitSystemErrorId}`
-            : unitSystemHintId}
-          value={unitSystem}
-          onValueChange={(value) => (unitSystem = value as UnitSystem)}
-        >
-          {#each UNIT_SYSTEMS as system (system)}
-            <Field.Label>
-              <RadioGroupItem value={system} />
-              {system}
-            </Field.Label>
-          {/each}
-        </RadioGroup>
-        {#if unitSystemError}
-          <Field.Error id={unitSystemErrorId}>{unitSystemError}</Field.Error>
-        {/if}
       </Field.Field>
     </Field.Set>
 
@@ -322,7 +380,7 @@ async function backToForm() {
       </Field.Description>
 
       <Field.Field>
-        <Field.Title id={countsBasisTitleId}>Count by</Field.Title>
+        <Field.Title id={countsBasisTitleId}>{FIELD_LABELS.countsBasis}</Field.Title>
         <RadioGroup
           aria-labelledby={countsBasisTitleId}
           name={FIELD.countsBasis}

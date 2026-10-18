@@ -24,10 +24,10 @@ test('uploading a good CSV creates a report and lands on its page, which reads b
 
   await page.getByLabel('Report name').fill('Q1 procurement');
   await chooseCsv(page, 'procurement.csv', GOOD_CSV);
-  await expect(page.getByText('1 of 1 months still need a count')).toBeVisible();
+  await expect(page.getByText('1 of 1 month still needs a count')).toBeVisible();
   await page.getByRole('radio', { name: 'Meals' }).click();
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('1250');
-  await page.getByRole('radio', { name: 'kg' }).click();
+  await page.getByRole('radio', { name: 'Kilograms (kg)' }).click();
 
   await page.getByRole('button', { name: 'Upload report' }).click();
 
@@ -35,7 +35,7 @@ test('uploading a good CSV creates a report and lands on its page, which reads b
   await expect(page).toHaveTitle(`Q1 procurement · ${org.name} · ${APP_NAME}`);
   const details = page.getByRole('region', { name: 'Upload details' });
   await expect(details.getByRole('link', { name: 'procurement.csv' })).toBeVisible();
-  await expect(details.getByText('kg (kilograms)')).toBeVisible();
+  await expect(details.getByText('Kilograms (kg)')).toBeVisible();
   await expect(details.getByText('Meals per month')).toBeVisible();
   await expect(details.getByText('January 2026')).toBeVisible();
   await expect(details.getByText('1,250')).toBeVisible();
@@ -100,7 +100,7 @@ test('uploading a workbook creates a report whose uploaded file is the workbook 
   await expect(page.getByText('2 of 2 months still need a count')).toBeVisible();
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
   await page.getByRole('spinbutton', { name: 'February 2026' }).fill('120');
-  await page.getByRole('radio', { name: 'lb' }).click();
+  await page.getByRole('radio', { name: 'Pounds (lb)' }).click();
 
   await page.getByRole('button', { name: 'Upload report' }).click();
 
@@ -131,7 +131,7 @@ test('a workbook big enough to be unzipped in a worker converts', async ({ page,
   await ensureHydrated(page);
   await chooseWorkbook(page, 'orders.xlsx', workbook);
 
-  await expect(page.getByText('1 of 1 months still need a count')).toBeVisible();
+  await expect(page.getByText('1 of 1 month still needs a count')).toBeVisible();
 });
 
 function sheetXmlBytes(workbook: Uint8Array): number {

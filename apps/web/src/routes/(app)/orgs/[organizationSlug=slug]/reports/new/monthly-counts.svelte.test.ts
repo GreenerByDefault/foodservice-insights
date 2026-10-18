@@ -74,7 +74,7 @@ describe('MonthlyCounts', () => {
     await expect.element(screen.getByText('2 of 3 months still need a count')).toBeInTheDocument();
 
     await screen.getByRole('spinbutton', { name: 'February 2026' }).fill('200');
-    await expect.element(screen.getByText('1 of 3 months still need a count')).toBeInTheDocument();
+    await expect.element(screen.getByText('1 of 3 months still needs a count')).toBeInTheDocument();
     expect(counts['2026-02']).toBe(200);
   });
 });

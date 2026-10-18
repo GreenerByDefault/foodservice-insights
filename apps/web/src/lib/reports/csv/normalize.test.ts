@@ -164,7 +164,7 @@ describe('normalizeCsv', () => {
           {
             rule: 'The weight has a unit in it',
             advice:
-              'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
+              'Enter plain numbers only, and put the unit in the column name instead: "Weight (lb)" or "Weight (kg)".',
             rows: { ranges: [{ start: 2, end: 3 }], total: 2, everyRow: false },
             examples: ['"5 oz"', '"3 kg"'],
           },

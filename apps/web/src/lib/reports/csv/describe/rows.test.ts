@@ -104,7 +104,7 @@ describe('the advice a finding carries', () => {
     ['scientific', 'Format the column as a number.'],
     [
       'has-a-unit',
-      'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
+      'Enter plain numbers only, and put the unit in the column name instead: "Weight (lb)" or "Weight (kg)".',
     ],
     ['comma-decimal', 'Use a period for the decimal point.'],
   ] as const)('weight fault %s carries advice as a sentence of its own', ([fault, advice]) => {

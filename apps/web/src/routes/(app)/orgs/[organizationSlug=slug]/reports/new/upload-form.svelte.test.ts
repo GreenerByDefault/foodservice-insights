@@ -57,9 +57,9 @@ async function fillRequiredFields(
 ) {
   await screen.getByLabelText('Report name').fill(reportName);
   await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
-  await expect.element(screen.getByText('1 of 1 months still need a count')).toBeInTheDocument();
+  await expect.element(screen.getByText('1 of 1 month still needs a count')).toBeInTheDocument();
   await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
-  await screen.getByRole('radio', { name: 'lb' }).click();
+  await screen.getByRole('radio', { name: 'Pounds (lb)' }).click();
 }
 
 describe('UploadForm', () => {
@@ -110,10 +110,10 @@ describe('UploadForm', () => {
       await screen.getByLabelText('Report name').fill('Q1 procurement');
       await screen.getByLabelText('Choose a CSV or Excel file').upload(workbook);
       await expect
-        .element(screen.getByText('1 of 1 months still need a count'))
+        .element(screen.getByText('1 of 1 month still needs a count'))
         .toBeInTheDocument();
       await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
-      await screen.getByRole('radio', { name: 'lb' }).click();
+      await screen.getByRole('radio', { name: 'Pounds (lb)' }).click();
       await screen.getByRole('button', { name: 'Upload report' }).click();
 
       await expect.poll(() => vi.mocked(goto).mock.calls.length).toBe(1);
@@ -162,9 +162,7 @@ describe('UploadForm', () => {
       await screen.getByRole('button', { name: 'Back to the form' }).click();
 
       await expect.element(screen.getByLabelText('Report name')).toHaveValue('Q1 procurement');
-      await expect
-        .element(screen.getByText('0 of 1 months still need a count'))
-        .toBeInTheDocument();
+      await expect.element(screen.getByText('0 of 1 month still need a count')).toBeInTheDocument();
       await expect
         .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
         .toHaveValue(100);
@@ -241,7 +239,7 @@ describe('UploadForm', () => {
 
       await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
       await expect
-        .element(screen.getByText('1 of 1 months still need a count'))
+        .element(screen.getByText('1 of 1 month still needs a count'))
         .toBeInTheDocument();
 
       await screen.getByRole('button', { name: 'Replace' }).click();
@@ -257,7 +255,6 @@ describe('UploadForm', () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
       await screen.getByLabelText('Report name').fill('Q1 procurement');
-      await screen.getByRole('radio', { name: 'lb' }).click();
       await screen.getByRole('button', { name: 'Upload report' }).click();
 
       await expect
@@ -279,9 +276,11 @@ describe('UploadForm', () => {
       const unitSystem = screen.getByRole('radiogroup', { name: 'Weight unit' });
       await expect
         .element(unitSystem)
-        .toHaveAccessibleDescription('The unit your file uses for weight. Choose lb or kg.');
+        .toHaveAccessibleDescription(
+          "Your weight column doesn't say whether it's in pounds or kilograms. Name it Weight (lb) or Weight (kg) next time, and we won't need to ask. Choose pounds or kilograms.",
+        );
       await expect.element(unitSystem).toHaveAttribute('aria-invalid', 'true');
-      await expect.element(unitSystem.getByRole('radio', { name: 'lb' })).toHaveFocus();
+      await expect.element(unitSystem.getByRole('radio', { name: 'Pounds (lb)' })).toHaveFocus();
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });
@@ -291,13 +290,18 @@ describe('UploadForm', () => {
       const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
 
       await expect
+        .element(screen.getByRole('group', { name: 'Purchasing data' }))
+        .toHaveAccessibleDescription(
+          'Upload a spreadsheet of what you bought, as a CSV or Excel file up to 10MB. Its first row should name these three columns: Any other columns are fine. We ignore them.',
+        );
+      await expect
+        .element(screen.getByLabelText('Report name'))
+        .toHaveAccessibleDescription('For example, Q1 2026 purchases.');
+      await expect
         .element(screen.getByLabelText('Site name (optional)'))
         .toHaveAccessibleDescription(
           'The specific location your file covers, such as one dining hall on a university campus. Leave blank if your file covers your whole organization.',
         );
-      await expect
-        .element(screen.getByRole('radiogroup', { name: 'Weight unit' }))
-        .toHaveAccessibleDescription('The unit your file uses for weight.');
       await expect
         .element(screen.getByRole('group', { name: 'Diners or meals served' }))
         .toHaveAccessibleDescription(
@@ -338,7 +342,7 @@ describe('UploadForm', () => {
       release();
 
       await expect
-        .element(screen.getByText('1 of 1 months still need a count'))
+        .element(screen.getByText('1 of 1 month still needs a count'))
         .toBeInTheDocument();
       await expect.element(screen.getByLabelText('Report name')).toHaveFocus();
     });
@@ -361,6 +365,60 @@ describe('UploadForm', () => {
       await screen.getByRole('button', { name: 'Replace' }).click();
 
       await expect.element(screen.getByLabelText('Choose a CSV or Excel file')).toHaveFocus();
+    });
+  });
+
+  describe('the weight unit', () => {
+    test('is not asked before a file is chosen', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+
+      await expect
+        .element(screen.getByRole('table', { name: 'Columns your file needs' }))
+        .toBeInTheDocument();
+      await expect
+        .element(screen.getByRole('radiogroup', { name: 'Weight unit' }))
+        .not.toBeInTheDocument();
+    });
+
+    test('comes from a header that names it, overriding an earlier choice', async () => {
+      const fetchMock = stubFetch(new Response(null, { status: 201 }));
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await fillRequiredFields(screen);
+      await screen.getByRole('button', { name: 'Replace' }).click();
+
+      await screen
+        .getByLabelText('Choose a CSV or Excel file')
+        .upload(csvFile('Product,Date,Weight (kg)\nbeef,2026-01-05,12\n'));
+
+      await expect
+        .element(screen.getByText('Weights are in kilograms, as the column name says.'))
+        .toBeInTheDocument();
+      await expect
+        .element(screen.getByRole('radiogroup', { name: 'Weight unit' }))
+        .not.toBeInTheDocument();
+      await screen.getByRole('button', { name: 'Upload report' }).click();
+      await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+      expect((lastFetchCall(fetchMock)[1].body as FormData).get('unit-system')).toBe('kg');
+    });
+
+    test('is asked again once Replace swaps in a file whose header names no unit', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen
+        .getByLabelText('Choose a CSV or Excel file')
+        .upload(csvFile('Product,Date,Weight (lbs)\nbeef,2026-01-05,12\n'));
+      await expect
+        .element(screen.getByText('Weights are in pounds, as the column name says.'))
+        .toBeInTheDocument();
+
+      await screen.getByRole('button', { name: 'Replace' }).click();
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+
+      await expect
+        .element(screen.getByRole('radiogroup', { name: 'Weight unit' }))
+        .toBeInTheDocument();
+      await expect
+        .element(screen.getByText('Weights are in pounds, as the column name says.'))
+        .not.toBeInTheDocument();
     });
   });
 

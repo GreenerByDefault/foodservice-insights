@@ -14,6 +14,8 @@ let { data }: PageProps = $props();
 <PageHeading>New report</PageHeading>
 <p>Uploading to <strong>{data.organization.name}</strong>.</p>
 
-<div class="mt-6 max-w-2xl">
+<!-- `w-full` because the layout's `<main>` aligns its children to the start, which would size this
+     to its content: a long file name would widen it past the screen. -->
+<div class="mt-6 w-full max-w-2xl">
   <UploadForm organizationSlug={data.organization.slug} rateLimitWarning={data.rateLimitWarning} />
 </div>

@@ -39,7 +39,7 @@ const WEIGHT_CLAUSES: Record<WeightFault, Clause> = {
   'has-a-unit': {
     clause: 'has a unit in it',
     advice:
-      'Enter plain numbers only — the lb or kg choice on the form sets the unit for the whole file.',
+      'Enter plain numbers only, and put the unit in the column name instead: "Weight (lb)" or "Weight (kg)".',
   },
   'not-a-number': { clause: 'is not a number' },
   'comma-decimal': {

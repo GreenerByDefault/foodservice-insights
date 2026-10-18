@@ -10,11 +10,14 @@ let {
 }: WithElementRef<HTMLFieldsetAttributes> = $props();
 </script>
 
+<!-- `min-w-0` undoes the browser's `min-inline-size: min-content` on a fieldset, which otherwise
+     grows to fit a long unbroken string, such as a file name, instead of letting `truncate`
+     inside it work. -->
 <fieldset
   bind:this={ref}
   data-slot="field-set"
   class={cn(
-    'gap-6 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3 flex flex-col',
+    'min-w-0 gap-6 has-[>[data-slot=checkbox-group]]:gap-3 has-[>[data-slot=radio-group]]:gap-3 flex flex-col',
     className,
   )}
   {...restProps}
