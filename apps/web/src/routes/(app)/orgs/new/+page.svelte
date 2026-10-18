@@ -18,7 +18,7 @@ let { data }: PageProps = $props();
      duplicate from someone who is really waiting on a colleague's invite. -->
 <div class="flex max-w-prose flex-col gap-2">
   <p>
-    Set up an organization for your school district, hospital, company or other institution. One
+    Set up an organization for your school, university, hospital, company or other institution. One
     organization can cover all your sites, and everyone you add to it can see and upload its
     reports.
   </p>
