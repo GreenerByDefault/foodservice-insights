@@ -1,6 +1,6 @@
 """Report figures, each a PDF page: single charts, and pages laid out from `panels`."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -29,7 +29,7 @@ from gbd_foodservice_insights.report.plots.panels import (
     draw_plant_share_by_month,
     draw_total_emissions,
 )
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
 
 
 def plot_diner_meal_numbers(
@@ -134,20 +134,21 @@ def plot_food_and_drink_comparison_page(
     monthly_category_data: pd.DataFrame,
     *,
     metric: Metric = KILOS,
-    diner_meal_mapping: Mapping[pd.Period, float],
-    diner_or_meal: DinerOrMeal = "diner",
+    headcounts: Headcounts | None,
 ) -> Figure:
-    """Create one page with total and per-diner trends, each comparing food vs food + drink."""
-    fig, axes = plt.subplots(2, 1, figsize=LETTER_LANDSCAPE)
+    """One page of total trends, with per-head trends below them given headcounts, each
+    comparing food against food + drink."""
+    fig, axes = _trend_subplots(headcounts)
     set_suptitle_font(fig, f"{metric.label} Over Time", fontsize=16)
     draw_food_and_drink_totals(axes[0], monthly_category_data, metric=metric)
-    draw_food_and_drink_per_diner(
-        axes[1],
-        monthly_category_data,
-        diner_meal_mapping,
-        metric=metric,
-        diner_or_meal=diner_or_meal,
-    )
+    if headcounts is not None:
+        draw_food_and_drink_per_diner(
+            axes[1],
+            monthly_category_data,
+            headcounts.by_month,
+            metric=metric,
+            diner_or_meal=headcounts.diner_or_meal,
+        )
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     return fig
 
@@ -183,18 +184,29 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
 
 def plot_emissions_summary_over_time(
     monthly_category_data: pd.DataFrame,
-    diner_meal_mapping: Mapping[pd.Period, float],
-    diner_or_meal: DinerOrMeal = "diner",
+    headcounts: Headcounts | None,
 ) -> Figure:
-    """Put total and per-diner emissions trends together on one report page."""
-    fig, axes = plt.subplots(2, 1, figsize=LETTER_LANDSCAPE)
+    """One page of the total emissions trend, with the per-head trend below it given
+    headcounts."""
+    fig, axes = _trend_subplots(headcounts)
     set_suptitle_font(fig, "Carbon Emissions Over Time", fontsize=16)
     draw_total_emissions(axes[0], monthly_category_data)
-    draw_emissions_per_diner(
-        axes[1], monthly_category_data, diner_meal_mapping, diner_or_meal=diner_or_meal
-    )
+    if headcounts is not None:
+        draw_emissions_per_diner(
+            axes[1],
+            monthly_category_data,
+            headcounts.by_month,
+            diner_or_meal=headcounts.diner_or_meal,
+        )
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     return fig
+
+
+def _trend_subplots(headcounts: Headcounts | None) -> tuple[Figure, Sequence[plt.Axes]]:
+    """A totals panel, and a per-head panel below it given headcounts."""
+    rows = 1 if headcounts is None else 2
+    fig, axes = plt.subplots(rows, 1, figsize=LETTER_LANDSCAPE, squeeze=False)
+    return fig, list(axes[:, 0])
 
 
 def plot_plant_breakdown_overview(

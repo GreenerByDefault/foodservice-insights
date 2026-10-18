@@ -12,12 +12,13 @@ from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     build_food_report,
     build_report_charts,
+    co2e_kg_per_diner_or_meal,
     date_range_label,
     summarize_report,
 )
 from gbd_foodservice_insights.report.plots import report as report_plots
 from gbd_foodservice_insights.report.quality import Finding, QualityCheck, make_finding
-from gbd_foodservice_insights.report.schema import DiagnosticStatus
+from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal, Headcounts
 
 JAN, FEB, MAR = pd.period_range("2024-01", periods=3, freq="M")
 
@@ -35,9 +36,8 @@ def _rows() -> pd.DataFrame:
 
 def _build(rows: pd.DataFrame, **overrides: Any) -> FoodReport:
     kwargs: dict[str, Any] = {
-        "diner_meal_mapping": {JAN: 100, FEB: 120},
+        "headcounts": Headcounts("diner", {JAN: 100, FEB: 120}),
         "region": "us",
-        "diner_or_meal": "diner",
         "top_n_drivers": 5,
     }
     return build_food_report(rows, **(kwargs | overrides))
@@ -61,9 +61,8 @@ def test_procurement_report_holds_its_normalized_inputs_and_tables():
     report = _build(_rows())
 
     assert report.rows["month_year"].tolist() == [JAN, JAN, FEB, FEB]
-    assert report.diner_meal_mapping == {JAN: 100.0, FEB: 120.0}
+    assert report.headcounts == Headcounts("diner", {JAN: 100.0, FEB: 120.0})
     assert report.region == "us"
-    assert report.diner_meals_in_data == 220.0
     assert report.emissions_summary["total_kg_co2e"].sum() == pytest.approx(970.5)
     assert (report.plant_animal_split.plant_total, report.plant_animal_split.animal_total) == (
         38.0,
@@ -110,6 +109,19 @@ def test_summarize_report_holds_the_headline_numbers():
         "plant_pct_by_weight": 63.3,
         "plant_protein_pct_by_weight": 63.3,
     }
+
+
+def test_a_report_without_headcounts_has_no_per_head_figures_or_counts_check():
+    report = _build(_rows(), headcounts=None)
+
+    summary = summarize_report(report)
+    assert summary.co2e_kg_per_diner_or_meal is None
+    assert [count.quality_check for count in summary.finding_counts] == [
+        "missing_internal_months",
+        "month_over_month_total_volatility",
+        "outlier_line_items",
+        "per_product_weight_bounds",
+    ]
 
 
 def test_summarize_report_without_protein_has_no_plant_protein_pct_by_weight():
@@ -181,7 +193,7 @@ def test_a_category_outside_the_gbd_list_raises_even_if_only_its_case_differs():
 )
 def test_a_data_month_without_a_positive_count_aborts(mapping: dict, months: str):
     with pytest.raises(ValueError, match=f"^No positive diner count for {months}$"):
-        _build(_rows(), diner_meal_mapping=mapping)
+        _build(_rows(), headcounts=Headcounts("diner", mapping))
 
 
 @pytest.mark.parametrize(
@@ -252,35 +264,40 @@ def test_month_year_comes_from_date_even_when_the_rows_carry_one():
 
 def test_a_mapping_month_absent_from_the_data_is_not_a_per_diner_denominator():
     aligned = _build(_rows())
-    report = _build(_rows(), diner_meal_mapping={JAN: 100, FEB: 120, MAR: 0})
+    report = _build(_rows(), headcounts=Headcounts("diner", {JAN: 100, FEB: 120, MAR: 0}))
 
-    assert report.diner_meals_in_data == 220.0
+    assert co2e_kg_per_diner_or_meal(report) == pytest.approx(970.5 / 220)
     pd.testing.assert_frame_equal(report.emissions_summary, aligned.emissions_summary)
 
 
-@pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
-def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: str):
-    report = _build(_rows(), diner_or_meal=diner_or_meal)
+@pytest.mark.parametrize("diner_or_meal", ["diner", "meal", None])
+def test_per_head_columns_are_named_for_the_counts_basis(diner_or_meal: DinerOrMeal | None):
+    report = _build(
+        _rows(),
+        headcounts=None
+        if diner_or_meal is None
+        else Headcounts(diner_or_meal, {JAN: 100, FEB: 120}),
+    )
 
-    per_head = f"kilos per {diner_or_meal}"
+    per_head = [] if diner_or_meal is None else [f"kilos per {diner_or_meal}"]
     assert list(report.aggregation.monthly_product.columns) == [
         "month_year",
         "product",
         "kilos_total",
-        per_head,
+        *per_head,
     ]
     assert list(report.aggregation.monthly_category.columns) == [
         "month_year",
         "category",
         "kilos_total",
-        per_head,
+        *per_head,
         "emissions_kg_co2e",
     ]
     assert list(report.emissions_summary.columns) == [
         "category",
         "total_kg_co2e",
         "pct_of_total",
-        f"kg_co2e_per_{diner_or_meal}",
+        *([] if diner_or_meal is None else [f"kg_co2e_per_{diner_or_meal}"]),
     ]
 
 

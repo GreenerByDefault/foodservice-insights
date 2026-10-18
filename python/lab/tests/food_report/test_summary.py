@@ -3,6 +3,7 @@ from typing import Any
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.food_report import FoodReport, build_food_report
+from gbd_foodservice_insights.report.schema import Headcounts
 from gbd_foodservice_insights_lab.food_report.summary import procurement_summary_stats
 
 JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
@@ -21,9 +22,8 @@ def _report(
         }
     )
     kwargs: dict[str, Any] = {
-        "diner_meal_mapping": {JAN: 100, FEB: 120},
+        "headcounts": Headcounts("diner", {JAN: 100, FEB: 120}),
         "region": "us",
-        "diner_or_meal": "diner",
         "top_n_drivers": 5,
     }
     return build_food_report(rows, **(kwargs | overrides))
@@ -46,6 +46,16 @@ def test_procurement_summary_stats_print_the_reports_numbers():
         "Plant protein share (% of protein categories)": "63.3%",
         "Plant protein total": "38.0 kg",
         "Protein-category total": "60.0 kg",
+    }
+
+
+def test_procurement_summary_stats_leave_out_the_per_head_lines_without_headcounts():
+    with_headcounts = procurement_summary_stats(_report())
+
+    assert procurement_summary_stats(_report(headcounts=None)) == {
+        label: value
+        for label, value in with_headcounts.items()
+        if label not in {"Total diners", "CO₂e per diner"}
     }
 
 

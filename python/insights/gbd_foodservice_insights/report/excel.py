@@ -16,7 +16,7 @@ import pandas as pd
 
 from gbd_foodservice_insights.report.aggregation import Aggregation, AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +72,22 @@ def write_client_workbook(report: FoodReport, path: Path) -> None:
         "Monthly by Product": aggregation.monthly_product,
         "Monthly by Category": aggregation.monthly_category,
         "Template": aggregation.template.reset_index(),
-        f"{report.diner_or_meal.title()}s": diner_meals_frame(
-            report.diner_meal_mapping, report.diner_or_meal
-        ),
+        **_headcounts_sheet(report.headcounts),
         "Emissions Summary": report.emissions_summary,
         **procurement_sheets(aggregation),
     }
     write_excel_workbook(path, sheets)
     logger.info("Client Excel report saved to %s", path)
+
+
+def _headcounts_sheet(headcounts: Headcounts | None) -> dict[str, pd.DataFrame]:
+    if headcounts is None:
+        return {}
+    return {
+        f"{headcounts.diner_or_meal.title()}s": diner_meals_frame(
+            headcounts.by_month, headcounts.diner_or_meal
+        )
+    }
 
 
 def diner_meals_frame(

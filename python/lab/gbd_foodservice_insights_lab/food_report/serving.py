@@ -47,7 +47,11 @@ from gbd_foodservice_insights.report.plots.figures import (
     plot_plant_breakdown_overview,
 )
 from gbd_foodservice_insights.report.quality import Finding
-from gbd_foodservice_insights.report.schema import DinerOrMeal, quality_status_from_findings
+from gbd_foodservice_insights.report.schema import (
+    DinerOrMeal,
+    Headcounts,
+    quality_status_from_findings,
+)
 from matplotlib.backends.backend_pdf import PdfPages
 
 logger = logging.getLogger(__name__)
@@ -219,8 +223,7 @@ def serving_charts(report: ServingReport) -> Generator[ReportCharts]:
             plot_food_and_drink_comparison_page(
                 report.monthly_category,
                 metric=SERVINGS,
-                diner_meal_mapping=report.diner_meal_mapping,
-                diner_or_meal=report.diner_or_meal,
+                headcounts=Headcounts(report.diner_or_meal, report.diner_meal_mapping),
             ),
             plot_category_totals(report.monthly_category, SERVINGS),
             plot_plant_breakdown_overview(

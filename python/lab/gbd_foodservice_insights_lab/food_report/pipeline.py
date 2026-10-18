@@ -26,7 +26,12 @@ from gbd_foodservice_insights.report.food_report import (
 )
 from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.quality import Finding
-from gbd_foodservice_insights.report.schema import DinerOrMeal, Region, quality_status_from_findings
+from gbd_foodservice_insights.report.schema import (
+    DinerOrMeal,
+    Headcounts,
+    Region,
+    quality_status_from_findings,
+)
 
 from gbd_foodservice_insights_lab.food_report import artifacts, plots, run_logging, serving, summary
 from gbd_foodservice_insights_lab.food_report import diagnostics as qa_diagnostics
@@ -212,10 +217,11 @@ def run_food_report(
 
         df = pd.read_csv(input_path)
         logger.info("Loaded %d rows from %s", len(df), input_path)
-        counts = (
+        headcounts = Headcounts(
+            diner_or_meal,
             load_diner_meal_mapping_from_json(diner_meal_file)
             if diner_meal_mapping is None
-            else normalize_diner_meal_mapping(diner_meal_mapping)
+            else normalize_diner_meal_mapping(diner_meal_mapping),
         )
         metric = _METRIC_BY_MODE[mode]
         df = clean_weight_column(parse_and_validate_date_column(df), metric.column)
@@ -223,9 +229,8 @@ def run_food_report(
         report = _build_report(
             df,
             mode=mode,
-            diner_meal_mapping=counts,
+            headcounts=headcounts,
             region=region,
-            diner_or_meal=diner_or_meal,
             top_n_drivers=top_n_drivers,
             report_progress=report_progress,
         )
@@ -285,6 +290,7 @@ def run_food_report(
         artifact_paths["qa_excel_path"] = _write_qa_workbook(
             report,
             artifact_paths["qa_excel_path"],
+            headcounts=headcounts,
             metric=metric,
             quality_findings=quality_findings,
             potential_name_splits=potential_name_splits,
@@ -367,24 +373,22 @@ def _build_report(
     rows: pd.DataFrame,
     *,
     mode: ReportMode,
-    diner_meal_mapping: Mapping[pd.Period, float],
+    headcounts: Headcounts,
     region: Region,
-    diner_or_meal: DinerOrMeal,
     top_n_drivers: int,
     report_progress: Callable[[], None],
 ) -> FoodReport | ServingReport:
     if mode == "serving":
         return serving.build_serving_report(
             rows,
-            diner_meal_mapping=diner_meal_mapping,
-            diner_or_meal=diner_or_meal,
+            diner_meal_mapping=headcounts.by_month,
+            diner_or_meal=headcounts.diner_or_meal,
             top_n_drivers=top_n_drivers,
         )
     return build_food_report(
         rows,
-        diner_meal_mapping=diner_meal_mapping,
+        headcounts=headcounts,
         region=region,
-        diner_or_meal=diner_or_meal,
         top_n_drivers=top_n_drivers,
         report_progress=report_progress,
     )
@@ -439,6 +443,7 @@ def _write_qa_workbook(
     report: FoodReport | ServingReport,
     path: str,
     *,
+    headcounts: Headcounts,
     metric: Metric,
     quality_findings: list[Finding],
     potential_name_splits: pd.DataFrame,
@@ -465,9 +470,9 @@ def _write_qa_workbook(
         template_data=tables.template,
         highest_lowest=qa_diagnostics.category_highest_vs_lowest_months(
             tables.monthly_category,
-            metric_col=metric.per_head(report.diner_or_meal),
+            metric_col=metric.per_head(headcounts.diner_or_meal),
         ),
-        diner_meals_df=excel.diner_meals_frame(report.diner_meal_mapping, report.diner_or_meal),
+        diner_meals_df=excel.diner_meals_frame(headcounts.by_month, headcounts.diner_or_meal),
         emissions_summary=emissions_summary,
         procurement=procurement,
         quality_findings_df=findings_to_frame(quality_findings),
@@ -475,13 +480,13 @@ def _write_qa_workbook(
         data_profile_df=data_profile_df,
         diagnostic_sheets=_collect_diagnostic_export_sheets(
             df,
-            report.diner_meal_mapping,
-            diner_or_meal=report.diner_or_meal,
+            headcounts.by_month,
+            diner_or_meal=headcounts.diner_or_meal,
             metric=metric,
             potential_name_splits=potential_name_splits,
             category_discontinuity=category_discontinuity,
         ),
-        diner_or_meal=report.diner_or_meal,
+        diner_or_meal=headcounts.diner_or_meal,
     )
 
 

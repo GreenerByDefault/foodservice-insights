@@ -17,10 +17,10 @@ from gbd_foodservice_insights.analysis import (
     AnalysisRequest,
     CachedCategorization,
     CategorizationSummary,
-    CountsBasis,
     InputSummary,
     InvalidInputError,
     LlmCall,
+    MonthlyCounts,
     NewCategorization,
     ReportSummary,
     StageFinished,
@@ -34,7 +34,7 @@ from gbd_foodservice_insights.categorization.llm import OnLlmCall
 from gbd_foodservice_insights.report import pdf
 from gbd_foodservice_insights.report.food_report import FindingCount, FoodReport, ReportCharts
 from gbd_foodservice_insights.report.quality import Finding
-from gbd_foodservice_insights.report.schema import quality_status_from_findings
+from gbd_foodservice_insights.report.schema import Headcounts, quality_status_from_findings
 from gbd_foodservice_insights.testing import (
     KEYWORD_PRODUCTS,
     SAMPLE_MONTHS,
@@ -50,10 +50,14 @@ from matplotlib.figure import Figure
 # ----------------------------------------------------------------------
 
 
+# Not a `dict`: `worker_child` hands over a read-only view.
+SAMPLE_COUNTS = MonthlyCounts("people", MappingProxyType(dict.fromkeys(SAMPLE_MONTHS, 1000)))
+
+
 def _request(
     tmp_path: Path,
     *,
-    counts_basis: CountsBasis = "people",
+    counts: MonthlyCounts | None = SAMPLE_COUNTS,
     unit_system: UnitSystem = "kg",
     site_name: str | None = None,
     categorization_cache: tuple[CachedCategorization, ...] = (),
@@ -67,10 +71,8 @@ def _request(
         report_name=None,
         site_name=site_name,
         organization_name="Acme Foodservice",
-        counts_basis=counts_basis,
+        counts=counts,
         unit_system=unit_system,
-        # Not a `dict`: `worker_child` hands over a read-only view.
-        monthly_counts=MappingProxyType(dict.fromkeys(SAMPLE_MONTHS, 1000)),
         categorization_cache=categorization_cache,
     )
 
@@ -174,6 +176,42 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
     assert summary.total_co2e_kg > 0
 
 
+def test_analyze_without_counts_writes_a_totals_only_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request = _request(tmp_path, counts=None)
+    request.input_csv.write_text(sample_input_csv())
+    chart_titles: list[list[str]] = []
+    write_report_pdf = analysis.write_report_pdf
+
+    def record_chart_titles(
+        report: FoodReport, charts: ReportCharts, *args: Any, **kwargs: Any
+    ) -> None:
+        chart_titles.extend(_chart_titles(figure) for figure in charts.figures)
+        write_report_pdf(report, charts, *args, **kwargs)
+
+    monkeypatch.setattr(analysis, "write_report_pdf", record_chart_titles)
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    # The pages after these never use counts.
+    assert chart_titles[:4] == [
+        ["Kilos Over Time", "Total Kilos"],
+        ["Kilos by Category Across All Months"],
+        ["Carbon Emissions by Category"],
+        ["Carbon Emissions Over Time", "Total Carbon Emissions Over Time"],
+    ]
+    assert list(pd.read_excel(outcome.xlsx, sheet_name=None)) == [
+        "Monthly by Product",
+        "Monthly by Category",
+        "Template",
+        "Emissions Summary",
+        "Animal Emissions Intensity",
+        "Decision KPIs",
+        "Substitution Scenarios",
+    ]
+
+
 class NaIsCheeseLlmClient(KeywordLlmClient):
     def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
         return "Cheese" if item == "na" else super().match_product_to_category(item, categories)
@@ -231,7 +269,7 @@ def _headcount_finding(
 ) -> Finding:
     """The headcount finding `analyze()` hands the PDF, buying `weight_by_month[month]` of every
     product each month."""
-    request = dataclasses.replace(_request(tmp_path), monthly_counts=MappingProxyType(counts))
+    request = _request(tmp_path, counts=MonthlyCounts("people", MappingProxyType(counts)))
     request.input_csv.write_text(
         input_csv_text(
             (product, f"{month}-15", weight)
@@ -343,15 +381,15 @@ def test_analyze_golden_deliverables(tmp_path: Path, monkeypatch: pytest.MonkeyP
     baseline = pd.read_csv(Path(__file__).parent / "data" / "aggregated_baseline.csv")
     baseline = baseline[baseline["category"].notna() & (baseline["category"] != "No Matches Found")]
     cached = baseline.drop_duplicates("product")
-    request = dataclasses.replace(
-        _request(
-            tmp_path,
-            categorization_cache=tuple(
-                CachedCategorization(product, category, product.lower())
-                for product, category in zip(cached["product"], cached["category"], strict=True)
-            ),
+    request = _request(
+        tmp_path,
+        counts=MonthlyCounts(
+            "people", MappingProxyType({"2023-10": 900, "2023-11": 1000, "2023-12": 1100})
         ),
-        monthly_counts=MappingProxyType({"2023-10": 900, "2023-11": 1000, "2023-12": 1100}),
+        categorization_cache=tuple(
+            CachedCategorization(product, category, product.lower())
+            for product, category in zip(cached["product"], cached["category"], strict=True)
+        ),
     )
     request.input_csv.write_text(
         input_csv_text(baseline[["product", "date", "kilos_total"]].itertuples(index=False))
@@ -456,23 +494,32 @@ def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -
     )
 
 
+SAMPLE_PERIODS = dict.fromkeys(pd.PeriodIndex(SAMPLE_MONTHS, freq="M"), 1000.0)
+
+
 @pytest.mark.parametrize(
-    ("counts_basis", "site_name", "diner_or_meal", "client"),
+    ("counts", "site_name", "headcounts", "client"),
     [
-        ("people", None, "diner", "Acme Foodservice"),
-        ("people", "", "diner", "Acme Foodservice"),
-        ("meals", "North Campus", "meal", "Acme Foodservice — North Campus"),
+        (SAMPLE_COUNTS, None, Headcounts("diner", SAMPLE_PERIODS), "Acme Foodservice"),
+        (SAMPLE_COUNTS, "", Headcounts("diner", SAMPLE_PERIODS), "Acme Foodservice"),
+        (
+            dataclasses.replace(SAMPLE_COUNTS, basis="meals"),
+            "North Campus",
+            Headcounts("meal", SAMPLE_PERIODS),
+            "Acme Foodservice — North Campus",
+        ),
+        (None, None, None, "Acme Foodservice"),
     ],
 )
 def test_hands_the_report_the_forms_answers(
     tmp_path: Path,
     fake_report: FakeReport,
-    counts_basis: CountsBasis,
+    counts: MonthlyCounts | None,
     site_name: str | None,
-    diner_or_meal: str,
+    headcounts: Headcounts | None,
     client: str,
 ) -> None:
-    request = _request(tmp_path, counts_basis=counts_basis, site_name=site_name)
+    request = _request(tmp_path, counts=counts, site_name=site_name)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
 
     def report_progress() -> None:
@@ -481,9 +528,8 @@ def test_hands_the_report_the_forms_answers(
     analyze(request, report_progress=report_progress, llm=KeywordLlmClient())
 
     assert fake_report.kwargs == {
-        "diner_meal_mapping": {pd.Period(month, freq="M"): 1000.0 for month in SAMPLE_MONTHS},
+        "headcounts": headcounts,
         "region": "us",
-        "diner_or_meal": diner_or_meal,
         "top_n_drivers": 5,
         "report_progress": report_progress,
     }

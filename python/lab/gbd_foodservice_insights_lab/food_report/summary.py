@@ -3,27 +3,38 @@
 A serving report computes its own, in `serving.ServingReport.summary_stats`.
 """
 
-from gbd_foodservice_insights.report.food_report import FoodReport, date_range_label
+from gbd_foodservice_insights.report.food_report import (
+    FoodReport,
+    date_range_label,
+    total_co2e_kg,
+)
 from gbd_foodservice_insights.report.metric import KILOS
 
 _REGION_LABELS = {"europe": "EU/UK", "us": "US/Canada"}
 
 
 def procurement_summary_stats(report: FoodReport) -> dict[str, str]:
-    """Without "Data Quality Status", which the lab's own findings can still change."""
-    rows, diner_or_meal = report.rows, report.diner_or_meal
-    total_co2e = float(report.emissions_summary["total_kg_co2e"].sum())
+    """Without "Data Quality Status", which the lab's own findings can still change, and without
+    the per-head stats when the report has no headcounts."""
+    rows, headcounts = report.rows, report.headcounts
+    total_co2e = total_co2e_kg(report)
     split, protein = report.plant_animal_split, report.plant_protein_share
     unit = KILOS.unit_plural
+    if headcounts is None:
+        total_heads, per_head = {}, {}
+    else:
+        noun, heads = headcounts.diner_or_meal, headcounts.total_in(rows["month_year"])
+        total_heads = {f"Total {noun}s": f"{heads:,.0f}"}
+        per_head = {f"CO₂e per {noun}": f"{total_co2e / heads:.3f} kg"}
     stats = {
         "Total rows": f"{len(rows):,}",
         "Unique products": f"{rows['product'].nunique():,}",
         "Date range": date_range_label(rows),
-        f"Total {diner_or_meal}s": f"{report.diner_meals_in_data:,.0f}",
+        **total_heads,
         "Data type": "Procurement",
         "Region used for climate emissions factors": _REGION_LABELS[report.region],
         "Total CO₂e": f"{total_co2e:,.0f} kg",
-        f"CO₂e per {diner_or_meal}": f"{total_co2e / report.diner_meals_in_data:.3f} kg",
+        **per_head,
         "Plant-based (% of classified food)": f"{split.plant_pct:.1f}%",
         "Animal-based (% of classified food)": f"{split.animal_pct:.1f}%",
         "Plant-based total": f"{split.plant_total:,.1f} {unit}",

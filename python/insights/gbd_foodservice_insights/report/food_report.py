@@ -8,7 +8,7 @@ wrapper that also writes the data scientists' bundle.
 
 import logging
 from collections import Counter
-from collections.abc import Callable, Generator, Mapping
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -33,7 +33,7 @@ from gbd_foodservice_insights.report.plots import report as report_plots
 from gbd_foodservice_insights.report.quality import Finding, QualityCheck
 from gbd_foodservice_insights.report.schema import (
     DiagnosticStatus,
-    DinerOrMeal,
+    Headcounts,
     QualityStatus,
     Region,
     quality_status_from_findings,
@@ -56,9 +56,8 @@ _STAGE_MESSAGES = {
 class FoodReport:
     rows: pd.DataFrame
     region: Region
-    diner_or_meal: DinerOrMeal
-    diner_meal_mapping: dict[pd.Period, float]
-    diner_meals_in_data: float
+    # `None` when the uploader gave no counts, so the report has no per-head figures.
+    headcounts: Headcounts | None
     aggregation: Aggregation
     emissions_summary: pd.DataFrame
     plant_animal_split: PlantAnimalSplit
@@ -90,7 +89,8 @@ class ReportSummary:
     # Only the pairs that occurred, sorted by check and then status.
     finding_counts: tuple[FindingCount, ...]
     total_co2e_kg: float
-    co2e_kg_per_diner_or_meal: float
+    # `None` without headcounts.
+    co2e_kg_per_diner_or_meal: float | None
     plant_pct_by_weight: float
     # `None` when the rows have no protein.
     plant_protein_pct_by_weight: float | None
@@ -108,9 +108,8 @@ def _ignore() -> None:
 def build_food_report(
     rows: pd.DataFrame,
     *,
-    diner_meal_mapping: Mapping[pd.Period, float],
+    headcounts: Headcounts | None,
     region: Region,
-    diner_or_meal: DinerOrMeal,
     top_n_drivers: int,
     report_progress: Callable[[], None] = _ignore,
 ) -> FoodReport:
@@ -129,52 +128,36 @@ def build_food_report(
     df = rows.assign(month_year=rows["date"].dt.to_period("M"))
 
     _log_stage("diner_meal_mapping", report_progress)
-    dm_mapping = {month: float(count) for month, count in diner_meal_mapping.items()}
-    months_with_rows = set(df["month_year"])
-    uncounted = sorted(month for month in months_with_rows if not dm_mapping.get(month, 0) > 0)
-    if uncounted:
-        raise ValueError(
-            f"No positive {diner_or_meal} count for {', '.join(str(month) for month in uncounted)}"
-        )
-    diner_meals_in_data = float(
-        sum(count for month, count in dm_mapping.items() if month in months_with_rows)
-    )
+    if headcounts is not None:
+        headcounts = _validate_headcounts(headcounts, df["month_year"])
 
     _log_stage("emissions", report_progress)
     df = emissions.calculate_emissions(df, region=region)
 
     _log_stage("aggregation", report_progress)
     agg_results = aggregation.run_aggregation_pipeline(
-        df,
-        dm_mapping,
-        top_n=top_n_drivers,
-        region=region,
-        diner_or_meal=diner_or_meal,
+        df, headcounts, top_n=top_n_drivers, region=region
     )
 
     _log_stage("emissions_summary", report_progress)
-    emissions_summary = emissions.calculate_emissions_per_diner_meal(
-        emissions.calculate_emissions_summary(df),
-        diner_meals_in_data,
-        diner_or_meal,
-    )
+    emissions_summary = emissions.calculate_emissions_summary(df)
+    if headcounts is not None:
+        emissions_summary = emissions.calculate_emissions_per_diner_meal(
+            emissions_summary,
+            headcounts.total_in(df["month_year"]),
+            headcounts.diner_or_meal,
+        )
 
     _log_stage("client_metrics_and_diagnostics", report_progress)
     plant_animal_split = calculate_plant_animal_split(df, metric_col=KILOS.column)
     plant_protein_share = calculate_plant_protein_share(df, metric_col=KILOS.column)
 
-    findings = checks.run_all_diagnostics(
-        df=df,
-        diner_meal_mapping=dm_mapping,
-        diner_or_meal=diner_or_meal,
-    )
+    findings = checks.run_all_diagnostics(df=df, headcounts=headcounts)
 
     return FoodReport(
         rows=df,
         region=region,
-        diner_or_meal=diner_or_meal,
-        diner_meal_mapping=dm_mapping,
-        diner_meals_in_data=diner_meals_in_data,
+        headcounts=headcounts,
         aggregation=agg_results,
         emissions_summary=emissions_summary,
         plant_animal_split=plant_animal_split,
@@ -183,15 +166,30 @@ def build_food_report(
     )
 
 
+def _validate_headcounts(headcounts: Headcounts, months: pd.Series) -> Headcounts:
+    """`headcounts` with float counts, after checking every month with rows has a positive one.
+    Partial counts are bad data, unlike no counts at all."""
+    by_month = {month: float(count) for month, count in headcounts.by_month.items()}
+    uncounted = sorted(month for month in set(months) if not by_month.get(month, 0) > 0)
+    if uncounted:
+        raise ValueError(
+            f"No positive {headcounts.diner_or_meal} count for "
+            f"{', '.join(str(month) for month in uncounted)}"
+        )
+    return Headcounts(headcounts.diner_or_meal, by_month)
+
+
 def total_co2e_kg(report: FoodReport) -> float:
     # Positive: every GBD category has a nonzero emission factor, and `build_food_report` rejects
     # rows that all weigh 0.
     return float(report.emissions_summary["total_kg_co2e"].sum())
 
 
-def co2e_kg_per_diner_or_meal(report: FoodReport) -> float:
+def co2e_kg_per_diner_or_meal(report: FoodReport) -> float | None:
+    if report.headcounts is None:
+        return None
     # `build_food_report` requires a positive count for every month with rows.
-    return total_co2e_kg(report) / report.diner_meals_in_data
+    return total_co2e_kg(report) / report.headcounts.total_in(report.rows["month_year"])
 
 
 def summarize_report(report: FoodReport) -> ReportSummary:
@@ -244,11 +242,10 @@ def build_report_charts(report: FoodReport) -> Generator[ReportCharts]:
     with close_new_figures_on_error():
         figures = report_plots.generate_all_report_plots(
             aggregation=report.aggregation,
-            diner_meal_mapping=report.diner_meal_mapping,
+            headcounts=report.headcounts,
             emissions_summary=report.emissions_summary,
             plant_animal_split=report.plant_animal_split,
             plant_protein_share=report.plant_protein_share,
-            diner_or_meal=report.diner_or_meal,
         )
     try:
         yield ReportCharts(figures=figures)

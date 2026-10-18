@@ -32,9 +32,8 @@ def _request(tmp_path: Path, report_name: str | None) -> AnalysisRequest:
         report_name=report_name,
         site_name=None,
         organization_name="Acme Foodservice",
-        counts_basis="people",
+        counts=None,
         unit_system="lb",
-        monthly_counts={"2025-01": 100},
         categorization_cache=(),
     )
 

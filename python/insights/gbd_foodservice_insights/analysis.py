@@ -63,7 +63,7 @@ from gbd_foodservice_insights.report.food_report import (
     summarize_report,
 )
 from gbd_foodservice_insights.report.pdf import write_report_pdf
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
 
 CountsBasis = Literal["people", "meals"]
 UnitSystem = Literal["lb", "kg"]
@@ -95,6 +95,12 @@ type ReportTelemetry = Callable[[Telemetry], None]
 
 
 @dataclass(frozen=True)
+class MonthlyCounts:
+    basis: CountsBasis
+    monthly: Mapping[str, int]  # "YYYY-MM" -> diners or meals
+
+
+@dataclass(frozen=True)
 class AnalysisRequest:
     run_id: str  # opaque; log correlation only
     input_csv: Path  # product,date,weight — UTF-8, ISO dates, plain numbers
@@ -102,9 +108,8 @@ class AnalysisRequest:
     report_name: str | None
     site_name: str | None
     organization_name: str
-    counts_basis: CountsBasis
+    counts: MonthlyCounts | None  # `None` when the uploader chose not to give counts
     unit_system: UnitSystem
-    monthly_counts: Mapping[str, int]  # "YYYY-MM" -> diners or meals
     categorization_cache: tuple[CachedCategorization, ...]
 
 
@@ -157,18 +162,10 @@ def analyze(
         rows = df_final.rename(columns={"weight": "kilos_total"})[
             ["date", "product", "category", "kilos_total"]
         ].reset_index(drop=True)
-        # A `PeriodIndex` rather than `pd.Period(month)` per key, which pandas' stubs type as
-        # possibly `NaT`.
-        months = pd.PeriodIndex(list(request.monthly_counts), freq="M")
-        monthly_counts = {
-            month: float(count)
-            for month, count in zip(months, request.monthly_counts.values(), strict=True)
-        }
         report = build_food_report(
             rows,
-            diner_meal_mapping=monthly_counts,
+            headcounts=None if request.counts is None else _headcounts(request.counts),
             region="us",
-            diner_or_meal=_DINER_OR_MEAL[request.counts_basis],
             top_n_drivers=5,
             report_progress=report_progress,
         )
@@ -203,6 +200,16 @@ def _stage(stage: Stage, report_telemetry: ReportTelemetry) -> Generator[None]:
     start = time.monotonic()
     yield
     report_telemetry(StageFinished(stage, duration_ms=round((time.monotonic() - start) * 1000)))
+
+
+def _headcounts(counts: MonthlyCounts) -> Headcounts:
+    # A `PeriodIndex` rather than `pd.Period(month)` per key, which pandas' stubs type as
+    # possibly `NaT`.
+    months = pd.PeriodIndex(list(counts.monthly), freq="M")
+    return Headcounts(
+        _DINER_OR_MEAL[counts.basis],
+        {month: float(count) for month, count in zip(months, counts.monthly.values(), strict=True)},
+    )
 
 
 def _summarize_input(df: pd.DataFrame, cache: CategorizationCache) -> InputSummary:

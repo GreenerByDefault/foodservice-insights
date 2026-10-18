@@ -32,6 +32,7 @@ from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.report.excel import write_client_workbook
 from gbd_foodservice_insights.report.food_report import build_food_report, build_report_charts
 from gbd_foodservice_insights.report.pdf import write_report_pdf
+from gbd_foodservice_insights.report.schema import Headcounts
 
 MAX_DATA_ROWS = 500_000
 PRODUCT_COUNT = 25_000
@@ -73,9 +74,8 @@ def build_deliverables(rows: pd.DataFrame, output_directory: Path) -> dict[str, 
     with timed("build_food_report", timings):
         report = build_food_report(
             rows,
-            diner_meal_mapping={month: DINERS_PER_MONTH for month in MONTHS},
+            headcounts=Headcounts("diner", dict.fromkeys(MONTHS, DINERS_PER_MONTH)),
             region="us",
-            diner_or_meal="diner",
             top_n_drivers=5,
         )
     with ExitStack() as stack:

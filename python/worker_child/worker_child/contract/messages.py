@@ -327,7 +327,11 @@ def _categorization_payload(
 
 def _report_payload(summary: ReportSummary) -> dict[str, Any]:
     _require_quantity("report.totalCo2eKg", summary.total_co2e_kg)
-    _require_quantity("report.co2eKgPerDinerOrMeal", summary.co2e_kg_per_diner_or_meal)
+    # Every manifest carries counts until the contract accepts a report without them.
+    per_head = summary.co2e_kg_per_diner_or_meal
+    if per_head is None:
+        raise ContractError("report.co2eKgPerDinerOrMeal is required")
+    _require_quantity("report.co2eKgPerDinerOrMeal", per_head)
     _require_percentage("report.plantPctByWeight", summary.plant_pct_by_weight)
     if summary.plant_protein_pct_by_weight is not None:
         _require_percentage("report.plantProteinPctByWeight", summary.plant_protein_pct_by_weight)

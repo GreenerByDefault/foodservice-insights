@@ -12,6 +12,7 @@ from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentra
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
 from gbd_foodservice_insights.report.pdf import (
     CategoryShare,
+    Co2ePerHead,
     ExecutiveNarrative,
     _display_table,
     _executive_narrative,
@@ -33,7 +34,7 @@ from gbd_foodservice_insights.report.pdf import (
     write_report_pdf,
 )
 from gbd_foodservice_insights.report.quality import Finding, make_finding
-from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal
+from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal, Headcounts
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
@@ -146,9 +147,8 @@ def _report(
     """Two months of lentils, alongside ``animal_product`` (its name and category) or, without
     one, chickpeas."""
     kwargs: dict[str, Any] = {
-        "diner_meal_mapping": {JAN: 100, FEB: 120},
+        "headcounts": Headcounts("diner", {JAN: 100, FEB: 120}),
         "region": "us",
-        "diner_or_meal": "diner",
         "top_n_drivers": 5,
     }
     product, category = animal_product or ("Chickpeas", "Legumes")
@@ -377,23 +377,41 @@ def test_about_page_bolds_every_heading(recording_pdf: _RecordingPdf) -> None:
     ]
 
 
+def _how_to_read_and_about_text(pdf: _RecordingPdf) -> str:
+    """Both pages' words, joined by single spaces, so a phrase matches across line breaks."""
+    return " ".join(
+        word
+        for page in pdf.pages
+        if page and page[0].text in {"How to Read This Report", "About This Report"}
+        for t in page
+        for word in t.text.split()
+    )
+
+
 @pytest.mark.parametrize("diner_or_meal", ["diner", "meal"])
 def test_text_pages_normalise_by_the_counts_basis(
     recording_pdf: _RecordingPdf, diner_or_meal: DinerOrMeal
 ) -> None:
-    _write(_report(diner_or_meal=diner_or_meal))
+    _write(_report(headcounts=Headcounts(diner_or_meal, {JAN: 100, FEB: 120})))
 
-    words = [
-        word
-        for page in recording_pdf.pages
-        if page and page[0].text in {"How to Read This Report", "About This Report"}
-        for t in page
-        for word in t.text.split()
-    ]
-    text = " ".join(words)
+    text = _how_to_read_and_about_text(recording_pdf)
     assert f"how many {diner_or_meal}s were served each month" in text
     assert f"the number of {diner_or_meal}s served" in text
     assert "people" not in text
+
+
+def test_text_pages_without_headcounts_say_every_figure_is_a_total(
+    recording_pdf: _RecordingPdf,
+) -> None:
+    _write(_report(headcounts=None))
+
+    text = _how_to_read_and_about_text(recording_pdf)
+    assert (
+        "Every figure in this report is a total. Totals rise and fall with how many people you "
+        "serve, so compare months with that in mind."
+    ) in text
+    assert "per diner" not in text.lower()
+    assert "normalising" not in text
 
 
 @pytest.mark.parametrize(
@@ -744,8 +762,7 @@ def test_executive_narrative_summarises_the_report() -> None:
         "period": "Jan 2024 – Feb 2024",
         "total_food_kg": 60.0,
         "total_co2e_kg": pytest.approx(970.5),
-        "co2e_kg_per_diner_or_meal": pytest.approx(970.5 / 220),
-        "diner_or_meal": "diner",
+        "co2e_per_head": ("diner", pytest.approx(970.5 / 220)),
         "plant_pct": 63.3,
         "animal_pct": 36.7,
         "any_animal": True,
@@ -755,6 +772,10 @@ def test_executive_narrative_summarises_the_report() -> None:
         ),
         "quality_status": "pass",
     }
+
+
+def test_executive_narrative_without_headcounts_has_no_co2e_per_head() -> None:
+    assert _executive_narrative(_report(headcounts=None), "Acme", "pass").co2e_per_head is None
 
 
 def test_executive_narrative_lists_only_the_top_three_categories() -> None:
@@ -806,8 +827,7 @@ def _narrative(**overrides: Any) -> ExecutiveNarrative:
         "period": "Jan 2024 – Feb 2024",
         "total_food_kg": 1234.5,
         "total_co2e_kg": 2501.0,
-        "co2e_kg_per_diner_or_meal": 1.2345,
-        "diner_or_meal": "meal",
+        "co2e_per_head": Co2ePerHead("meal", 1.2345),
         "plant_pct": 63.3,
         "animal_pct": 36.7,
         "any_animal": True,
@@ -836,6 +856,16 @@ def test_narrative_paragraphs_describe_the_footprint() -> None:
         "The pages that follow show how the footprint breaks down by month, category and "
         "product. The methodology is explained at the back.",
     ]
+
+
+def test_narrative_paragraphs_without_headcounts_say_the_figures_are_totals() -> None:
+    assert _narrative_paragraphs(_narrative(co2e_per_head=None))[0] == (
+        "Over this period the kitchen purchased about 1,234 kg of categorised food. Producing "
+        "that food released an estimated 2.5 tonnes of carbon dioxide equivalent (CO₂e), the "
+        "standard measure for comparing the climate impact of different foods. No diner or meal "
+        "counts were provided, so these figures are totals. Sites differ in size, so they can't "
+        "be compared directly with other sites."
+    )
 
 
 def test_narrative_paragraphs_caveat_the_quality() -> None:

@@ -21,6 +21,7 @@ from gbd_foodservice_insights.report.aggregation import (
     run_aggregation_pipeline,
     summarize_animal_emissions_intensity,
 )
+from gbd_foodservice_insights.report.schema import Headcounts
 
 JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
 
@@ -781,10 +782,9 @@ def test_run_aggregation_pipeline_fills_the_procurement_tables_from_the_rows():
 
     result = run_aggregation_pipeline(
         df,
-        diner_meal_mapping={JAN: 100.0, FEB: 120.0},
+        Headcounts("diner", {JAN: 100.0, FEB: 120.0}),
         top_n=1,
         region="us",
-        diner_or_meal="diner",
     )
 
     assert result.animal_emissions_concentration == AnimalEmissionsConcentration(
@@ -831,9 +831,8 @@ def test_run_aggregation_pipeline_monthly_tables_each_sum_to_the_input_total():
 
     result = run_aggregation_pipeline(
         df,
-        diner_meal_mapping={JAN: 100.0, FEB: 120.0},
+        None,
         region="us",
-        diner_or_meal="diner",
     )
 
     assert result.monthly_product["kilos_total"].sum() == 22.5
@@ -854,8 +853,7 @@ def test_run_aggregation_pipeline_divides_each_month_by_its_count(diner_or_meal)
 
     result = run_aggregation_pipeline(
         df,
-        diner_meal_mapping={JAN: 100.0, FEB: 120.0},
-        diner_or_meal=diner_or_meal,
+        Headcounts(diner_or_meal, {JAN: 100.0, FEB: 120.0}),
     )
 
     per_head = f"kilos per {diner_or_meal}"
@@ -877,8 +875,7 @@ def test_run_aggregation_pipeline_leaves_out_procurement_tables_with_nothing_to_
 
     result = run_aggregation_pipeline(
         df,
-        diner_meal_mapping={JAN: 100.0},
-        diner_or_meal="diner",
+        Headcounts("diner", {JAN: 100.0}),
     )
 
     assert (
