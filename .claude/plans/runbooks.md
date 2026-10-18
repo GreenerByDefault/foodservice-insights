@@ -44,3 +44,15 @@ leaves the DigitalOcean team.
    ```
 
 8. Delete the old token in the dashboard.
+
+### Review cache suggestions in Supabase Studio
+
+The worker, and later the lab, insert unverified rows into `product_categorization`,
+`entree_classification` and `unit_weight`. Only verified rows are ever used.
+
+1. Open the table in Studio's Table Editor and filter on `is_verified = false`, sorted by
+   `created_at`. `suggested_by` says where a row came from.
+2. Fix `category` (or the label, or the weight) in place if it's wrong, then tick `is_verified`.
+   The next worker claim and the next lab pull pick it up.
+3. To reject a suggestion, leave it unverified. To have the pipeline suggest again, delete it.
+   To verify many rows at once, run an `UPDATE` in the SQL editor.

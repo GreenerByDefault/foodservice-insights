@@ -25,14 +25,17 @@ import {
   resultFilePath,
   runPath,
 } from '../contract/layout.ts';
-import { parseTelemetry, type Telemetry } from '../contract/messages.ts';
+import { type NewCategorizations, parseTelemetry, type Telemetry } from '../contract/messages.ts';
 
 export type FakeChildStep =
   | { step: 'progress'; sequence: number }
-  /** Write `result.json` and the files it declares. `withoutFiles` names ones to leave out. */
+  /** Write `new-categorizations.json` (no rows unless given some), then `result.json` and the
+   * files it declares. `withoutFiles` names ones to leave out. */
   | {
       step: 'result';
       withoutFiles?: readonly string[];
+      newCategorizations?: NewCategorizations['rows'];
+      withoutNewCategorizations?: boolean;
     }
   | { step: 'failure'; reason: string; detail: string; traceback?: string | null }
   /** Write `telemetry.json`, `FAKE_TELEMETRY` unless given another. */
@@ -216,20 +219,22 @@ async function writeResult(
   step: Extract<FakeChildStep, { step: 'result' }>,
   runDirectory: string,
 ): Promise<void> {
-  const declared = Object.values(RESULT_FILE_NAMES);
+  // The real child reads the attempt id out of `run.json`; taking it from the directory name keeps a
+  // scenario from having to know it.
+  const analysisAttemptId = basename(runDirectory);
+  if (!step.withoutNewCategorizations) {
+    await writeAtomically(
+      runPath(runDirectory, 'newCategorizations'),
+      JSON.stringify({ analysisAttemptId, rows: step.newCategorizations ?? [] }),
+    );
+  }
 
+  const declared = Object.values(RESULT_FILE_NAMES);
   for (const fileName of declared.filter((name) => !(step.withoutFiles ?? []).includes(name))) {
     await writeAtomically(resultFilePath(runDirectory, fileName), fakeResultFileContents(fileName));
   }
 
-  await writeAtomically(
-    runPath(runDirectory, 'result'),
-    JSON.stringify({
-      // The real child reads this out of `run.json`; taking it from the directory name keeps a
-      // scenario from having to know the attempt id.
-      analysisAttemptId: basename(runDirectory),
-    }),
-  );
+  await writeAtomically(runPath(runDirectory, 'result'), JSON.stringify({ analysisAttemptId }));
 }
 
 /** Stands in for the subprocesses the analysis library spawns, so a test can check the parent's kill

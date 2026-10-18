@@ -172,6 +172,7 @@ Parent lifecycle:
   - Exit 0 plus a result file the parent can parse is success; exit 1 means the child wrote a failure instead; any other exit means it reached no verdict at all.
   - Throughout, the child keeps `telemetry.json` current: its LLM usage and each finished stage's counts and time.
 5. Upload the result files to the blob store and save metadata to the database.
+  - After a recorded success, suggest the products the child's LLM categorized to the cache, unverified. Like the telemetry, it never changes the verdict.
   - Then, whatever the ending and whoever now owns the attempt, record the telemetry. It never changes the verdict.
 
 Whenever a child fails in any way — including being killed by its parent — the parent marks the

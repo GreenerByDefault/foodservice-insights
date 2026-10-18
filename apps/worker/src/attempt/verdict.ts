@@ -5,7 +5,12 @@
 
 import type { AnalysisFailureReason } from '@gbd/db';
 import { type ChildOutcome, STDERR_TAIL_BYTES } from '../child/spawn.ts';
-import { type ChildFailure, type ChildResult, ContractError } from '../contract/messages.ts';
+import {
+  type ChildFailure,
+  type ChildResult,
+  ContractError,
+  type NewCategorizations,
+} from '../contract/messages.ts';
 import { EXIT_CODES } from '../contract/names.ts';
 import { describe } from '../failures.ts';
 
@@ -23,7 +28,12 @@ export type Kill =
  * have written according to the worker contract.
  */
 export type DocumentRead =
-  | { kind: 'result'; result: ChildResult; missingResultFiles: readonly string[] }
+  | {
+      kind: 'result';
+      result: ChildResult;
+      missingResultFiles: readonly string[];
+      newCategorizations: NewCategorizations['rows'] | undefined;
+    }
   | { kind: 'failure'; failure: ChildFailure }
   | { kind: 'read-error'; error: unknown }
   | { kind: 'not-read' };
@@ -35,7 +45,7 @@ export type ChildEnding = {
 };
 
 export type Verdict =
-  | { kind: 'succeeded'; result: ChildResult }
+  | { kind: 'succeeded'; result: ChildResult; newCategorizations: NewCategorizations['rows'] }
   | { kind: 'failed'; reason: AnalysisFailureReason; detail: string }
   | { kind: 'canceled' }
   /** The attempt was fenced or reaped. */
@@ -68,9 +78,10 @@ function classify(ending: ChildEnding): Verdict {
     outcome.kind === 'exited' &&
     outcome.exitCode === 0 &&
     read.kind === 'result' &&
-    read.missingResultFiles.length === 0
+    read.missingResultFiles.length === 0 &&
+    read.newCategorizations !== undefined
   ) {
-    return { kind: 'succeeded', result: read.result };
+    return { kind: 'succeeded', result: read.result, newCategorizations: read.newCategorizations };
   }
   if (outcome.kind === 'exited' && outcome.exitCode === 1 && read.kind === 'failure') {
     const { reason, detail, traceback } = read.failure;
@@ -105,11 +116,7 @@ function classify(ending: ChildEnding): Verdict {
   }
 
   if (outcome.kind === 'exited' && outcome.exitCode === EXIT_CODES.wroteResult) {
-    const detail =
-      read.kind === 'result' && read.missingResultFiles.length > 0
-        ? `result.json declared file(s) never written: ${read.missingResultFiles.join(', ')}`
-        : 'exited 0 without writing result.json';
-    return { kind: 'failed', reason: 'contract_violation', detail };
+    return { kind: 'failed', reason: 'contract_violation', detail: incompleteResultDetail(read) };
   }
   if (outcome.kind === 'exited' && outcome.exitCode === EXIT_CODES.wroteFailure) {
     return {
@@ -137,6 +144,14 @@ function classify(ending: ChildEnding): Verdict {
         reason: 'child_crashed',
         detail: crashDetail(`exited with code ${outcome.exitCode}`, outcome.stderrTail),
       };
+}
+
+function incompleteResultDetail(read: DocumentRead): string {
+  if (read.kind !== 'result') return 'exited 0 without writing result.json';
+  if (read.missingResultFiles.length > 0) {
+    return `result.json declared file(s) never written: ${read.missingResultFiles.join(', ')}`;
+  }
+  return 'exited 0 without writing new-categorizations.json';
 }
 
 function crashDetail(head: string, stderrTail: string): string {
