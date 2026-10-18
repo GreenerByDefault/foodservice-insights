@@ -52,6 +52,7 @@ function succeededWireBody() {
         pdf: { href: '/file/result/1' },
         xlsx: { href: '/file/result/2' },
       },
+      findings: [{ message: 'Found 1 missing internal month.', sampleValues: [] }],
     },
   };
 }
@@ -108,6 +109,7 @@ describe('ReportView', () => {
           claimedAt: new Date('2026-01-15T10:01:00Z'),
           finishedAt: new Date('2026-01-15T10:04:00Z'),
           files: { pdf: { href: '/file/result/1' }, xlsx: { href: '/file/result/2' } },
+          findings: [],
         },
       };
       const screen = await render(ReportView, { data });
@@ -171,6 +173,7 @@ describe('ReportView', () => {
 
       await triggerImmediatePoll();
       await expect.element(screen.getByRole('link', { name: 'Download PDF' })).toBeVisible();
+      await expect.element(screen.getByText('Found 1 missing internal month.')).toBeVisible();
       await expect
         .element(screen.getByText('We lost the connection', { exact: false }))
         .not.toBeInTheDocument();

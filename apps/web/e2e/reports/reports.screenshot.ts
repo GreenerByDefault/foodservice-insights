@@ -50,6 +50,12 @@ test('a report that succeeded', async ({ page, reports, org }) => {
 
   await expect(page.getByRole('link', { name: 'Download PDF' })).toBeVisible();
   await expect(page.getByText('Finished 3 hours ago.')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'This report has 2 data quality warnings' }),
+  ).toBeVisible();
+  // One finding's examples open, so the image shows both states of the disclosure.
+  await page.getByText('Examples (3)').click();
+  await page.mouse.move(0, 0);
   await expectScreenshots(page, 'succeeded.png');
 });
 

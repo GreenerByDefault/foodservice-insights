@@ -21,6 +21,7 @@ export {
   dbMsFromNow,
   findOrInsertAppUser,
   insertAnalysisAttempt,
+  insertAnalysisAttemptFinding,
   insertAppUser,
   insertAppUserWithEmail,
   insertInputFile,

@@ -77,6 +77,7 @@ function screenHeadline(report: ReportPageData): string {
     finishedAt={current.attempt.finishedAt}
     now={current.now}
     files={current.attempt.files}
+    findings={current.attempt.findings}
     organizationSlug={current.organizationSlug}
     reportId={current.report.id}
     reportName={current.report.name}

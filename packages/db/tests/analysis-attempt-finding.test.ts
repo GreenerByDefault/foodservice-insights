@@ -1,46 +1,23 @@
 /** The findings a succeeded attempt's customer sees, stored with the attempt. */
 
-import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
-import type { AnalysisAttemptId } from '../src/generated/public/AnalysisAttempt.ts';
-import type { NewAnalysisAttemptFinding } from '../src/generated/public/AnalysisAttemptFinding.ts';
 import { POSTGRES_CODE_UNIQUE_VIOLATION } from '../src/postgres-codes.ts';
-import type { Database } from '../src/schema.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   insertAnalysisAttempt,
+  insertAnalysisAttemptFinding,
   insertOrganization,
   insertReport,
 } from '../src/testing/fixtures.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
-async function insertFinding(
-  transaction: Transaction<Database>,
-  analysisAttemptId: AnalysisAttemptId,
-  overrides: Partial<NewAnalysisAttemptFinding> = {},
-) {
-  return await transaction
-    .insertInto('analysisAttemptFinding')
-    .values({
-      analysisAttemptId,
-      position: 0,
-      qualityCheck: 'missing_internal_months',
-      status: 'warning',
-      message: 'No lines were found for Feb 2024.',
-      sampleValues: ['Feb 2024'],
-      ...overrides,
-    })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-}
-
 describe('analysis_attempt_finding', () => {
   test('accepts both a warning and an error status', async () => {
     const statuses = await withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      const warning = await insertFinding(transaction, attempt.id, { position: 0 });
-      const error = await insertFinding(transaction, attempt.id, {
+      const warning = await insertAnalysisAttemptFinding(transaction, attempt.id, { position: 0 });
+      const error = await insertAnalysisAttemptFinding(transaction, attempt.id, {
         position: 1,
         status: 'error',
       });
@@ -53,8 +30,11 @@ describe('analysis_attempt_finding', () => {
   test('accepts a finding with no sample values, and one with 5', async () => {
     const sizes = await withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      const none = await insertFinding(transaction, attempt.id, { position: 0, sampleValues: [] });
-      const five = await insertFinding(transaction, attempt.id, {
+      const none = await insertAnalysisAttemptFinding(transaction, attempt.id, {
+        position: 0,
+        sampleValues: [],
+      });
+      const five = await insertAnalysisAttemptFinding(transaction, attempt.id, {
         position: 1,
         sampleValues: ['a', 'b', 'c', 'd', 'e'],
       });
@@ -67,7 +47,7 @@ describe('analysis_attempt_finding', () => {
   test.each(['success' as const, 'info' as const])('rejects a status of %s', async (status) => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await insertFinding(transaction, attempt.id, { status });
+      await insertAnalysisAttemptFinding(transaction, attempt.id, { status });
     });
 
     await expectConstraintViolation(insert, 'analysis_attempt_finding_status_is_warning_or_error');
@@ -76,7 +56,7 @@ describe('analysis_attempt_finding', () => {
   test('rejects an empty message', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await insertFinding(transaction, attempt.id, { message: '' });
+      await insertAnalysisAttemptFinding(transaction, attempt.id, { message: '' });
     });
 
     await expectConstraintViolation(insert, 'analysis_attempt_finding_message_not_empty');
@@ -85,7 +65,7 @@ describe('analysis_attempt_finding', () => {
   test('rejects 6 sample values', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await insertFinding(transaction, attempt.id, {
+      await insertAnalysisAttemptFinding(transaction, attempt.id, {
         sampleValues: ['a', 'b', 'c', 'd', 'e', 'f'],
       });
     });
@@ -96,7 +76,7 @@ describe('analysis_attempt_finding', () => {
   test('rejects a negative position', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await insertFinding(transaction, attempt.id, { position: -1 });
+      await insertAnalysisAttemptFinding(transaction, attempt.id, { position: -1 });
     });
 
     await expectConstraintViolation(insert, 'analysis_attempt_finding_position_non_negative');
@@ -105,8 +85,8 @@ describe('analysis_attempt_finding', () => {
   test('rejects two findings at the same position in one attempt', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const attempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
-      await insertFinding(transaction, attempt.id, { position: 0 });
-      await insertFinding(transaction, attempt.id, { position: 0 });
+      await insertAnalysisAttemptFinding(transaction, attempt.id, { position: 0 });
+      await insertAnalysisAttemptFinding(transaction, attempt.id, { position: 0 });
     });
 
     await expectConstraintViolation(
@@ -124,7 +104,7 @@ describe('analysis_attempt_finding', () => {
         reportId: report.id,
         status: 'succeeded',
       });
-      await insertFinding(transaction, attempt.id);
+      await insertAnalysisAttemptFinding(transaction, attempt.id);
 
       await transaction.deleteFrom('organization').where('id', '=', organization.id).execute();
 

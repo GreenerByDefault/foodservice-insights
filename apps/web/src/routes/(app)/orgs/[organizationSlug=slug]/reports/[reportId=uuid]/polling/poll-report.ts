@@ -9,7 +9,7 @@
 
 import { reloadIfOtherDeploy } from '#lib/api/deploy-version.js';
 import { apiCall } from '#lib/api/fetch.js';
-import type { Attempt, ReportPageData, ResultFiles } from '../+page.server.ts';
+import type { Attempt, Finding, ReportPageData, ResultFiles } from '../+page.server.ts';
 import type { FailureCopy } from '../failure/failure-copy.ts';
 
 type WireAttempt =
@@ -21,6 +21,7 @@ type WireAttempt =
       claimedAt: string;
       finishedAt: string;
       files: ResultFiles;
+      findings: Finding[];
     }
   | { status: 'failed'; finishedAt: string; attemptNumber: number; failure: FailureCopy }
   | { status: 'canceled'; stoppedAt: string };

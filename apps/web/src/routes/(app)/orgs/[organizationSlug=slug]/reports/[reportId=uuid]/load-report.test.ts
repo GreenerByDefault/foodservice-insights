@@ -9,6 +9,7 @@ import {
 import {
   DB_NOW,
   insertAnalysisAttempt,
+  insertAnalysisAttemptFinding,
   insertAppUser,
   insertInputFile,
   insertOrganization,
@@ -407,7 +408,38 @@ describe('_loadReport', () => {
             pdf: { href: `/file/result/${pdf.id}` },
             xlsx: { href: `/file/result/${xlsx.id}` },
           },
+          findings: [],
         });
+      });
+    });
+
+    test('succeeded, with its findings in the order the PDF lists them', async () => {
+      await withRollback(database(), async (transaction) => {
+        const { organization, report } = await anOrgAndReport(transaction);
+        const attempt = await insertAnalysisAttempt(transaction, {
+          reportId: report.id,
+          status: 'succeeded',
+        });
+        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
+        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
+        // Inserted out of order, so the result's order can only have come from `position`.
+        await insertAnalysisAttemptFinding(transaction, attempt.id, {
+          position: 1,
+          message: 'Second',
+          sampleValues: [],
+        });
+        await insertAnalysisAttemptFinding(transaction, attempt.id, {
+          position: 0,
+          message: 'First',
+          sampleValues: ['a', 'b'],
+        });
+
+        const data = await loadReport(transaction, organization, report.id);
+
+        expect(data.attempt.status === 'succeeded' && data.attempt.findings).toEqual([
+          { message: 'First', sampleValues: ['a', 'b'] },
+          { message: 'Second', sampleValues: [] },
+        ]);
       });
     });
 
@@ -488,6 +520,7 @@ describe('_loadReport', () => {
             pdf: { href: `/file/result/${pdf.id}` },
             xlsx: { href: `/file/result/${xlsx.id}` },
           },
+          findings: [],
         });
       });
     });

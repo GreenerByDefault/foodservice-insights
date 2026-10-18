@@ -16,6 +16,10 @@ import { type RawBuilder, sql } from 'kysely';
 import type { UsersId } from '../generated/auth/Users.ts';
 import type { AnalysisAttempt, AnalysisAttemptId } from '../generated/public/AnalysisAttempt.ts';
 import type {
+  AnalysisAttemptFinding,
+  NewAnalysisAttemptFinding,
+} from '../generated/public/AnalysisAttemptFinding.ts';
+import type {
   AnalysisAttemptLlmUsage,
   NewAnalysisAttemptLlmUsage,
 } from '../generated/public/AnalysisAttemptLlmUsage.ts';
@@ -491,6 +495,26 @@ export async function insertResultFile(
       byteSize: 1024,
       contentType: RESULT_FILE_TEST_CONTENT_TYPE[kind],
       checksumSha256: aChecksum(),
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+}
+
+export async function insertAnalysisAttemptFinding(
+  database: DatabaseExecutor,
+  analysisAttemptId: AnalysisAttemptId,
+  overrides: Partial<Omit<NewAnalysisAttemptFinding, 'analysisAttemptId'>> = {},
+): Promise<AnalysisAttemptFinding> {
+  return await database
+    .insertInto('analysisAttemptFinding')
+    .values({
+      position: 0,
+      qualityCheck: 'missing_internal_months',
+      status: 'warning',
+      message: 'No lines were found for Feb 2024.',
+      sampleValues: ['Feb 2024'],
+      ...overrides,
+      analysisAttemptId,
     })
     .returningAll()
     .executeTakeFirstOrThrow();

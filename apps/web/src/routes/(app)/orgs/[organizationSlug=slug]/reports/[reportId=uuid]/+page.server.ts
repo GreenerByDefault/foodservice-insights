@@ -50,6 +50,9 @@ export function _reportEnvironment(): { supportEmail: string; pollIntervalMs: nu
 
 export type FileLink = { href: string };
 
+/** A data quality warning, worded as the PDF words it. */
+export type Finding = { message: string; sampleValues: string[] };
+
 export type ResultFiles = {
   pdf: FileLink;
   xlsx: FileLink;
@@ -69,7 +72,15 @@ export type ResultFiles = {
 export type Attempt =
   | { status: 'pending'; createdAt: Date }
   | { status: 'processing'; createdAt: Date; claimedAt: Date }
-  | { status: 'succeeded'; createdAt: Date; claimedAt: Date; finishedAt: Date; files: ResultFiles }
+  | {
+      status: 'succeeded';
+      createdAt: Date;
+      claimedAt: Date;
+      finishedAt: Date;
+      files: ResultFiles;
+      /** In the PDF's order. Empty when every check passed. */
+      findings: Finding[];
+    }
   | { status: 'failed'; finishedAt: Date; attemptNumber: number; failure: FailureCopy }
   | { status: 'canceled'; stoppedAt: Date };
 
@@ -281,6 +292,7 @@ async function toAttempt(
         claimedAt: requireConstraint(row.claimedAt, 'analysis_attempt_processing_is_claimed'),
         finishedAt: requireConstraint(row.finishedAt, 'analysis_attempt_finished_at_iff_terminal'),
         files: await loadResultFiles(db, row.attemptId),
+        findings: await loadFindings(db, row.attemptId),
       };
     case 'failed':
       return {
@@ -328,6 +340,19 @@ async function loadResultFiles(
       ),
     ),
   };
+}
+
+// No check emits `error` yet, so `status` is not selected: the page calls every finding a warning.
+async function loadFindings(
+  db: DatabaseExecutor,
+  attemptId: AnalysisAttemptId,
+): Promise<Finding[]> {
+  return await db
+    .selectFrom('analysisAttemptFinding')
+    .select(['message', 'sampleValues'])
+    .where('analysisAttemptId', '=', attemptId)
+    .orderBy('position')
+    .execute();
 }
 
 function toFileLink(file: { id: ResultFileId }): FileLink {

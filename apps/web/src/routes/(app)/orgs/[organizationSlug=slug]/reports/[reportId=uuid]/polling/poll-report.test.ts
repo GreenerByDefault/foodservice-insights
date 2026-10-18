@@ -59,11 +59,12 @@ describe('pollReport', () => {
     });
   });
 
-  test('revives a succeeded attempt, leaving the files untouched', async () => {
+  test('revives a succeeded attempt, leaving the files and findings untouched', async () => {
     const files = {
       pdf: { href: '/file/result/1' },
       xlsx: { href: '/file/result/2' },
     };
+    const findings = [{ message: 'Found 1 missing internal month.', sampleValues: ['Feb 2026'] }];
     stubFetch(
       jsonFromThisDeploy({
         ...BASE,
@@ -74,6 +75,7 @@ describe('pollReport', () => {
           claimedAt: '2026-01-15T10:01:00.000Z',
           finishedAt: '2026-01-15T10:04:00.000Z',
           files,
+          findings,
         },
       }),
     );
@@ -86,6 +88,7 @@ describe('pollReport', () => {
       claimedAt: new Date('2026-01-15T10:01:00.000Z'),
       finishedAt: new Date('2026-01-15T10:04:00.000Z'),
       files,
+      findings,
     });
   });
 
