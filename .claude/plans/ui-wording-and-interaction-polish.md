@@ -19,72 +19,11 @@ Two findings from exploring the code shaped the upload form:
   `Product Description`, and neither is recognized. As decided, the reader will accept both and take
   the weight unit from the header.
 
-The work is split into two independent PRs off `main`. Each touches its own files and regenerates
-only its own screenshots.
+What's left is one PR, the upload form. It regenerates only its own screenshots.
 
 ---
 
-## PR 1: Members page, with the invite form in a modal
-
-**Add the dialog component.** Run `pnpm dlx shadcn-svelte@latest add dialog` in `apps/web`. It
-lands in `lib/components/ui/dialog/`, the same way `alert-dialog` was added. The bits-ui patch only
-touches pin-input, so it doesn't affect dialogs.
-
-**`members/+page.svelte`**
-- H1 and `pageTitle` become **"Organization members"**, like "Organization settings". The tab
-  label stays "Members".
-- Admins get an **"Invite someone"** button in `PageHeading`'s `actions` snippet, the way Reports
-  has "New report".
-- The inline "Invite someone" section is removed.
-- "Pending invitations" and "Your membership" stay as they are.
-
-**New `members/invite-dialog.svelte`** wraps the existing `InviteForm`:
-- Title: **"Invite someone to {org name}"**
-- Description: *"We'll email them a link to join. The invitation lasts {INVITE_LIFETIME_DAYS}
-  days."* The constant comes from `@gbd/core` and is currently 14.
-- Footer buttons: **Cancel** and **Send invitation**.
-- Closing the dialog resets the form and its messages. Focus returns to the trigger, which bits-ui
-  handles.
-
-**`members/invite-form.svelte`**
-- Add an `onInvited` callback. The dialog closes only on created + `emailSent`, and the existing
-  "Invited x" toast still fires.
-- Every other outcome stays inline inside the dialog, following the README's rule that problems are
-  shown where they happen.
-- Role radios stack vertically, each with a description wired to `aria-describedby`:
-  - **Member**: *"Can see and upload reports."*
-  - **Admin**: *"Can also invite and remove people, and manage the organization."* This matches
-    the roles table in `REQUIREMENTS.md`.
-- New text for the unknown-outcome message, since the modal now hides the list it used to point at:
-  *"We couldn't tell whether that invite was sent. Close this and check Pending invitations. If it's
-  not there, try again."*
-- When the email failed to send, keep the address in the field instead of clearing it, so pressing
-  "Send invitation" again retries.
-
-**`members/pending-invite-row.svelte`.** "Revoke" becomes plainer wording:
-
-| Element | Now | New |
-|---|---|---|
-| Button | Revoke | **Cancel invite** |
-| Accessible name | Revoke invite for {email} | Cancel invite for {email} |
-| Toast | Revoked the invitation for {email} | Canceled the invitation for {email} |
-| Error | Couldn't revoke this invite — please try again. | Couldn't cancel this invite — please try again. |
-
-**Tests.** These flows now open the dialog first.
-- `invite-form.svelte.test.ts`
-- A new `invite-dialog.svelte.test.ts`, covering:
-  - it closes on success
-  - it stays open with each inline message
-  - it resets when closed
-- `pending-invite-row.svelte.test.ts`
-- `e2e/organizations/invites.e2e.ts`
-- `e2e/organizations/members.screenshot.ts`:
-  - the heading at lines 92 and 134
-  - the invite-state shots, which now capture the open dialog
-
-**Screenshots:** `organizations/members-*`.
-
-## PR 2: Upload form, with clear instructions and friendlier file checks
+## PR 1: Upload form, with clear instructions and friendlier file checks
 
 ### Form wording (`reports/new/upload-form.svelte`)
 Weight unit moves out of "Report details" and into a reorganized **"Purchasing data"** fieldset,
@@ -187,14 +126,14 @@ The Python worker is unaffected, because `write.ts` always writes the header `pr
   - field labels (line 108)
 - `monthly-coverage` tests.
 - `upload-form.svelte.test.ts`:
-  - hint texts (lines 279–307)
+  - hint texts (the `hints` block)
   - months-progress strings
   - the radio is set and the other disabled for a file with a unit header
   - it resets on Replace
 - `monthly-counts.svelte.test.ts`, `rows.test.ts`.
 - `e2e/new-report/new-report.e2e.ts`:
   - the `kg` radio needs `exact` or the full label
-  - months text at lines 26, 99 and 133
+  - the three "… months still need a count" assertions
 - `tests/e2e/specs/report-lifecycle.e2e.ts`: form labels at lines 38–46.
 
 **Screenshots:** `new-report/*`.
@@ -207,24 +146,22 @@ The Python worker is unaffected, because `write.ts` always writes the header `pr
 - Every page must still call `pageTitle(`, because `page-titles.test.ts` scans for it.
 - The `csv/` modules run in the browser too, so keep them free of server-only imports.
 
-## Verification, for each PR
+## Verification
 1. While iterating, run only the touched test files:
-   - `pnpm --filter @gbd/web test:unit <file>`
-   - `pnpm --filter @gbd/web test:e2e -- <file>`
+   - `pnpm --filter @gbd/web test:unit <file>`. Vitest's filter is not a literal path, so a path
+     through `[organizationSlug=slug]` matches nothing; pass a substring such as
+     `reports/new/upload-form` instead.
+   - `pnpm turbo run test:e2e --filter=@gbd/web -- <file>`, through Turbo so the build is fresh.
 2. Regenerate baselines with `pnpm turbo run screenshots:update --filter=@gbd/web`. Going through
-   turbo avoids a stale build.
+   turbo avoids a stale build. To scope it to one spec, pass the update mode before the path
+   (`-- changed e2e/new-report/<spec>`): the script ends in `--update-snapshots`, which otherwise
+   takes the path as its mode.
 3. **Read the regenerated PNGs** (desktop, tablet and mobile) for every changed page:
    - check that the wording wraps sensibly at 375px
-   - check the dialog's layout on mobile
    - check that nothing unrelated changed
 4. Run the gate in the background: `pnpm lint && pnpm check && pnpm test`. Report flaky tests
    rather than chasing them.
 5. Check by hand in the running app (`/run` or Playwright MCP):
-   - **PR 1:**
-     - open the dialog, invite someone, and confirm it closes with a toast
-     - invite an existing member and confirm the inline error stays in the dialog
-     - press Escape and confirm the form resets and focus returns to "Invite someone"
-   - **PR 2:**
-     - upload a copy of the lab sample CSV and confirm Weight unit locks to lb
-     - upload `Weight (oz)` and read the rejection
-     - upload `apps/web/sample-reports/valid.csv` and confirm both radios stay open
+   - upload a copy of the lab sample CSV and confirm Weight unit locks to lb
+   - upload `Weight (oz)` and read the rejection
+   - upload `apps/web/sample-reports/valid.csv` and confirm both radios stay open
