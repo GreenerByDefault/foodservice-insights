@@ -20,6 +20,6 @@ worker deploys only on demand (`ARCHITECTURE.md` § Worker deploys only on deman
   app, commit or revert the rollback in the dashboard.
 - **The region is the one nearest the Supabase project**, in AWS `us-east-1`: every request,
   claim, and lease renewal is a round trip to the database.
-- **`EMAIL_TRANSPORT=provider`** is a stub whose every send fails with an `EmailError`, until
+- **`EMAIL_TRANSPORT=provider`** is a stub that drops every send as if it went out, until
   `.claude/plans/email-provider.md` wires up Postmark. `EMAIL_GBD_ADDRESS` is a stand-in until GBD
   names one.

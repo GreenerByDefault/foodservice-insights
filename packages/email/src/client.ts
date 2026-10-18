@@ -30,7 +30,7 @@ export type RenderedEmail = {
 export const SEND_TIMEOUT_MS = 10_000;
 
 export type EmailTransport = {
-  /** For log lines, and for the error a stub transport raises when asked to send. */
+  /** For log lines. */
   readonly name: string;
   /** Implementors of this interface must timeout within `SEND_TIMEOUT_MS`. */
   send(email: RenderedEmail): Promise<void>;
