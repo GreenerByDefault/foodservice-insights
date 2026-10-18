@@ -1,7 +1,7 @@
 /** `invites.png` is one live offer and one expired, the two shapes a card takes; `invites-empty.png`
  * is the page with nothing waiting. `invites-accept-failed.png` is a card's error line, routed
- * rather than actually hit, as `members.screenshot.ts` does for Revoke — Decline and Dismiss render
- * the same line, so this one image covers all three.
+ * rather than actually hit, as `members.screenshot.ts` does for Cancel invite — Decline and Dismiss
+ * render the same line, so this one image covers all three.
  *
  * The invitee is a second person, minted by `users`, rather than the test's own user: that user is
  * the one `organizations.create` puts in every organization it makes. No image renders the

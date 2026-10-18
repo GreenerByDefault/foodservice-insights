@@ -8,9 +8,9 @@ import { revokeInvite } from '#lib/invites/api/revoke-invite.js';
 import { focusPageHeading } from '#lib/utils/focus-page-heading.js';
 import type { InviteRow } from './+page.server.ts';
 
-/** One row of `pending-invites.svelte`'s list: the invite's own state, and its Revoke button.
- * No confirm dialog — re-inviting the same address supersedes and resends, so revoking the
- * wrong one costs nothing but a moment. */
+/** One row of `pending-invites.svelte`'s list: the invite's own state, and its Cancel invite
+ * button. No confirm dialog — re-inviting the same address supersedes and resends, so canceling
+ * the wrong one costs nothing but a moment. */
 interface Props {
   organizationSlug: string;
   invite: InviteRow;
@@ -30,9 +30,9 @@ async function revoke() {
     actionState = { status: 'idle' };
     await onRevoked();
     await focusPageHeading();
-    toast.success(`Revoked the invitation for ${invite.email}`);
+    toast.success(`Canceled the invitation for ${invite.email}`);
   } catch {
-    actionState = { status: 'error', message: "Couldn't revoke this invite — please try again." };
+    actionState = { status: 'error', message: "Couldn't cancel this invite — please try again." };
   }
 }
 </script>
@@ -55,9 +55,9 @@ async function revoke() {
       onclick={revoke}
       disabled={actionState.status === 'loading'}
       aria-busy={actionState.status === 'loading'}
-      aria-label="Revoke invite for {invite.email}"
+      aria-label="Cancel invite for {invite.email}"
     >
-      Revoke
+      Cancel invite
     </Button>
     {#if actionState.status === 'error'}
       <p role="alert" class="basis-full text-sm text-destructive">{actionState.message}</p>

@@ -37,13 +37,13 @@ describe('PendingInviteRow', () => {
     await expect.element(screen.getByText('Expired', { exact: false })).toBeVisible();
   });
 
-  test('revoking DELETEs the invite, calls onRevoked and toasts', async () => {
+  test('canceling DELETEs the invite, calls onRevoked and toasts', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
     const onRevoked = vi.fn().mockResolvedValue(undefined);
     const invite = aPendingInvite();
     const screen = await render(PendingInviteRow, { organizationSlug: 'org-1', invite, onRevoked });
 
-    await screen.getByRole('button', { name: `Revoke invite for ${invite.email}` }).click();
+    await screen.getByRole('button', { name: `Cancel invite for ${invite.email}` }).click();
 
     await expect.poll(() => onRevoked.mock.calls.length).toBe(1);
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
@@ -52,19 +52,19 @@ describe('PendingInviteRow', () => {
     );
     await expect
       .poll(() => toast.success.mock.calls)
-      .toEqual([[`Revoked the invitation for ${invite.email}`]]);
+      .toEqual([[`Canceled the invitation for ${invite.email}`]]);
   });
 
-  test('a failed revoke shows a generic error and does not call onRevoked', async () => {
+  test('a failed cancel shows a generic error and does not call onRevoked', async () => {
     stubFetch(jsonResponse({ message: 'Not found', code: 'not_found' }, 404));
     const onRevoked = vi.fn().mockResolvedValue(undefined);
     const invite = aPendingInvite();
     const screen = await render(PendingInviteRow, { organizationSlug: 'org-1', invite, onRevoked });
 
-    await screen.getByRole('button', { name: `Revoke invite for ${invite.email}` }).click();
+    await screen.getByRole('button', { name: `Cancel invite for ${invite.email}` }).click();
 
     await expect
-      .element(screen.getByText("Couldn't revoke this invite — please try again."))
+      .element(screen.getByText("Couldn't cancel this invite — please try again."))
       .toBeVisible();
     expect(onRevoked).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
