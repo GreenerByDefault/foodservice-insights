@@ -60,7 +60,7 @@ async function confirm() {
     <ul class="flex flex-col gap-1 text-sm">
       {#each soleAdminOrganizations as organization (organization.slug)}
         <li>
-          <a class="underline" href={organizationMembersHref(organization.slug)}>
+          <a class="link" href={organizationMembersHref(organization.slug)}>
             {organization.name}
           </a>
         </li>

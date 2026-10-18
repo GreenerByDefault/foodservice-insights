@@ -8,9 +8,17 @@ interface Props {
 }
 
 let { status }: Props = $props();
+
+const STATUS_COLORS: Record<AnalysisAttemptStatus, string> = {
+  pending: 'text-muted-foreground',
+  processing: 'text-muted-foreground',
+  succeeded: 'text-primary',
+  failed: 'text-destructive',
+  canceled: 'text-muted-foreground',
+};
 </script>
 
-<span class={status === 'failed' ? 'text-destructive' : 'text-muted-foreground'}>
+<span class={STATUS_COLORS[status]}>
   {#if status === 'processing'}
     <LoaderCircleIcon class="inline size-4 motion-safe:animate-spin" aria-hidden="true" />
   {/if}

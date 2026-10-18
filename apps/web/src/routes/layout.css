@@ -162,3 +162,8 @@
 @utility page-width {
   @apply mx-auto w-full max-w-4xl px-6 sm:px-8;
 }
+
+/* An anchor inside running text. */
+@utility link {
+  @apply text-primary underline underline-offset-2 hover:no-underline;
+}

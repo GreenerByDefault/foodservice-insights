@@ -20,7 +20,7 @@ let { stoppedAt, now, newReportHref, organizationSlug, reportId, reportName }: P
   <StatusLine icon={CircleStopIcon}>
     <p class="text-muted-foreground">
       Someone stopped this report <RelativeTime at={stoppedAt} {now} direction="past" />.
-      <a class="underline hover:no-underline" href={newReportHref}>Upload a file</a>
+      <a class="link" href={newReportHref}>Upload a file</a>
       to start a new one.
     </p>
   </StatusLine>

@@ -1,8 +1,8 @@
 <script lang="ts">
-import { APP_NAME } from '@gbd/core';
 import { page } from '$app/state';
 import { authMode } from '#lib/auth/mode.js';
 import SiteHeader from '#lib/components/site-header.svelte';
+import Wordmark from '#lib/components/wordmark.svelte';
 import type { LayoutProps } from './$types';
 import OrganizationSwitcher from './shell/organization-switcher.svelte';
 import UserMenu from './shell/user-menu.svelte';
@@ -17,9 +17,7 @@ const currentOrganization = $derived(page.data.organization);
 
 <div class="flex min-h-svh flex-col">
   <SiteHeader>
-    <a href="/" class="hidden shrink-0 text-sm font-medium text-muted-foreground sm:block">
-      {APP_NAME}
-    </a>
+    <Wordmark class="hidden sm:flex" />
 
     <!-- Mobile hides the app title, so the switcher sits first and reads as the page's
          identity; sm+ shows the title and groups the switcher with the avatar instead. -->
