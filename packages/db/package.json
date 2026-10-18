@@ -17,6 +17,7 @@
     "test": "pnpm run test:unit",
     "migrate": "node scripts/migrate.ts",
     "seed:identity": "node scripts/seed-identity.ts",
+    "seed:history": "node scripts/seed-history.ts",
     "truncate": "node scripts/truncate.ts",
     "temporary-go-live-cache-import": "node scripts/temporary-go-live-cache-import/main.ts",
     "db:clean": "node scripts/clean.ts",

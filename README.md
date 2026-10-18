@@ -299,6 +299,7 @@ avoid clashes between tests. If the test database gets into a strange state,
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
 | `pnpm seed:identity` | Create the placeholder user, organization, and membership that `PUBLIC_AUTH_MODE=placeholder` runs as |
+| `pnpm seed:history` | Replace the synthetic history of organizations, users, reports and attempts that dashboards draw locally |
 | `pnpm truncate` | Delete every row, object, and local email, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/), [`packages/db/public-schema.sql`](packages/db/public-schema.sql), [`packages/db/metrics-schema.sql`](packages/db/metrics-schema.sql), and [`packages/db/auth-schema.sql`](packages/db/auth-schema.sql) from the live database |
 | `pnpm test:db:clean` | Drop every leftover per-run test database and cached template (`fsi_test_%`) |
@@ -313,6 +314,8 @@ Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 Which to run when:
 
 - After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`.
+- Before working on a dashboard, or to move the history's dates up to today — `pnpm seed:history`.
+  Re-running it replaces the history rather than adding to it, and leaves rows you made alone.
 - For tests, `test:e2e` and `test:screenshots` clone a fresh, migrated database per run and seed it
   themselves. The vitest tiers migrate the shared test database and never truncate it.
 

@@ -57,6 +57,9 @@ export async function insertAnalysisAttempt(
     failureReason?: AnalysisFailureReason;
     /** Defaults to 1. Set higher to build a row an older worker must leave in the queue. */
     requiredContractVersion?: number;
+    /** Only meaningful for `succeeded` and `failed`: marks the email as sent, claimed once by the
+     * worker at the same moment, so the notification sweep passes the row by. */
+    notificationEmailSentAt?: Date | RawBuilder<Date>;
     resultFiles?: null;
   } = {},
 ): Promise<AnalysisAttempt> {
@@ -91,6 +94,14 @@ export async function insertAnalysisAttempt(
             finishedAt: overrides.finishedAt ?? DB_NOW,
             failureReason:
               status === 'failed' ? (overrides.failureReason ?? 'child_crashed') : null,
+          }
+        : {}),
+      ...(overrides.notificationEmailSentAt !== undefined
+        ? {
+            notificationClaimedAt: overrides.notificationEmailSentAt,
+            notificationClaimedByWorkerId: overrides.workerId ?? 'test-worker',
+            notificationAttempts: 1,
+            notificationEmailSentAt: overrides.notificationEmailSentAt,
           }
         : {}),
       ...(overrides.cancelRequestedAt !== undefined

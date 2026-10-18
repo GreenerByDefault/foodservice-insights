@@ -24,6 +24,7 @@
     "fmt": "biome check --write .",
     "migrate": "turbo run migrate",
     "seed:identity": "turbo run seed:identity",
+    "seed:history": "turbo run seed:history",
     "truncate": "turbo run truncate",
     "db:gen-types": "turbo run gen-types",
     "test:db:clean": "turbo run db:clean",

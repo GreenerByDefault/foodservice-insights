@@ -15,7 +15,12 @@ import { insertAppUser } from './app-user.ts';
  * test's signed-in identity, say. Left out, a disposable admin is created here. */
 export async function insertOrganization(
   database: DatabaseExecutor,
-  overrides: { name?: string; slug?: string; adminUserId?: AppUser['id'] } = {},
+  overrides: {
+    name?: string;
+    slug?: string;
+    adminUserId?: AppUser['id'];
+    createdAt?: Date | RawBuilder<Date>;
+  } = {},
 ): Promise<{ organization: Organization; admin: AppUser }> {
   const admin =
     overrides.adminUserId === undefined
@@ -33,6 +38,7 @@ export async function insertOrganization(
       // Slug-legal without deriving one: lowercase hex, already hyphen-free.
       slug: overrides.slug ?? `test-org-${crypto.randomUUID().slice(0, 8)}`,
       createdByUserId: admin.id,
+      createdAt: overrides.createdAt,
     })
     .returningAll()
     .executeTakeFirstOrThrow();

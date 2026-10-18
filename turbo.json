@@ -104,6 +104,10 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "seed:history": {
+      "dependsOn": ["^build"],
+      "cache": false
+    },
     "truncate": {
       "dependsOn": ["^build"],
       "cache": false
