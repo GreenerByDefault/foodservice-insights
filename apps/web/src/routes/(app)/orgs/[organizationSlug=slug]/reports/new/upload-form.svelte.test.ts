@@ -304,6 +304,12 @@ describe('UploadForm', () => {
         .toHaveAccessibleDescription(
           'A count for each month lets your report show emissions per diner or per meal, so you can compare it with other sites. Use whichever you already keep track of.',
         );
+      // Before any file is chosen, so the user knows which site to count before going to find it.
+      await expect
+        .element(screen.getByRole('group', { name: 'Diners per month' }))
+        .toHaveAccessibleDescription(
+          "Use counts for the same sites as your file. For example, if your file only covers one dining hall, count only that dining hall's diners, not the whole university's.",
+        );
     });
   });
 

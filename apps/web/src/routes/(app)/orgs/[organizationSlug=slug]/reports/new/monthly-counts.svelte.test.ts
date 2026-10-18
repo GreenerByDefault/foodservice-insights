@@ -57,10 +57,20 @@ describe('MonthlyCounts', () => {
       await expect
         .element(screen.getByRole('group', { name: legend }))
         .toHaveAccessibleDescription(
-          `Count only the sites your file covers. For example, if it covers one dining hall, count that hall's ${counted}, not the whole university's.`,
+          `Use counts for the same sites as your file. For example, if your file only covers one dining hall, count only that dining hall's ${counted}, not the whole university's.`,
         );
     },
   );
+
+  test('before a file is chosen, holds a placeholder where the months will go', async () => {
+    const counts: CountDraft = $state({});
+    const screen = await render(MonthlyCounts, { months: undefined, basis: 'people', counts });
+
+    await expect
+      .element(screen.getByText('Choose a file above, and each month it covers will appear here.'))
+      .toBeInTheDocument();
+    await expect.element(screen.getByRole('spinbutton')).not.toBeInTheDocument();
+  });
 
   describe('the progress line', () => {
     test('counts up as the user fills in an input', async () => {
