@@ -109,6 +109,10 @@ Applies to `packages/db` and every app or package that imports it (`apps/web`, `
 - **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a
   test *about* concurrency — a lock, a block, a second snapshot — which `withRollback` cannot
   express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
+- **Name a test helper for what it does**: `insert*` writes rows, by the rules at the top of
+  [`fixtures/index.ts`](../../packages/db/src/testing/fixtures/index.ts); `a*`/`an*` builds a
+  value in memory; `with*` scopes a committed fixture and cleans it up. A row fixture goes in
+  `@gbd/db/testing`, in its table's file. A composite only one app uses stays in that app.
 
 ## Blob store
 

@@ -6,7 +6,7 @@ import {
   listVerifiedProductCategorizations,
 } from './product-categorization.ts';
 import type { Database } from './schema.ts';
-import { insertProductCategorization } from './testing/fixtures.ts';
+import { insertProductCategorization } from './testing/fixtures/index.ts';
 import { withRollback } from './testing/transactions.ts';
 
 /** Verified rows from other tests' committed data may exist, so every assertion looks only at

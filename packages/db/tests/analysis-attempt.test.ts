@@ -28,7 +28,7 @@ import {
   insertAppUser,
   insertInputFile,
   insertReport,
-} from '../src/testing/fixtures.ts';
+} from '../src/testing/fixtures/index.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
 /** Take an attempt all the way to `failed`, the only status a retry may follow. */

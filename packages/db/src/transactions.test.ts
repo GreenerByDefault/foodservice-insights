@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from './env.ts';
-import { insertOrganization } from './testing/fixtures.ts';
+import { insertOrganization } from './testing/fixtures/index.ts';
 import { withRollback } from './testing/transactions.ts';
 import { withTransaction } from './transactions.ts';
 import type { OrganizationId } from './types.ts';

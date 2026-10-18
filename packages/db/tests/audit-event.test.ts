@@ -5,7 +5,7 @@ import type { UsersId } from '../src/generated/auth/Users.ts';
 import type { NewAuditEvent } from '../src/generated/public/AuditEvent.ts';
 import type { OrganizationId } from '../src/generated/public/Organization.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
-import { insertAppUser, insertOrganization } from '../src/testing/fixtures.ts';
+import { insertAppUser, insertOrganization } from '../src/testing/fixtures/index.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
 function anEvent(overrides: Partial<NewAuditEvent> = {}): NewAuditEvent {

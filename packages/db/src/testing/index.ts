@@ -33,7 +33,7 @@ export {
   insertReportWithAttempt,
   insertResultFile,
   readAnalysisAttemptRow,
-} from './fixtures.ts';
+} from './fixtures/index.ts';
 export { setup } from './global-setup.ts';
 export type { RunDatabase } from './run-database.ts';
 export {
