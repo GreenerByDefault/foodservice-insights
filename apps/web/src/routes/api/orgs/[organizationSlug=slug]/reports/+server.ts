@@ -154,8 +154,8 @@ async function insertReport(
       createdByUserId: input.userId,
       name: input.metadata.name,
       siteName: input.metadata.siteName,
-      countsBasis: input.metadata.countsBasis,
-      monthlyCounts: input.metadata.monthlyCounts,
+      countsBasis: input.metadata.counts?.basis ?? null,
+      monthlyCounts: input.metadata.counts?.monthly ?? null,
       unitSystem: input.metadata.unitSystem,
     })
     .execute();

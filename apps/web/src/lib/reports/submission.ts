@@ -17,7 +17,13 @@ import {
   MAX_UPLOAD_FIELD_BYTES,
   MAX_UPLOAD_FIELD_MEGABYTES,
 } from './limits.ts';
-import { FIELD, FIELD_LABELS, type ReportMetadata, ReportMetadataSchema } from './metadata.ts';
+import {
+  FIELD,
+  FIELD_LABELS,
+  type MetadataField,
+  type ReportMetadata,
+  ReportMetadataSchema,
+} from './metadata.ts';
 import { monthsWithoutCounts } from './monthly-coverage.ts';
 import type { RejectedUploadRecord } from './rejection.ts';
 
@@ -182,8 +188,10 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
     };
   }
 
-  const uncounted = monthsWithoutCounts(csv.months, parsed.output.monthlyCounts);
-  if (uncounted) return { ok: false, fileDescription, bytes, rejection: uncounted };
+  if (parsed.output.counts) {
+    const uncounted = monthsWithoutCounts(csv.months, parsed.output.counts.monthly);
+    if (uncounted) return { ok: false, fileDescription, bytes, rejection: uncounted };
+  }
 
   return {
     ok: true,
@@ -201,5 +209,5 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
 
 /** `fieldsWithIssues` falls back to "the form" for an issue with no path, which needs no label. */
 function fieldLabel(field: string): string {
-  return Object.hasOwn(FIELD_LABELS, field) ? FIELD_LABELS[field as keyof ReportMetadata] : field;
+  return Object.hasOwn(FIELD_LABELS, field) ? FIELD_LABELS[field as MetadataField] : field;
 }

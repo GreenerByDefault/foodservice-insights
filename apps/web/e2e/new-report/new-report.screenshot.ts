@@ -17,13 +17,13 @@ test('the new report form, before any file is chosen', async ({ page, org }) => 
   await expectScreenshots(page, 'no-file.png');
 });
 
-// Spans two years, like the fixture this replaced, so the shot also exercises the year headings.
+// Spans two years, so the shot also exercises the year headings, and more than six months, so the
+// inputs fall into two columns at the wider widths.
 const CSV = [
   'product,date,weight',
-  'beef,2025-11-05,12',
-  'beef,2025-12-05,12',
-  'beef,2026-01-05,12',
-  'beef,2026-02-05,12',
+  ...['2025-11', '2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06'].map(
+    (month) => `beef,${month}-05,12`,
+  ),
 ].join('\n');
 
 test('the new report form, asking for the weight unit, with the monthly counts partway filled in', async ({
@@ -35,14 +35,13 @@ test('the new report form, asking for the weight unit, with the monthly counts p
 
   await chooseCsv(page, 'procurement.csv', CSV);
 
-  // Fills three of the four months and leaves one untouched — a mid-progress state exercises
-  // the progress line and the filled/empty input contrast that an all-empty or all-filled shot
-  // would miss.
+  // Fills some months and leaves the rest untouched — a mid-progress state exercises the progress
+  // line and the filled/empty input contrast that an all-empty or all-filled shot would miss.
   await page.getByRole('spinbutton', { name: 'November 2025' }).fill('120');
   await page.getByRole('spinbutton', { name: 'December 2025' }).fill('115');
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('130');
 
-  await expect(page.getByText('1 of 4 months still needs a count')).toBeVisible();
+  await expect(page.getByText('3 of 8 months filled in')).toBeVisible();
   await expectScreenshots(page, 'unit-asked.png');
 });
 
@@ -64,6 +63,25 @@ test('the new report form, with the weight unit taken from the header', async ({
   await expectScreenshots(page, 'unit-from-header.png', {
     clipBelow: page.getByRole('group', { name: 'Purchasing data' }),
   });
+});
+
+test('the new report form, with counts skipped', async ({ page, org }) => {
+  await page.goto(`/orgs/${org.slug}/reports/new`);
+  await ensureHydrated(page);
+
+  // A header that names the unit keeps the weight question, which `unit-asked.png` covers, out of
+  // the shot.
+  await chooseCsv(
+    page,
+    'procurement.csv',
+    ['Product,Date,Weight (lb)', 'beef,2026-01-05,12'].join('\n'),
+  );
+  await page.getByRole('radio', { name: 'Skip counts' }).click();
+
+  await expect(
+    page.getByText('Your report will show totals only.', { exact: false }),
+  ).toBeVisible();
+  await expectScreenshots(page, 'no-counts.png');
 });
 
 // Every column at once, one distinct fault per row plus two rows whose dates prove opposite

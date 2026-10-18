@@ -45,36 +45,60 @@ describe('MonthlyCounts', () => {
       .toBeInTheDocument();
   });
 
-  test('legend follows the counts basis', async () => {
-    const peopleCounts: CountDraft = $state({});
-    const people = await render(MonthlyCounts, {
-      months: ['2026-01'],
-      basis: 'people',
-      counts: peopleCounts,
-    });
-    await expect.element(people.getByText('Diners per month')).toBeInTheDocument();
+  test.for([
+    ['people', 'Diners per month', 'diners'],
+    ['meals', 'Meals per month', 'meals'],
+  ] as const)(
+    'names the %s basis in the legend and the description',
+    async ([basis, legend, counted]) => {
+      const counts: CountDraft = $state({});
+      const screen = await render(MonthlyCounts, { months: ['2026-01'], basis, counts });
 
-    const mealsCounts: CountDraft = $state({});
-    const meals = await render(MonthlyCounts, {
-      months: ['2026-01'],
-      basis: 'meals',
-      counts: mealsCounts,
-    });
-    await expect.element(meals.getByText('Meals per month')).toBeInTheDocument();
+      await expect
+        .element(screen.getByRole('group', { name: legend }))
+        .toHaveAccessibleDescription(
+          `Use counts for the same sites as your file. For example, if your file only covers one dining hall, count only that dining hall's ${counted}, not the whole university's.`,
+        );
+    },
+  );
+
+  test('before a file is chosen, holds a placeholder where the months will go', async () => {
+    const counts: CountDraft = $state({});
+    const screen = await render(MonthlyCounts, { months: undefined, basis: 'people', counts });
+
+    await expect
+      .element(
+        screen.getByText(
+          'Choose a file above. Then you can enter a count here for each month it covers.',
+        ),
+      )
+      .toBeInTheDocument();
+    await expect.element(screen.getByRole('spinbutton')).not.toBeInTheDocument();
   });
 
-  test('the progress line counts down as the user fills in an input', async () => {
-    const counts: CountDraft = $state({ '2026-01': 100 });
-    const screen = await render(MonthlyCounts, {
-      months: ['2026-01', '2026-02', '2026-03'],
-      basis: 'people',
-      counts,
+  describe('the progress line', () => {
+    test('counts up as the user fills in an input', async () => {
+      const counts: CountDraft = $state({ '2026-01': 100 });
+      const screen = await render(MonthlyCounts, {
+        months: ['2026-01', '2026-02', '2026-03'],
+        basis: 'people',
+        counts,
+      });
+
+      await expect
+        .element(screen.getByRole('group', { name: 'Diners per month' }))
+        .toHaveAccessibleDescription(/1 of 3 months filled in$/);
+
+      await screen.getByRole('spinbutton', { name: 'February 2026' }).fill('200');
+      await expect.element(screen.getByText('2 of 3 months filled in')).toBeInTheDocument();
+      expect(counts['2026-02']).toBe(200);
     });
 
-    await expect.element(screen.getByText('2 of 3 months still need a count')).toBeInTheDocument();
+    test('is left out for a single month', async () => {
+      const counts: CountDraft = $state({});
+      const screen = await render(MonthlyCounts, { months: ['2026-01'], basis: 'people', counts });
 
-    await screen.getByRole('spinbutton', { name: 'February 2026' }).fill('200');
-    await expect.element(screen.getByText('1 of 3 months still needs a count')).toBeInTheDocument();
-    expect(counts['2026-02']).toBe(200);
+      await expect.element(screen.getByText('filled in', { exact: false })).not.toBeInTheDocument();
+    });
   });
 });

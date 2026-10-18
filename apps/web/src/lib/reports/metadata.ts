@@ -19,6 +19,25 @@ export const FIELD = {
 } as const;
 
 export const COUNTS_BASES = exhaustiveArray<CountsBasis>()(['people', 'meals']);
+
+/** The `counts-basis` answer for a report without counts. It exists only in the form: the server
+ * stores a report without counts as NULL in both `report.counts_basis` and `report.monthly_counts`. */
+export const NO_COUNTS = 'none';
+
+/** Every answer the upload form offers under "Diners or meals served". */
+export type CountsBasisChoice = CountsBasis | typeof NO_COUNTS;
+
+export const COUNTS_BASIS_CHOICES = exhaustiveArray<CountsBasisChoice>()([
+  ...COUNTS_BASES,
+  NO_COUNTS,
+]);
+
+export const COUNTS_BASIS_LABELS: Record<CountsBasisChoice, string> = {
+  people: 'Diners',
+  meals: 'Meals',
+  none: 'Skip counts',
+};
+
 export const UNIT_SYSTEMS = exhaustiveArray<UnitSystem>()(['lb', 'kg']);
 
 /** The upload form's radio labels, which the report page echoes back. */
@@ -46,23 +65,44 @@ export type MonthlyCounts = v.InferOutput<typeof MonthlyCountsSchema>;
 /** The months a CSV's rows cover: `YYYY-MM`, sorted ascending, deduplicated, and never empty. */
 export type MonthsFromFile = readonly string[];
 
-export const ReportMetadataSchema = v.object({
-  name: requiredText({ minLength: MIN_NAME_LENGTH, maxLength: MAX_FREE_TEXT_LENGTH }),
-  siteName: optionalText({ minLength: MIN_NAME_LENGTH, maxLength: MAX_FREE_TEXT_LENGTH }),
-  countsBasis: v.picklist(COUNTS_BASES),
-  unitSystem: v.picklist(UNIT_SYSTEMS),
-  // One JSON field rather than a form field per month: the column is `jsonb`, and the browser
-  // has to serialise the map somehow.
-  monthlyCounts: v.pipe(v.nullable(v.string()), parsedJson, MonthlyCountsSchema),
-});
+export const ReportMetadataSchema = v.pipe(
+  // A `variant` alone stops at a bad `countsBasis` without checking anything else, so the other
+  // fields sit beside it in an `intersect`, which reports every field's problem at once.
+  v.intersect([
+    v.object({
+      name: requiredText({ minLength: MIN_NAME_LENGTH, maxLength: MAX_FREE_TEXT_LENGTH }),
+      siteName: optionalText({ minLength: MIN_NAME_LENGTH, maxLength: MAX_FREE_TEXT_LENGTH }),
+      unitSystem: v.picklist(UNIT_SYSTEMS),
+    }),
+    v.variant('countsBasis', [
+      v.object({
+        countsBasis: v.literal(NO_COUNTS),
+        monthlyCounts: v.null('must be absent without counts'),
+      }),
+      v.object({
+        countsBasis: v.picklist(COUNTS_BASES),
+        // One JSON field rather than a form field per month: the column is `jsonb`, and the
+        // browser has to serialise the map somehow.
+        monthlyCounts: v.pipe(v.nullable(v.string()), parsedJson, MonthlyCountsSchema),
+      }),
+    ]),
+  ]),
+  v.transform(({ countsBasis, monthlyCounts, ...rest }) => ({
+    ...rest,
+    counts: countsBasis === NO_COUNTS ? null : { basis: countsBasis, monthly: monthlyCounts },
+  })),
+);
 
 export type ReportMetadata = v.InferOutput<typeof ReportMetadataSchema>;
 
+/** A form field that carries report metadata, named as `ReportMetadataSchema`'s issues name it. */
+export type MetadataField = Exclude<keyof typeof FIELD, 'csvFile' | 'workbook'>;
+
 /** Each field as the upload form labels it, for a rejection to name. */
-export const FIELD_LABELS: Record<keyof ReportMetadata, string> = {
+export const FIELD_LABELS: Record<MetadataField, string> = {
   name: 'Report name',
   siteName: 'Site name',
-  countsBasis: 'Count by',
+  countsBasis: 'Diners or meals served',
   unitSystem: 'Weight unit',
   monthlyCounts: 'Diners or meals per month',
 };

@@ -22,7 +22,7 @@ A user can upload a CSV or XLSX file matching a predefined column format.
 - The user provides additional metadata:
   - a name for the report to help users identify it
   - site name (optional)
-  - a map of each month to the number of diners or meals
+  - a map of each month to the number of diners or meals, or none
   - lb vs kg
 
 ### Processing

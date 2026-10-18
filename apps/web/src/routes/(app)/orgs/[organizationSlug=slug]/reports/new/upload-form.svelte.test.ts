@@ -57,7 +57,6 @@ async function fillRequiredFields(
 ) {
   await screen.getByLabelText('Report name').fill(reportName);
   await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
-  await expect.element(screen.getByText('1 of 1 month still needs a count')).toBeInTheDocument();
   await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
   await screen.getByRole('radio', { name: 'Pounds (lb)' }).click();
 }
@@ -76,7 +75,7 @@ describe('UploadForm', () => {
       await fillRequiredFields(screen);
       await screen.getByLabelText('Site name (optional)').fill('Main kitchen');
       await screen
-        .getByRole('radiogroup', { name: 'Count by' })
+        .getByRole('group', { name: 'Diners or meals served' })
         .getByRole('radio', { name: 'Meals' })
         .click();
       await screen.getByRole('button', { name: 'Upload report' }).click();
@@ -109,9 +108,6 @@ describe('UploadForm', () => {
 
       await screen.getByLabelText('Report name').fill('Q1 procurement');
       await screen.getByLabelText('Choose a CSV or Excel file').upload(workbook);
-      await expect
-        .element(screen.getByText('1 of 1 month still needs a count'))
-        .toBeInTheDocument();
       await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
       await screen.getByRole('radio', { name: 'Pounds (lb)' }).click();
       await screen.getByRole('button', { name: 'Upload report' }).click();
@@ -162,7 +158,6 @@ describe('UploadForm', () => {
       await screen.getByRole('button', { name: 'Back to the form' }).click();
 
       await expect.element(screen.getByLabelText('Report name')).toHaveValue('Q1 procurement');
-      await expect.element(screen.getByText('0 of 1 month still need a count')).toBeInTheDocument();
       await expect
         .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
         .toHaveValue(100);
@@ -239,13 +234,17 @@ describe('UploadForm', () => {
 
       await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
       await expect
-        .element(screen.getByText('1 of 1 month still needs a count'))
+        .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
         .toBeInTheDocument();
 
       await screen.getByRole('button', { name: 'Replace' }).click();
 
       await expect
-        .element(screen.getByText('Choose a file first — we will list the months it covers.'))
+        .element(
+          screen.getByText(
+            'Choose a file above. Then you can enter a count here for each month it covers.',
+          ),
+        )
         .toBeInTheDocument();
       await expect.element(screen.getByLabelText('Choose a CSV or Excel file')).toBeInTheDocument();
     });
@@ -305,7 +304,13 @@ describe('UploadForm', () => {
       await expect
         .element(screen.getByRole('group', { name: 'Diners or meals served' }))
         .toHaveAccessibleDescription(
-          "Enter how many diners or meals you served each month. The report uses these to show your emissions per diner or per meal. Use counts for the same sites as your file. For example, if your file only covers one dining hall, count only that dining hall's diners or meals, not the whole university's.",
+          'Give a count for each month, such as 1,200 diners in March. Your report will then show emissions per diner or per meal, so you can compare your site with sites of other sizes. Count diners or meals, whichever you already track.',
+        );
+      // Before any file is chosen, so the user knows which site to count before going to find it.
+      await expect
+        .element(screen.getByRole('group', { name: 'Diners per month' }))
+        .toHaveAccessibleDescription(
+          "Use counts for the same sites as your file. For example, if your file only covers one dining hall, count only that dining hall's diners, not the whole university's.",
         );
     });
   });
@@ -342,7 +347,7 @@ describe('UploadForm', () => {
       release();
 
       await expect
-        .element(screen.getByText('1 of 1 month still needs a count'))
+        .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
         .toBeInTheDocument();
       await expect.element(screen.getByLabelText('Report name')).toHaveFocus();
     });
@@ -419,6 +424,77 @@ describe('UploadForm', () => {
       await expect
         .element(screen.getByText('Weights are in pounds, as the column name says.'))
         .not.toBeInTheDocument();
+    });
+  });
+
+  describe('skipping counts', () => {
+    const NOTE =
+      "Your report will show totals only. Bigger sites have bigger totals, so you won't be able to compare your totals directly with other sites.";
+
+    function countsBasisGroup(screen: Awaited<ReturnType<typeof render>>) {
+      return screen.getByRole('group', { name: 'Diners or meals served' }).getByRole('radiogroup');
+    }
+
+    async function chooseCountBasis(screen: Awaited<ReturnType<typeof render>>, name: string) {
+      await countsBasisGroup(screen).getByRole('radio', { name }).click();
+    }
+
+    test('replaces the months with a note that describes the choice', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+
+      await chooseCountBasis(screen, 'Skip counts');
+
+      await expect
+        .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
+        .not.toBeInTheDocument();
+      await expect.element(countsBasisGroup(screen)).toHaveAccessibleDescription(NOTE);
+    });
+
+    test('replaces the placeholder with the note before any file is chosen', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+
+      await chooseCountBasis(screen, 'Skip counts');
+
+      await expect
+        .element(screen.getByText('Choose a file above', { exact: false }))
+        .not.toBeInTheDocument();
+      await expect.element(countsBasisGroup(screen)).toHaveAccessibleDescription(NOTE);
+    });
+
+    test('switching back to a basis restores the counts already typed', async () => {
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+      await screen.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
+
+      await chooseCountBasis(screen, 'Skip counts');
+      await chooseCountBasis(screen, 'Diners');
+
+      await expect
+        .element(screen.getByRole('spinbutton', { name: 'January 2026' }))
+        .toHaveValue(100);
+      await expect.element(countsBasisGroup(screen)).toHaveAccessibleDescription('');
+    });
+
+    test('submits the none basis and no monthly counts, even with a month left blank', async () => {
+      const fetchMock = stubFetch(
+        new Response(JSON.stringify({ reportId: 'report-1' }), {
+          status: 201,
+          headers: { location: '/orgs/org-1/reports/report-1' },
+        }),
+      );
+      const screen = await render(UploadForm, { organizationSlug: ORGANIZATION_SLUG });
+      await screen.getByLabelText('Report name').fill('Q1 procurement');
+      await screen.getByLabelText('Choose a CSV or Excel file').upload(csvFile());
+      await screen.getByRole('radio', { name: 'Pounds (lb)' }).click();
+
+      await chooseCountBasis(screen, 'Skip counts');
+      await screen.getByRole('button', { name: 'Upload report' }).click();
+
+      await expect.poll(() => fetchMock.mock.calls.length).toBe(1);
+      const body = lastFetchCall(fetchMock)[1].body as FormData;
+      expect(body.get('counts-basis')).toBe('none');
+      expect(body.has('monthly-counts')).toBe(false);
     });
   });
 
