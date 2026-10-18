@@ -40,7 +40,7 @@ const steps = [
   <main class="flex flex-1 flex-col">
     <section class="page-width flex flex-col items-start gap-6 py-16 sm:py-24">
       <p class="text-sm font-medium text-muted-foreground">From Greener by Default</p>
-      <h1 class="max-w-2xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
+      <h1 class="max-w-2xl text-4xl font-medium text-balance sm:text-5xl">
         See the climate impact of your food purchasing
       </h1>
       <p class="max-w-xl text-lg text-muted-foreground">
@@ -52,7 +52,7 @@ const steps = [
 
     <section class="flex-1 border-t bg-muted/40">
       <div class="page-width flex flex-col gap-8 py-16">
-        <h2 class="text-2xl font-semibold tracking-tight">How it works</h2>
+        <h2 class="text-2xl font-medium">How it works</h2>
         <ol class="grid gap-8 sm:grid-cols-3 sm:gap-6">
           {#each steps as step, index (step.title)}
             <li class="flex flex-col gap-2">

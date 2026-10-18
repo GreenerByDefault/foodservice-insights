@@ -57,7 +57,7 @@ const title = $derived(
        until a user is told to quote it, `handleError` finding its own log line by timestamp and
        user is enough. -->
   <div class="flex flex-col items-start gap-3">
-    <h1 class="text-3xl font-semibold tracking-tight">{presentation.title}</h1>
+    <h1 class="text-3xl font-medium">{presentation.title}</h1>
     <p class="max-w-prose text-muted-foreground">{presentation.body}</p>
 
     {#if presentation.showStatus}
