@@ -60,6 +60,6 @@ describe('DataQualityNotice', () => {
     const screen = await render(DataQualityNotice, { findings: [NO_SAMPLES] });
 
     await expect.element(screen.getByText(NO_SAMPLES.message)).toBeVisible();
-    expect(screen.container.querySelector('details')).toBeNull();
+    await expect.element(screen.getByText('Examples', { exact: false })).not.toBeInTheDocument();
   });
 });

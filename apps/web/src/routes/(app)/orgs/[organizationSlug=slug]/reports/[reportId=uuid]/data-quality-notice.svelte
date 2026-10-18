@@ -39,8 +39,11 @@ let heading = $derived(
           <p class="text-pretty text-foreground">{finding.message}</p>
           {#if finding.sampleValues.length > 0}
             <details class="group">
+              <!-- The padding grows the tap target to 36px tall, past WCAG's 24px minimum, and the
+                   negative margin gives it back so the layout does not move. Any taller and it
+                   would cover the first example once they are open. -->
               <summary
-                class="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm font-medium text-amber-800 hover:text-amber-950 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden"
+                class="-mx-1 -my-2 inline-flex cursor-pointer list-none items-center gap-1 rounded-sm px-1 py-2 font-medium text-amber-800 hover:text-amber-950 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden"
               >
                 <ChevronRightIcon
                   class="size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none"

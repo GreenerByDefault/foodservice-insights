@@ -413,7 +413,7 @@ describe('_loadReport', () => {
       });
     });
 
-    test('succeeded, with its findings in the order the PDF lists them', async () => {
+    test('succeeded, with only its own findings, in the order the PDF lists them', async () => {
       await withRollback(database(), async (transaction) => {
         const { organization, report } = await anOrgAndReport(transaction);
         const attempt = await insertAnalysisAttempt(transaction, {
@@ -432,6 +432,10 @@ describe('_loadReport', () => {
           position: 0,
           message: 'First',
           sampleValues: ['a', 'b'],
+        });
+        const otherAttempt = await insertAnalysisAttempt(transaction, { status: 'succeeded' });
+        await insertAnalysisAttemptFinding(transaction, otherAttempt.id, {
+          message: "Another report's",
         });
 
         const data = await loadReport(transaction, organization, report.id);
