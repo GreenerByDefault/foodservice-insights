@@ -26,7 +26,6 @@ import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   insertAnalysisAttempt,
   insertAppUser,
-  insertInputFile,
   insertReport,
 } from '../src/testing/fixtures/index.ts';
 import { withRollback } from '../src/testing/transactions.ts';
@@ -445,7 +444,6 @@ describe('analysis_attempt', () => {
         async (transaction, trash) => {
           const { organization } = await insertFixtureOrganization(transaction, trash);
           const report = await insertReport(transaction, { organizationId: organization.id });
-          await insertInputFile(transaction, { reportId: report.id });
           await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
           return report;
         },
@@ -485,7 +483,6 @@ describe('analysis_attempt', () => {
         async (transaction, trash) => {
           const { organization } = await insertFixtureOrganization(transaction, trash);
           const report = await insertReport(transaction, { organizationId: organization.id });
-          await insertInputFile(transaction, { reportId: report.id });
           await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
           return report;
         },
@@ -524,7 +521,6 @@ describe('analysis_attempt', () => {
         async (transaction, trash) => {
           const { organization } = await insertFixtureOrganization(transaction, trash);
           const report = await insertReport(transaction, { organizationId: organization.id });
-          await insertInputFile(transaction, { reportId: report.id });
           await insertAnalysisAttempt(transaction, { reportId: report.id, status: 'failed' });
           return report;
         },
@@ -793,7 +789,6 @@ describe('analysis_attempt', () => {
         async (transaction, trash) => {
           const { organization } = await insertFixtureOrganization(transaction, trash);
           const report = await insertReport(transaction, { organizationId: organization.id });
-          await insertInputFile(transaction, { reportId: report.id });
           return await insertAnalysisAttempt(transaction, {
             reportId: report.id,
             status: 'processing',

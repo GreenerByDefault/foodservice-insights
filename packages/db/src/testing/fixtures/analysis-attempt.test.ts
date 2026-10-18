@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../../env.ts';
-import { withRollback } from '../transactions.ts';
-import { insertAnalysisAttempt } from './analysis-attempt.ts';
+import type AnalysisAttemptStatus from '../../generated/public/AnalysisAttemptStatus.ts';
+import { checkDeferredConstraints, withRollback } from '../transactions.ts';
+import { insertAnalysisAttempt, insertReportWithAttempt } from './analysis-attempt.ts';
+
+const STATUSES: AnalysisAttemptStatus[] = [
+  'pending',
+  'processing',
+  'succeeded',
+  'failed',
+  'canceled',
+];
 
 describe('insertAnalysisAttempt', () => {
   test.for(['succeeded', 'failed'] as const)(
@@ -40,4 +49,14 @@ describe('insertAnalysisAttempt', () => {
       });
     },
   );
+});
+
+describe('insertReportWithAttempt', () => {
+  test.for(STATUSES)('commits as-is with a %s attempt', async (status) => {
+    await withRollback(DATABASE, async (transaction) => {
+      await insertReportWithAttempt(transaction, { status });
+
+      await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
+    });
+  });
 });

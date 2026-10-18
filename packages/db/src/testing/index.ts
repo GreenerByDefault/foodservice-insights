@@ -14,6 +14,7 @@ export {
   withConcurrentTransactions,
 } from './concurrency.ts';
 export { aDatabaseError, anUnreachableDatabaseError, divideByZero } from './errors.ts';
+export type { ReportWithAttemptOverrides } from './fixtures/index.ts';
 export {
   aChecksum,
   DB_NOW,

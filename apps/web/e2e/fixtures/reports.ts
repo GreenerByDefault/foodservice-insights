@@ -2,9 +2,8 @@
  *
  * Every state commits inside one `withTransaction`: `report_has_an_input_file` and
  * `analysis_attempt_succeeded_has_result_files` are `DEFERRABLE INITIALLY DEFERRED`, so a report
- * inserted on its own — or a `succeeded` attempt committed ahead of its result files — fails at
- * `COMMIT`, not at `INSERT`. `withRollback` never reaches that failure because it never commits;
- * these fixtures do, so they don't get that pass.
+ * committed ahead of its input file — or a `succeeded` attempt ahead of its result files — fails
+ * at `COMMIT`.
  *
  * `report.created_at` is always an offset from one `ANCHOR`, fixed well outside
  * `HOURLY_REPORT_LIMIT`/`WEEKLY_REPORT_LIMIT`'s rolling windows, so seeding these reports never
@@ -18,7 +17,6 @@
 
 import { HOUR_MS, SECOND_MS } from '@gbd/core';
 import type {
-  AnalysisAttemptStatus,
   AnalysisFailureReason,
   CountsBasis,
   Database,
@@ -34,11 +32,10 @@ import {
   insertAnalysisAttempt,
   insertAnalysisAttemptFinding,
   insertAppUser,
-  insertInputFile,
   insertReport,
   insertResultFile,
 } from '@gbd/db/testing';
-import { type Kysely, type RawBuilder, sql, type Transaction } from 'kysely';
+import { type Kysely, sql, type Transaction } from 'kysely';
 import { ANALYSIS_WARNING_AFTER_MS, QUEUE_WARNING_AFTER_MS } from '../../src/lib/reports/limits.ts';
 
 const ANCHOR = new Date('2026-01-15T09:00:00Z');
@@ -58,15 +55,14 @@ export type ReportState =
   | 'failed-at-retry-cap'
   | 'canceled';
 
-/** Every fixture report is created the same way: one report, one input file, backdated to
- * `ANCHOR` (see the file header).
+/** Every fixture report is backdated to `ANCHOR` (see the file header).
  *
- * `siteName` and `createdByUserId` default to null, the shape most states don't care about: no
+ * `siteName` and `createdByUserId` stay null unless passed, the shape most states don't care about: no
  * site, and the heading's "a deleted user" branch. `buildSucceeded` and `buildFailed` pass one so
  * the heading's other branches get exercised too, without a screenshot dedicated to each. They
  * likewise split the upload details' units and counts bases between them.
  */
-async function insertReportWithInputFile(
+async function insertAnchoredReport(
   tx: Transaction<Database>,
   organizationId: OrganizationId,
   name: string,
@@ -78,15 +74,7 @@ async function insertReportWithInputFile(
     monthlyCounts?: Record<string, number>;
   } = {},
 ): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    ...overrides,
-    organizationId,
-    name,
-    createdAt: ANCHOR,
-    siteName: overrides.siteName ?? null,
-    createdByUserId: overrides.createdByUserId ?? null,
-  });
-  await insertInputFile(tx, { reportId: report.id });
+  const report = await insertReport(tx, { ...overrides, organizationId, name, createdAt: ANCHOR });
   return report.id;
 }
 
@@ -97,7 +85,7 @@ type ReportBuilder = (
 
 function buildPending(name: string, queuedForMs: number): ReportBuilder {
   return async (tx, organizationId) => {
-    const reportId = await insertReportWithInputFile(tx, organizationId, name);
+    const reportId = await insertAnchoredReport(tx, organizationId, name);
     await insertAnalysisAttempt(tx, {
       reportId,
       status: 'pending',
@@ -109,7 +97,7 @@ function buildPending(name: string, queuedForMs: number): ReportBuilder {
 
 function buildProcessing(name: string, queuedForMs: number, analyzingForMs: number): ReportBuilder {
   return async (tx, organizationId) => {
-    const reportId = await insertReportWithInputFile(tx, organizationId, name);
+    const reportId = await insertAnchoredReport(tx, organizationId, name);
     await insertAnalysisAttempt(tx, {
       reportId,
       status: 'processing',
@@ -126,7 +114,7 @@ async function buildSucceeded(
 ): Promise<ReportId> {
   // The screen most likely to be shown off, so it's the one that carries the full heading.
   const creator = await insertAppUser(tx, { displayName: 'Dana Cook' });
-  const reportId = await insertReportWithInputFile(tx, organizationId, 'Q1 Procurement', {
+  const reportId = await insertAnchoredReport(tx, organizationId, 'Q1 Procurement', {
     siteName: 'Lakeside Grill',
     createdByUserId: creator.id,
     unitSystem: 'lb',
@@ -141,8 +129,6 @@ async function buildSucceeded(
     claimedAt: dbMsAgo(finishedMsAgo + 180 * SECOND_MS),
     finishedAt: dbMsAgo(finishedMsAgo),
   });
-  await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
-  await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
   // Worded as the real checks word them, so the notice is shown with copy of a realistic length.
   await insertAnalysisAttemptFinding(tx, attempt.id, {
     position: 0,
@@ -205,7 +191,7 @@ async function buildFailed(
   // fixed email, not the default random one — this fixture renders into a committed screenshot —
   // and so found rather than inserted when a repeat of the test already made them.
   const creator = await findOrInsertAppUser(tx, { email: 'jordan@example.test' });
-  const reportId = await insertReportWithInputFile(tx, organizationId, 'January Dairy', {
+  const reportId = await insertAnchoredReport(tx, organizationId, 'January Dairy', {
     createdByUserId: creator.id,
     unitSystem: 'kg',
     countsBasis: 'meals',
@@ -226,7 +212,7 @@ async function buildFailedRetried(
   tx: Transaction<Database>,
   organizationId: OrganizationId,
 ): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, organizationId, 'March Seafood');
+  const reportId = await insertAnchoredReport(tx, organizationId, 'March Seafood');
   await insertFailedAttempts(tx, reportId, 2, 'child_crashed');
   return reportId;
 }
@@ -236,7 +222,7 @@ async function buildFailedAtRetryCap(
   tx: Transaction<Database>,
   organizationId: OrganizationId,
 ): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, organizationId, 'April Beverages');
+  const reportId = await insertAnchoredReport(tx, organizationId, 'April Beverages');
   await insertFailedAttempts(tx, reportId, MAX_ANALYSIS_ATTEMPTS, 'child_crashed');
   return reportId;
 }
@@ -245,7 +231,7 @@ async function buildCanceled(
   tx: Transaction<Database>,
   organizationId: OrganizationId,
 ): Promise<ReportId> {
-  const reportId = await insertReportWithInputFile(tx, organizationId, 'May Seafood');
+  const reportId = await insertAnchoredReport(tx, organizationId, 'May Seafood');
   const stoppedMsAgo = 2 * HOUR_MS;
   await insertAnalysisAttempt(tx, {
     reportId,
@@ -306,46 +292,4 @@ export async function succeedLatestAttempt(
       .where('id', '=', attempt.id)
       .execute();
   });
-}
-
-export type ReportWithAttemptSpec = {
-  organizationId: OrganizationId;
-  name: string;
-  siteName?: string | null;
-  createdByUserId?: UserId | null;
-  createdAt: Date | RawBuilder<Date>;
-  status: AnalysisAttemptStatus;
-  claimedAt?: Date | RawBuilder<Date>;
-  finishedAt?: Date | RawBuilder<Date>;
-  cancelRequestedAt?: Date | RawBuilder<Date>;
-};
-
-/** One committed report: the input file (and, when `status` is `succeeded`, both result files)
- * land in the same transaction as the report — see the file header for why. Returns its id.
- */
-export async function insertReportWithAttempt(
-  tx: Transaction<Database>,
-  spec: ReportWithAttemptSpec,
-): Promise<ReportId> {
-  const report = await insertReport(tx, {
-    organizationId: spec.organizationId,
-    name: spec.name,
-    siteName: spec.siteName ?? null,
-    createdByUserId: spec.createdByUserId ?? null,
-    createdAt: spec.createdAt,
-  });
-  await insertInputFile(tx, { reportId: report.id });
-  const attempt = await insertAnalysisAttempt(tx, {
-    reportId: report.id,
-    status: spec.status,
-    createdAt: spec.createdAt,
-    claimedAt: spec.claimedAt,
-    finishedAt: spec.finishedAt,
-    cancelRequestedAt: spec.cancelRequestedAt,
-  });
-  if (spec.status === 'succeeded') {
-    await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'pdf' });
-    await insertResultFile(tx, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-  }
-  return report.id;
 }

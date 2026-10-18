@@ -11,7 +11,7 @@ const CSV = new TextEncoder().encode('product name,date ordered,weight\n');
 describe('_downloadInputFile', () => {
   test('redirects to a URL that actually serves the bytes', async () => {
     await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
-      const report = await insertReport(transaction, { organizationId });
+      const report = await insertReport(transaction, { organizationId, inputFile: null });
       const inputFileId = newInputFileId();
       const stored = await putInputFile(
         store,
@@ -49,7 +49,7 @@ describe('_downloadInputFile', () => {
 
   test('redirects to the workbook, not the CSV, when the input file has one', async () => {
     await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
-      const report = await insertReport(transaction, { organizationId });
+      const report = await insertReport(transaction, { organizationId, inputFile: null });
       const inputFileId = newInputFileId();
       const workbook = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
       const stored = await putInputFile(
@@ -96,7 +96,7 @@ describe('_downloadInputFile', () => {
 
     test('a file whose report was soft-deleted', async () => {
       await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
-        const report = await insertReport(transaction, { organizationId });
+        const report = await insertReport(transaction, { organizationId, inputFile: null });
         const inputFile = await insertInputFile(transaction, { reportId: report.id });
         await transaction
           .updateTable('report')
@@ -112,7 +112,10 @@ describe('_downloadInputFile', () => {
 
     test('a row pointing at an object that is not there', async () => {
       await withOrganizationFixtures(async ({ transaction, store, organizationId }) => {
-        const report: { id: ReportId } = await insertReport(transaction, { organizationId });
+        const report: { id: ReportId } = await insertReport(transaction, {
+          organizationId,
+          inputFile: null,
+        });
         // A row with a plausible key and nothing behind it, which is what an interrupted upload
         // would leave if the object write had failed after the row was written.
         const inputFile = await insertInputFile(transaction, { reportId: report.id });

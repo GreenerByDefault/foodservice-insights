@@ -11,7 +11,6 @@ import {
   insertAnalysisAttempt,
   insertAnalysisAttemptFinding,
   insertAppUser,
-  insertInputFile,
   insertOrganization,
   insertReport,
   insertResultFile,
@@ -39,23 +38,13 @@ function loadReport(
   });
 }
 
-async function aReportWithInputFile(
-  transaction: DatabaseExecutor,
-  organizationId: OrganizationId,
-  overrides: { siteName?: string; createdByUserId?: UserId | null } = {},
-) {
-  const report = await insertReport(transaction, { organizationId, ...overrides });
-  await insertInputFile(transaction, { reportId: report.id });
-  return report;
-}
-
 /** The organization+report pair nearly every test needs before it can shape its own attempt. */
 async function anOrgAndReport(
   transaction: DatabaseExecutor,
   overrides: { siteName?: string; createdByUserId?: UserId | null } = {},
 ) {
   const { organization } = await insertOrganization(transaction);
-  const report = await aReportWithInputFile(transaction, organization.id, overrides);
+  const report = await insertReport(transaction, { organizationId: organization.id, ...overrides });
   return { organization, report };
 }
 
@@ -146,10 +135,9 @@ describe('_loadReport', () => {
     test("inputFile.byteSize is the workbook's, not the normalized CSV's, when there was one", async () => {
       await withRollback(database(), async (transaction) => {
         const { organization } = await insertOrganization(transaction);
-        const report = await insertReport(transaction, { organizationId: organization.id });
-        await insertInputFile(transaction, {
-          reportId: report.id,
-          workbook: { byteSize: 4096 },
+        const report = await insertReport(transaction, {
+          organizationId: organization.id,
+          inputFile: { workbook: { byteSize: 4096 } },
         });
         await insertAnalysisAttempt(transaction, { reportId: report.id });
 
@@ -181,7 +169,6 @@ describe('_loadReport', () => {
           countsBasis: 'meals',
           monthlyCounts: { '2026-02': 135, '2025-12': 90, '2026-01': 120 },
         });
-        await insertInputFile(transaction, { reportId: report.id });
         await insertAnalysisAttempt(transaction, { reportId: report.id });
 
         const data = await loadReport(transaction, organization, report.id);
@@ -208,7 +195,6 @@ describe('_loadReport', () => {
           countsBasis: null,
           monthlyCounts: null,
         });
-        await insertInputFile(transaction, { reportId: report.id });
         await insertAnalysisAttempt(transaction, { reportId: report.id });
 
         const data = await loadReport(transaction, organization, report.id);
@@ -387,6 +373,7 @@ describe('_loadReport', () => {
           createdAt,
           claimedAt,
           finishedAt,
+          resultFiles: null,
         });
         const pdf = await insertResultFile(transaction, {
           analysisAttemptId: attempt.id,
@@ -420,8 +407,6 @@ describe('_loadReport', () => {
           reportId: report.id,
           status: 'succeeded',
         });
-        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
-        await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
         // Inserted out of order, so the result's order can only have come from `position`.
         await insertAnalysisAttemptFinding(transaction, attempt.id, {
           position: 1,
@@ -503,6 +488,7 @@ describe('_loadReport', () => {
           reportId: report.id,
           status: 'succeeded',
           cancelRequestedAt: DB_NOW,
+          resultFiles: null,
         });
         const pdf = await insertResultFile(transaction, {
           analysisAttemptId: attempt.id,

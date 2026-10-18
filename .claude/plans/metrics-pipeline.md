@@ -297,7 +297,8 @@ exist and the tombstones keep the ones a delete removes.
 - `packages/db/src/testing/history.ts`: the generator from Decisions, split into a pure
   `planSyntheticHistory(seed)`, which returns the rows to write with offsets from now rather
   than dates, and `insertSyntheticHistory(database)`, which writes a plan through the fixtures
-  with `dbMsAgo`. Exported from `@gbd/db/testing`.
+  with `dbMsAgo`. Exported from `@gbd/db/testing`. The fixtures already add the children the
+  schema requires at `COMMIT`, so the generator adds none of its own.
 - `packages/db/scripts/seed-history.ts`, behind `pnpm seed:history` and its Turbo task: the
   replace from Decisions, tombstones included, in one transaction under
   `pg_advisory_xact_lock`. It refuses a connection string whose host is not `localhost`,

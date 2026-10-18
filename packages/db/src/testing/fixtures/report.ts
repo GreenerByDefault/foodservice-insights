@@ -9,6 +9,9 @@ import type { DatabaseExecutor } from '../../schema.ts';
 import { insertOrganization } from './organization.ts';
 import { aChecksum } from './values.ts';
 
+/** Also inserts the report's input file, which `report_has_an_input_file` requires at `COMMIT`.
+ * Pass `inputFile: null` to skip it — to test that constraint, or to insert the file yourself
+ * with `insertInputFile` when you need the row back. */
 export async function insertReport(
   database: DatabaseExecutor,
   overrides: Partial<{
@@ -20,12 +23,13 @@ export async function insertReport(
     monthlyCounts: unknown;
     unitSystem: UnitSystem;
     createdAt: Date | RawBuilder<Date>;
+    inputFile: InputFileOverrides | null;
   }> = {},
 ): Promise<Report> {
   const organizationId =
     overrides.organizationId ?? (await insertOrganization(database)).organization.id;
 
-  return await database
+  const report = await database
     .insertInto('report')
     .values({
       organizationId,
@@ -42,18 +46,23 @@ export async function insertReport(
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+  if (overrides.inputFile !== null) {
+    await insertInputFile(database, { ...overrides.inputFile, reportId: report.id });
+  }
+  return report;
 }
+
+type InputFileOverrides = {
+  storageKey?: string;
+  object?: { byteSize: number; checksumSha256: Buffer };
+  workbook?: { storageKey?: string; byteSize?: number; checksumSha256?: Buffer };
+};
 
 export async function insertInputFile(
   database: DatabaseExecutor,
-  overrides: {
-    reportId?: Report['id'];
-    storageKey?: string;
-    object?: { byteSize: number; checksumSha256: Buffer };
-    workbook?: { storageKey?: string; byteSize?: number; checksumSha256?: Buffer };
-  } = {},
+  overrides: InputFileOverrides & { reportId?: Report['id'] } = {},
 ): Promise<InputFile> {
-  const reportId = overrides.reportId ?? (await insertReport(database)).id;
+  const reportId = overrides.reportId ?? (await insertReport(database, { inputFile: null })).id;
 
   return await database
     .insertInto('inputFile')

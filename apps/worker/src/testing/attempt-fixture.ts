@@ -12,7 +12,6 @@ import type { AnalysisAttemptId, OrganizationId, ReportId, UserId } from '@gbd/d
 import {
   insertAnalysisAttempt,
   insertFixtureOrganization,
-  insertInputFile,
   insertReport,
   withCommittedFixture,
 } from '@gbd/db/testing';
@@ -70,10 +69,10 @@ export async function withReportFixture<T>(
             .select('email')
             .where('id', '=', admin.id)
             .executeTakeFirstOrThrow();
-          const report = await insertReport(transaction, { organizationId: organization.id });
-          const inputFile = await insertInputFile(transaction, {
-            reportId: report.id,
-            object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
+          const inputFile = anInputFile();
+          const report = await insertReport(transaction, {
+            organizationId: organization.id,
+            inputFile,
           });
           return {
             organizationId: organization.id,
@@ -128,16 +127,22 @@ async function anotherReport(
   organizationId: OrganizationId,
   requesterId: UserId,
 ): Promise<SeededReport> {
-  // One transaction: `report_has_an_input_file` is deferred to commit, and two separate
-  // autocommit statements would each be their own commit.
-  const inputFile = await WORKER_DATABASE.transaction().execute(async (transaction) => {
-    const report = await insertReport(transaction, { organizationId });
-    return await insertInputFile(transaction, {
-      reportId: report.id,
-      object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
-    });
-  });
-  return await seededReport(inputFile.reportId, inputFile.storageKey, requesterId);
+  const inputFile = anInputFile();
+  // One transaction: `insertReport` writes the report and its input file in two statements, and
+  // `report_has_an_input_file` fails if the first commits on its own.
+  const report = await WORKER_DATABASE.transaction().execute(
+    async (transaction) => await insertReport(transaction, { organizationId, inputFile }),
+  );
+  return await seededReport(report.id, inputFile.storageKey, requesterId);
+}
+
+/** The storage key is chosen here rather than read back from the row, since `insertReport`
+ * returns only the report. */
+function anInputFile() {
+  return {
+    storageKey: `org/test/${crypto.randomUUID()}.csv`,
+    object: { byteSize: AN_INPUT_CSV.byteLength, checksumSha256: AN_INPUT_CSV_SHA256 },
+  };
 }
 
 /** A `ReportFixture` with one attempt already seeded and claimed by `workerId`. */

@@ -20,7 +20,6 @@ import {
   withConcurrentTransactions,
 } from './testing/concurrency.ts';
 import {
-  insertInputFile,
   insertOrganization,
   insertOrganizationInvite,
   insertReport,
@@ -271,8 +270,7 @@ describe('lockReportRateLimit', () => {
       });
       if (organizationCount >= HOURLY_LIMIT) return { inserted: false };
 
-      const report = await insertReport(transaction, { organizationId, createdByUserId: userId });
-      await insertInputFile(transaction, { reportId: report.id });
+      await insertReport(transaction, { organizationId, createdByUserId: userId });
       return { inserted: true };
     }
 
@@ -285,11 +283,10 @@ describe('lockReportRateLimit', () => {
           const { organization, admin } = await insertOrganization(transaction);
           trash.organization(organization.id);
           for (let i = 0; i < HOURLY_LIMIT - 1; i++) {
-            const report = await insertReport(transaction, {
+            await insertReport(transaction, {
               organizationId: organization.id,
               createdByUserId: admin.id,
             });
-            await insertInputFile(transaction, { reportId: report.id });
           }
           return { organization, admin };
         },

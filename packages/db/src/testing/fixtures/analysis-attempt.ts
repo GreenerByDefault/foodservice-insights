@@ -19,6 +19,8 @@ import { aChecksum, DB_NOW } from './values.ts';
 /** An attempt in `status`, with whatever other columns make it a state the app can actually
  * produce:
  * - `finished_at` for any terminal status.
+ * - A pdf and an xlsx for `succeeded`, which `analysis_attempt_succeeded_has_result_files`
+ *   requires at `COMMIT`. Pass `resultFiles: null` to insert your own.
  * - `worker_id`/`claimed_at`/`lease_renewed_at` for `processing`, `succeeded`, and `failed` —
  *   reaching one of those means the worker claimed the attempt first. The CHECK constraints
  *   don't require this; the state machine does.
@@ -55,6 +57,7 @@ export async function insertAnalysisAttempt(
     failureReason?: AnalysisFailureReason;
     /** Defaults to 1. Set higher to build a row an older worker must leave in the queue. */
     requiredContractVersion?: number;
+    resultFiles?: null;
   } = {},
 ): Promise<AnalysisAttempt> {
   const reportId = overrides.reportId ?? (await insertReport(database)).id;
@@ -64,7 +67,7 @@ export async function insertAnalysisAttempt(
   const isTerminal = status === 'succeeded' || status === 'failed' || status === 'canceled';
   const isCanceled = status === 'canceled';
 
-  return await database
+  const attempt = await database
     .insertInto('analysisAttempt')
     .values({
       reportId,
@@ -98,7 +101,26 @@ export async function insertAnalysisAttempt(
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+  if (status === 'succeeded' && overrides.resultFiles !== null) {
+    await insertResultFile(database, { analysisAttemptId: attempt.id, kind: 'pdf' });
+    await insertResultFile(database, { analysisAttemptId: attempt.id, kind: 'xlsx' });
+  }
+  return attempt;
 }
+
+export type ReportWithAttemptOverrides = {
+  organizationId?: Organization['id'];
+  createdByUserId?: AppUser['id'] | null;
+  requestedByUserId?: AppUser['id'] | null;
+  name?: string;
+  siteName?: string | null;
+  status?: AnalysisAttemptStatus;
+  /** Both the report's and the attempt's. */
+  createdAt?: Date | RawBuilder<Date>;
+  claimedAt?: Date | RawBuilder<Date>;
+  finishedAt?: Date | RawBuilder<Date>;
+  cancelRequestedAt?: Date | RawBuilder<Date>;
+};
 
 /** A report and the one attempt on it, for a test about acting on a report rather than about
  * either row's own constraints. Defaults to `pending` — the state a report just submitted is in,
@@ -106,21 +128,23 @@ export async function insertAnalysisAttempt(
  */
 export async function insertReportWithAttempt(
   database: DatabaseExecutor,
-  overrides: {
-    organizationId?: Organization['id'];
-    createdByUserId?: AppUser['id'] | null;
-    requestedByUserId?: AppUser['id'] | null;
-    status?: AnalysisAttemptStatus;
-  } = {},
+  overrides: ReportWithAttemptOverrides = {},
 ): Promise<{ report: Report; attempt: AnalysisAttempt }> {
   const report = await insertReport(database, {
     organizationId: overrides.organizationId,
     createdByUserId: overrides.createdByUserId ?? null,
+    name: overrides.name,
+    siteName: overrides.siteName,
+    createdAt: overrides.createdAt,
   });
   const attempt = await insertAnalysisAttempt(database, {
     reportId: report.id,
     status: overrides.status ?? 'pending',
     requestedByUserId: overrides.requestedByUserId,
+    createdAt: overrides.createdAt,
+    claimedAt: overrides.claimedAt,
+    finishedAt: overrides.finishedAt,
+    cancelRequestedAt: overrides.cancelRequestedAt,
   });
   return { report, attempt };
 }

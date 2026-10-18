@@ -3,22 +3,19 @@
 import type { Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { DATABASE } from '../src/env.ts';
-import type { Report } from '../src/generated/public/Report.ts';
 import { POSTGRES_CODE_UNIQUE_VIOLATION } from '../src/postgres-codes.ts';
 import type { Database } from '../src/schema.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   aChecksum,
   insertAnalysisAttempt,
-  insertInputFile,
-  insertReport,
   insertResultFile,
 } from '../src/testing/fixtures/index.ts';
 import { checkDeferredConstraints, withRollback } from '../src/testing/transactions.ts';
 
 describe('result_file', () => {
-  async function aSucceededAttempt(transaction: Transaction<Database>, reportId?: Report['id']) {
-    return await insertAnalysisAttempt(transaction, { reportId, status: 'succeeded' });
+  async function aSucceededAttempt(transaction: Transaction<Database>) {
+    return await insertAnalysisAttempt(transaction, { status: 'succeeded', resultFiles: null });
   }
 
   test('rejects an empty file', async () => {
@@ -72,18 +69,9 @@ describe('result_file', () => {
   });
 
   describe('a succeeded attempt has a pdf and an xlsx', () => {
-    // checkDeferredConstraints also re-checks report_has_an_input_file, since insertReport
-    // (which insertAnalysisAttempt falls back on) doesn't attach one — so every test below needs
-    // its own report with an input file, not the bare one insertAnalysisAttempt would create.
-    async function aReportId(transaction: Transaction<Database>): Promise<Report['id']> {
-      const report = await insertReport(transaction);
-      await insertInputFile(transaction, { reportId: report.id });
-      return report.id;
-    }
-
     test('rejects succeeding with neither', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
-        await aSucceededAttempt(transaction, await aReportId(transaction));
+        await aSucceededAttempt(transaction);
         await checkDeferredConstraints(transaction);
       });
 
@@ -92,7 +80,7 @@ describe('result_file', () => {
 
     test('rejects succeeding with a pdf but no xlsx', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
+        const attempt = await aSucceededAttempt(transaction);
         await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
         await checkDeferredConstraints(transaction);
       });
@@ -102,7 +90,7 @@ describe('result_file', () => {
 
     test('rejects succeeding with an xlsx but no pdf', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
+        const attempt = await aSucceededAttempt(transaction);
         await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
         await checkDeferredConstraints(transaction);
       });
@@ -112,7 +100,7 @@ describe('result_file', () => {
 
     test('passes once both are attached', async () => {
       await withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
+        const attempt = await aSucceededAttempt(transaction);
         await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
         await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
 
@@ -122,7 +110,7 @@ describe('result_file', () => {
 
     test('does not require a pdf or xlsx while pending', async () => {
       await withRollback(DATABASE, async (transaction) => {
-        await insertAnalysisAttempt(transaction, { reportId: await aReportId(transaction) });
+        await insertAnalysisAttempt(transaction);
 
         await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
       });
@@ -130,7 +118,7 @@ describe('result_file', () => {
 
     test('is not retroactively required once the attempt is deleted', async () => {
       await withRollback(DATABASE, async (transaction) => {
-        const attempt = await aSucceededAttempt(transaction, await aReportId(transaction));
+        const attempt = await aSucceededAttempt(transaction);
         await transaction.deleteFrom('analysisAttempt').where('id', '=', attempt.id).execute();
 
         await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
@@ -142,10 +130,7 @@ describe('result_file', () => {
       // AFTER UPDATE too, since the real worker path (markAttemptSucceeded) reaches 'succeeded'
       // by updating a 'processing' row.
       const insert = withRollback(DATABASE, async (transaction) => {
-        const attempt = await insertAnalysisAttempt(transaction, {
-          reportId: await aReportId(transaction),
-          status: 'processing',
-        });
+        const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });
         await transaction
           .updateTable('analysisAttempt')
           .set({ status: 'succeeded', finishedAt: new Date() })

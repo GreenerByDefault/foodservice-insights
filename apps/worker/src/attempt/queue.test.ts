@@ -237,7 +237,6 @@ describe('claiming', () => {
           const reportIds: ReportId[] = [];
           for (let index = 0; index < count; index++) {
             const report = await insertReport(transaction, { organizationId: organization.id });
-            await insertInputFile(transaction, { reportId: report.id });
             await insertAnalysisAttempt(transaction, { reportId: report.id, ...overrides });
             reportIds.push(report.id);
           }
@@ -363,6 +362,7 @@ describe('loadAttemptInputs', () => {
         name: 'Q3 procurement',
         siteName: 'North kitchen',
         monthlyCounts: { '2026-03': 900 },
+        inputFile: null,
       });
       const inputFile = await insertInputFile(transaction, { reportId: report.id });
       const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
@@ -405,7 +405,6 @@ describe('loadAttemptInputs', () => {
         countsBasis: null,
         monthlyCounts: null,
       });
-      await insertInputFile(transaction, { reportId });
       const attempt = await insertAnalysisAttempt(transaction, { reportId });
       return (await loadAttemptInputs(transaction, attempt.id)).report;
     });
@@ -424,8 +423,9 @@ describe('loadAttemptInputs', () => {
 
   test('throws when the report has no input file', async () => {
     const load = withRollback(WORKER_DATABASE, async (transaction) => {
-      const { attemptId } = await pendingAttempt(transaction);
-      await loadAttemptInputs(transaction, attemptId);
+      const report = await insertReport(transaction, { inputFile: null });
+      const attempt = await insertAnalysisAttempt(transaction, { reportId: report.id });
+      await loadAttemptInputs(transaction, attempt.id);
     });
 
     await expect(load).rejects.toThrow(NoResultError);
