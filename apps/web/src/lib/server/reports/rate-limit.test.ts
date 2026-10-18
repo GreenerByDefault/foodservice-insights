@@ -3,7 +3,6 @@
  */
 
 import {
-  insertInputFile,
   insertOrganization,
   insertReport,
   sendBlockingStatement,
@@ -191,11 +190,10 @@ describe('lockAndCheckReportRateLimit', () => {
     await withConcurrentTransactions(database(), async (alpha, beta) => {
       const { organization, admin } = await insertOrganization(alpha.transaction);
       for (let i = 0; i < HOURLY_REPORT_LIMIT - 1; i++) {
-        const report = await insertReport(alpha.transaction, {
+        await insertReport(alpha.transaction, {
           organizationId: organization.id,
           createdByUserId: null,
         });
-        await insertInputFile(alpha.transaction, { reportId: report.id });
       }
 
       const alphaResult = await lockAndCheckReportRateLimit(alpha.transaction, {
@@ -206,11 +204,10 @@ describe('lockAndCheckReportRateLimit', () => {
 
       // Pushes the organization to the limit, but not yet visible to `beta` — it's still
       // uncommitted. `beta`'s check below only reads it correctly because it waits for the lock.
-      const lastReport = await insertReport(alpha.transaction, {
+      await insertReport(alpha.transaction, {
         organizationId: organization.id,
         createdByUserId: null,
       });
-      await insertInputFile(alpha.transaction, { reportId: lastReport.id });
 
       const blocked = await sendBlockingStatement(database(), beta, alpha, (transaction) =>
         lockAndCheckReportRateLimit(transaction, {

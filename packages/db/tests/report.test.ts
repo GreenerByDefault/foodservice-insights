@@ -80,7 +80,7 @@ describe('report', () => {
 
   test('report_has_an_input_file fails with no input file attached', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
-      await insertReport(transaction);
+      await insertReport(transaction, { inputFile: null });
       await checkDeferredConstraints(transaction);
     });
 
@@ -89,7 +89,7 @@ describe('report', () => {
 
   test('report_has_an_input_file passes once the input file is attached', async () => {
     await withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
+      const report = await insertReport(transaction, { inputFile: null });
       await insertInputFile(transaction, { reportId: report.id });
 
       await expect(checkDeferredConstraints(transaction)).resolves.toBeUndefined();
@@ -125,7 +125,6 @@ describe('input_file', () => {
     const insert = withRollback(DATABASE, async (transaction) => {
       const report = await insertReport(transaction);
       await insertInputFile(transaction, { reportId: report.id });
-      await insertInputFile(transaction, { reportId: report.id });
     });
 
     await expectConstraintViolation(
@@ -151,7 +150,7 @@ describe('input_file', () => {
 
   test('rejects a checksum that is not 32 bytes', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
+      const report = await insertReport(transaction, { inputFile: null });
       await transaction
         .insertInto('inputFile')
         .values({
@@ -172,11 +171,7 @@ describe('input_file', () => {
   describe('workbook', () => {
     test('accepts a workbook with all three columns set', async () => {
       await withRollback(DATABASE, async (transaction) => {
-        const report = await insertReport(transaction);
-        const inputFile = await insertInputFile(transaction, {
-          reportId: report.id,
-          workbook: {},
-        });
+        const inputFile = await insertInputFile(transaction, { workbook: {} });
 
         expect(inputFile.workbookStorageKey).not.toBeNull();
         expect(inputFile.workbookByteSize).not.toBeNull();
@@ -186,7 +181,7 @@ describe('input_file', () => {
 
     test('rejects a workbook with only some of its three columns set', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
-        const report = await insertReport(transaction);
+        const report = await insertReport(transaction, { inputFile: null });
         await transaction
           .insertInto('inputFile')
           .values({
@@ -208,11 +203,7 @@ describe('input_file', () => {
 
     test('rejects a byte size that is not positive', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
-        const report = await insertReport(transaction);
-        await insertInputFile(transaction, {
-          reportId: report.id,
-          workbook: { byteSize: 0 },
-        });
+        await insertInputFile(transaction, { workbook: { byteSize: 0 } });
       });
 
       await expectConstraintViolation(insert, 'input_file_workbook_byte_size_positive');
@@ -220,9 +211,7 @@ describe('input_file', () => {
 
     test('rejects a checksum that is not 32 bytes', async () => {
       const insert = withRollback(DATABASE, async (transaction) => {
-        const report = await insertReport(transaction);
         await insertInputFile(transaction, {
-          reportId: report.id,
           workbook: { checksumSha256: Buffer.from('too short') },
         });
       });
@@ -247,7 +236,7 @@ describe('input_file', () => {
 
   test('rejects an empty file', async () => {
     const insert = withRollback(DATABASE, async (transaction) => {
-      const report = await insertReport(transaction);
+      const report = await insertReport(transaction, { inputFile: null });
       await transaction
         .insertInto('inputFile')
         .values({

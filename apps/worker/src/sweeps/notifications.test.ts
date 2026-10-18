@@ -18,7 +18,6 @@ import {
   insertAnalysisAttempt,
   insertAppUserWithEmail,
   insertFixtureOrganization,
-  insertInputFile,
   insertReport,
   insertResultFile,
   raceAgainstCommittedWrite,
@@ -87,11 +86,6 @@ async function insertNotifiableAttempt(
         : overrides.requestedByUserId,
     ...(finishedAt ? { createdAt: new Date(finishedAt.getTime() - 60_000), finishedAt } : {}),
   });
-
-  if (status === 'succeeded') {
-    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
-    await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
-  }
 
   return { attemptId: attempt.id, reportId: report.id, email: requester?.email };
 }
@@ -416,6 +410,7 @@ describe('sendPendingNotifications', () => {
           reportId: report.id,
           status: 'succeeded',
           requestedByUserId: requester.id,
+          resultFiles: null,
         });
         await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
         // No xlsx.
@@ -512,7 +507,6 @@ describe('sendPendingNotifications', () => {
         async (transaction, trash) => {
           const { organization } = await insertFixtureOrganization(transaction, trash);
           const report = await insertReport(transaction, { organizationId: organization.id });
-          await insertInputFile(transaction, { reportId: report.id });
           const requester = await insertAppUserWithEmail(transaction);
           trash.user(requester.id);
           const attempt = await insertAnalysisAttempt(transaction, {
@@ -520,8 +514,6 @@ describe('sendPendingNotifications', () => {
             status: 'succeeded',
             requestedByUserId: requester.id,
           });
-          await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'pdf' });
-          await insertResultFile(transaction, { analysisAttemptId: attempt.id, kind: 'xlsx' });
           return { attemptId: attempt.id, reportId: report.id };
         },
         async (transaction, fixture) => {

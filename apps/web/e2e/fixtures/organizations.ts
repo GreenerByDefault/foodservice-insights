@@ -25,10 +25,11 @@ import {
   insertOrganization,
   insertOrganizationInvite,
   insertOrganizationMember,
+  insertReportWithAttempt,
+  type ReportWithAttemptOverrides,
 } from '@gbd/db/testing';
 import type { Kysely, RawBuilder } from 'kysely';
 import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
-import { insertReportWithAttempt, type ReportWithAttemptSpec } from './reports.ts';
 
 export type OrganizationMemberSpec = {
   displayName?: string;
@@ -45,7 +46,7 @@ export type OrganizationMemberSpec = {
  * screenshot spec cannot have, since the roster it captures renders this person's row. */
 export type OrganizationAdminSpec = Omit<OrganizationMemberSpec, 'role'>;
 
-export type OrganizationReportSpec = Omit<ReportWithAttemptSpec, 'organizationId'>;
+export type OrganizationReportSpec = Omit<ReportWithAttemptOverrides, 'organizationId'>;
 
 export type OrganizationInviteSpec = {
   /** Defaults to a random address, the same rationale as `OrganizationMemberSpec.email`. */
@@ -107,7 +108,8 @@ export async function insertOrganizationFixture(
 
     const reportIds: ReportId[] = [];
     for (const report of spec.reports ?? []) {
-      reportIds.push(await insertReportWithAttempt(tx, { organizationId, ...report }));
+      const { report: inserted } = await insertReportWithAttempt(tx, { ...report, organizationId });
+      reportIds.push(inserted.id);
     }
 
     for (const member of spec.members ?? []) {
