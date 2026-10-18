@@ -153,6 +153,7 @@ def _finding_payload(finding: ListedFinding) -> dict[str, Any]:
         f"{MAX_FINDING_SAMPLE_VALUES}",
     )
     for text in (finding.message, *finding.sample_values):
+        _require("\0" not in text, f"{finding.quality_check}: {text[:40]!r}... holds a NUL")
         _require(
             len(text.encode("utf-8")) <= MAX_FINDING_TEXT_BYTES,
             f"{finding.quality_check}: {text[:40]!r}... is over {MAX_FINDING_TEXT_BYTES} bytes",

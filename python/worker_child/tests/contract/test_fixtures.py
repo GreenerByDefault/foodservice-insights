@@ -246,6 +246,10 @@ def test_result_payload_accepts_a_finding_at_every_bound() -> None:
             replace(WEIGHT_BOUNDS, sample_values=("é" * (MAX_FINDING_TEXT_BYTES // 2 + 1),)),
             id="sample-value-over-max-bytes",
         ),
+        pytest.param(
+            replace(WEIGHT_BOUNDS, sample_values=("Oat Milk \0Barista at 4,500 kg.",)),
+            id="sample-value-has-nul",
+        ),
     ],
 )
 def test_result_payload_refuses_what_the_parent_would(finding: ListedFinding) -> None:

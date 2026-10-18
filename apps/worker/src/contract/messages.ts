@@ -62,8 +62,12 @@ const ProgressSchema = v.strictObject({
   sequence: v.pipe(v.number(), v.integer(), v.minValue(1)),
 });
 
+// Findings are inserted in the success verdict's own transaction, and a verdict parked at `record`
+// retries every tick with no budget, so a row Postgres refuses strands the attempt in `processing`.
+// Hence everything Postgres would refuse is refused here, NUL included, which `text` cannot hold.
 const findingText = v.pipe(
   v.string(),
+  v.check((text) => !text.includes('\0'), 'cannot hold a NUL, which Postgres text refuses'),
   v.check(
     (text) => UTF8.encode(text).length <= MAX_FINDING_TEXT_BYTES,
     `needs at most ${MAX_FINDING_TEXT_BYTES} bytes of UTF-8`,
