@@ -228,7 +228,7 @@ e2e tests for anything that is really about one component's behaviour.
 **Web e2e tests** build the app and run it with Playwright. Debug with:
 
 ```sh
-pnpm --filter @gbd/web test:e2e -- --ui
+pnpm turbo run test:e2e --filter=@gbd/web -- --ui
 ```
 
 CI uploads a Playwright report as a build artifact on failure. Download it and open the
@@ -307,6 +307,14 @@ Which to run when:
 Running the tests applies the migration to the test database, which every checkout on this machine
 shares. Until it lands, any other checkout's tests fail on the migration they lack;
 [reset](#reset-a-database) the test database from that checkout to go on working there.
+
+To leave the other checkouts alone instead, test the migration against a private database in the
+same cluster. As `supabase_admin` (password `postgres`), `CREATE DATABASE wt_<name> TEMPLATE
+template0 OWNER postgres`, restore [`packages/db/auth-schema.sql`](packages/db/auth-schema.sql)
+into it, and run the tests with
+`DB_CONNECTION_STRING=postgresql://postgres:postgres@127.0.0.1:65322/wt_<name>`, which beats
+`.env.test`. Only the `sweepStaleGoTrueUsers` test fails, since it always targets `postgres`. Drop
+the database when the migration lands.
 
 #### Reset a database
 

@@ -27,7 +27,10 @@ suite — a loop-versus-gate distinction, not a judgement call about blast radiu
 
 - vitest: `pnpm --filter @gbd/<pkg> test:unit path/to/thing.test.ts`
 - Playwright (`test:e2e` or `test:screenshots`):
-  `pnpm --filter @gbd/web test:e2e -- path/to/thing.e2e.ts`
+  `pnpm turbo run test:e2e --filter=@gbd/web -- path/to/thing.e2e.ts`. Always through Turbo:
+  Playwright serves the production build in `apps/web/build/`, and only Turbo rebuilds it first,
+  so `pnpm --filter @gbd/web test:e2e` silently tests the previous build. That includes
+  `screenshots:update`, which regenerates images of the old UI.
 
 Scoping to a package (`pnpm --filter @gbd/<pkg> test:unit`, no path) is the fallback when a
 change touches several files in one package and there's no single file to target. For Playwright,
@@ -43,7 +46,8 @@ seam between the app, the worker and the child. For anything else, let CI have i
 **Run the gate in the background** (`run_in_background: true` on the Bash tool) once the
 change is ready, rather than blocking on it — Claude Code notifies on completion, so the wait
 overlaps with re-reading the diff, `/prune-comments`, and drafting the PR body instead of
-costing wall clock on top of it.
+costing wall clock on top of it. Don't start another Turbo task in this checkout until it
+finishes: two concurrent builds of `apps/web` write the same `.svelte-kit/output` and corrupt it.
 
 ## Test organization
 
@@ -63,6 +67,8 @@ costing wall clock on top of it.
 ## General TypeScript
 
 - **Use `async`/`await`**, not raw promise chains.
+- **Module-scope functions are `function` declarations**, even one-liners, not
+  `const name = () => …`. Arrow functions are for callbacks and other nested uses.
 - **Cross-package imports use the package name** (`@gbd/core`), never a relative path out
   of a package and never a tsconfig path alias.
 - **`@gbd/*` packages are consumed as compiled JS, from `dist/`.** So a package you edit has

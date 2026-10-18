@@ -36,6 +36,10 @@ site_url = "http://localhost:5173"
 double_confirm_changes = false
 
 # GoTrue's built-in templates send a link; the sign-in and change-email forms need a code instead.
+#
+# Kong serves these to GoTrue, bind-mounting each file from the checkout that started the stack.
+# A template added later is missing until Kong restarts, and GoTrue silently falls back to its
+# link email: `docker restart supabase_kong_fsi-dev supabase_kong_fsi-test`.
 [auth.email.template.magic_link]
 subject = "Your Foodservice Insights sign-in code"
 content_path = "./supabase/templates/sign-in-code.html"

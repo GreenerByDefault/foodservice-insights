@@ -41,6 +41,8 @@ async function sendCode(page: Page): Promise<void> {
   // rather than 375: the widened input overflows the page there. On a real phone it wouldn't —
   // bits-ui re-checks the room every second and keeps the input narrow when there is none — but
   // that check runs on the paused clock too, so it never re-runs after the resize to phone width.
+  // *Rejected: `pushPasswordManagerStrategy="none"` on the PinInput* — a product change to steady
+  // a test.
   await page.clock.runFor(1);
 }
 

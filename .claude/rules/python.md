@@ -45,6 +45,15 @@ constraints, so its code carries none of the product's guarantees.
   runs one way only.
 - Put code in the lab when it is exploratory, and move it into `gbd_foodservice_insights` when
   the worker needs it — not the other way around.
+- **Before optimizing or fixing ported code, check that the product needs it.** Trace whether
+  `analyze()` reaches it and whether its output reaches a customer. The product only ever sees
+  validated CSVs from `apps/web`, so much ported code is lab-only in practice, and moving it to
+  the lab is often simpler than making it fast.
+- **"No caller in the repo" does not prove code is dead.** Data scientists call product and lab
+  code from notebooks in the gitignored `client_work/`, which no grep can see. Breaking changes
+  are accepted, so delete what is superseded or a one-liner over something that stays, but keep
+  or move to the lab what is real capability (regions, modes, taxonomy getters). Name those
+  judgment calls in the PR description.
 
 ## LLM providers
 
