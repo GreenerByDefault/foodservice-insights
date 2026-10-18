@@ -24,7 +24,7 @@ export const COUNTS_BASES = exhaustiveArray<CountsBasis>()(['people', 'meals']);
  * stores a report without counts as NULL in both `report.counts_basis` and `report.monthly_counts`. */
 export const NO_COUNTS = 'none';
 
-/** Every answer the upload form's "Count by" question offers. */
+/** Every answer the upload form offers under "Diners or meals served". */
 export type CountsBasisChoice = CountsBasis | typeof NO_COUNTS;
 
 export const COUNTS_BASIS_CHOICES = exhaustiveArray<CountsBasisChoice>()([
@@ -35,7 +35,7 @@ export const COUNTS_BASIS_CHOICES = exhaustiveArray<CountsBasisChoice>()([
 export const COUNTS_BASIS_LABELS: Record<CountsBasisChoice, string> = {
   people: 'Diners',
   meals: 'Meals',
-  none: 'No counts',
+  none: 'Skip counts',
 };
 
 export const UNIT_SYSTEMS = exhaustiveArray<UnitSystem>()(['lb', 'kg']);
@@ -102,7 +102,7 @@ export type MetadataField = Exclude<keyof typeof FIELD, 'csvFile' | 'workbook'>;
 export const FIELD_LABELS: Record<MetadataField, string> = {
   name: 'Report name',
   siteName: 'Site name',
-  countsBasis: 'Count by',
+  countsBasis: 'Diners or meals served',
   unitSystem: 'Weight unit',
   monthlyCounts: 'Diners or meals per month',
 };

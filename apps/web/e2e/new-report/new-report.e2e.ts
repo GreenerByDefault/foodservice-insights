@@ -24,7 +24,6 @@ test('uploading a good CSV creates a report and lands on its page, which reads b
 
   await page.getByLabel('Report name').fill('Q1 procurement');
   await chooseCsv(page, 'procurement.csv', GOOD_CSV);
-  await expect(page.getByText('1 of 1 month still needs a count')).toBeVisible();
   await page.getByRole('radio', { name: 'Meals' }).click();
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('1250');
   await page.getByRole('radio', { name: 'Kilograms (kg)' }).click();
@@ -50,7 +49,7 @@ test('uploading with no counts creates a report whose details say none were prov
 
   await page.getByLabel('Report name').fill('Q1 procurement');
   await chooseCsv(page, 'procurement.csv', GOOD_CSV);
-  await page.getByRole('radio', { name: 'No counts' }).click();
+  await page.getByRole('radio', { name: 'Skip counts' }).click();
   await page.getByRole('radio', { name: 'Pounds (lb)' }).click();
 
   await page.getByRole('button', { name: 'Upload report' }).click();
@@ -117,7 +116,7 @@ test('uploading a workbook creates a report whose uploaded file is the workbook 
   await chooseWorkbook(page, 'orders.xlsx', workbook);
   // The months only appear once the browser has converted the workbook and read the CSV, so
   // seeing both of the fixture's is what proves the conversion ran here rather than on the server.
-  await expect(page.getByText('2 of 2 months still need a count')).toBeVisible();
+  await expect(page.getByText('0 of 2 months filled in')).toBeVisible();
   await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
   await page.getByRole('spinbutton', { name: 'February 2026' }).fill('120');
   await page.getByRole('radio', { name: 'Pounds (lb)' }).click();
@@ -151,7 +150,7 @@ test('a workbook big enough to be unzipped in a worker converts', async ({ page,
   await ensureHydrated(page);
   await chooseWorkbook(page, 'orders.xlsx', workbook);
 
-  await expect(page.getByText('1 of 1 month still needs a count')).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'January 2026' })).toBeVisible();
 });
 
 function sheetXmlBytes(workbook: Uint8Array): number {

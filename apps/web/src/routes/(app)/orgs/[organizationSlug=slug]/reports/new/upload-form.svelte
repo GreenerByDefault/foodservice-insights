@@ -51,8 +51,8 @@ let fileWeightUnit: UnitSystem | undefined = $state();
 let counts: CountDraft = $state({});
 let name = $state('');
 let siteName = $state('');
-// Stays Diners by default, so leaving counts out is a deliberate choice. Choosing "No counts" keeps
-// `counts`, so switching back restores what was typed.
+// Stays Diners by default, so leaving counts out is a deliberate choice. Choosing "Skip counts"
+// keeps `counts`, so switching back restores what was typed.
 let countsBasis: CountsBasisChoice = $state('people');
 let unitSystem: UnitSystem | undefined = $state();
 
@@ -86,9 +86,7 @@ const siteNameHintId = `${id}-site-name-hint`;
 const unitSystemHintId = `${id}-unit-system-hint`;
 const unitSystemErrorId = `${id}-unit-system-error`;
 const unitSystemTitleId = `${id}-unit-system-title`;
-const countsMeaningId = `${id}-counts-meaning`;
-const countsScopeId = `${id}-counts-scope`;
-const countsBasisTitleId = `${id}-counts-basis-title`;
+const countsIntroId = `${id}-counts-intro`;
 const noCountsNoteId = `${id}-no-counts-note`;
 
 const UNIT_WORDS: Record<UnitSystem, string> = { lb: 'pounds', kg: 'kilograms' };
@@ -375,34 +373,28 @@ async function backToForm() {
       </Field.Field>
     </Field.Set>
 
-    <Field.Set aria-describedby="{countsMeaningId} {countsScopeId}">
-      <Field.Legend>Diners or meals served</Field.Legend>
-      <Field.Description id={countsMeaningId}>
-        Enter how many diners or meals you served each month. The report uses these to show your
-        emissions per diner or per meal.
-      </Field.Description>
-      <Field.Description id={countsScopeId}>
-        Use counts for the same sites as your file. For example, if your file only covers one dining
-        hall, count only that dining hall's diners or meals, not the whole university's.
+    <Field.Set aria-describedby={countsIntroId}>
+      <Field.Legend>{FIELD_LABELS.countsBasis}</Field.Legend>
+      <Field.Description id={countsIntroId}>
+        A count for each month lets your report show emissions per diner or per meal, so you can
+        compare it with other sites. Use whichever you already keep track of.
       </Field.Description>
 
-      <Field.Field>
-        <Field.Title id={countsBasisTitleId}>{FIELD_LABELS.countsBasis}</Field.Title>
-        <RadioGroup
-          aria-labelledby={countsBasisTitleId}
-          aria-describedby={countsBasis === NO_COUNTS ? noCountsNoteId : undefined}
-          name={FIELD.countsBasis}
-          value={countsBasis}
-          onValueChange={(value) => (countsBasis = value as CountsBasisChoice)}
-        >
-          {#each COUNTS_BASIS_CHOICES as basis (basis)}
-            <Field.Label>
-              <RadioGroupItem value={basis} />
-              {COUNTS_BASIS_LABELS[basis]}
-            </Field.Label>
-          {/each}
-        </RadioGroup>
-      </Field.Field>
+      <!-- No name of its own: the field set's legend already asks the question, and naming the
+           group too would have a screen reader announce it twice. -->
+      <RadioGroup
+        aria-describedby={countsBasis === NO_COUNTS ? noCountsNoteId : undefined}
+        name={FIELD.countsBasis}
+        value={countsBasis}
+        onValueChange={(value) => (countsBasis = value as CountsBasisChoice)}
+      >
+        {#each COUNTS_BASIS_CHOICES as basis (basis)}
+          <Field.Label>
+            <RadioGroupItem value={basis} />
+            {COUNTS_BASIS_LABELS[basis]}
+          </Field.Label>
+        {/each}
+      </RadioGroup>
 
       {#if countsBasis === NO_COUNTS}
         <!-- Not an `Alert`: its `role="alert"` would interrupt a screen reader on every change of
@@ -417,9 +409,10 @@ async function backToForm() {
       {:else if months}
         <MonthlyCounts {months} basis={countsBasis} bind:counts />
       {:else}
-        <Field.Description
-          >Choose a file first — we will list the months it covers.</Field.Description
-        >
+        <!-- Dashed, like the drop zone, to mark a space that fills in once a file is chosen. -->
+        <p class="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Choose a file above, and each month it covers will appear here.
+        </p>
       {/if}
     </Field.Set>
 

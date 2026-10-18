@@ -43,7 +43,7 @@ async function uploadReport(
     buffer: Buffer.from(csv),
   });
   if (withCounts) await page.getByRole('spinbutton', { name: 'January 2026' }).fill('100');
-  else await page.getByRole('radio', { name: 'No counts' }).click();
+  else await page.getByRole('radio', { name: 'Skip counts' }).click();
   await page.getByRole('radio', { name: 'Pounds (lb)' }).click();
   await page.getByRole('button', { name: 'Upload report' }).click();
 

@@ -156,7 +156,7 @@ describe('validateSubmission', () => {
         ok: false,
         rejection: {
           reason: 'invalid_metadata',
-          summary: 'Check these fields: Weight unit, Count by.',
+          summary: 'Check these fields: Weight unit, Diners or meals served.',
         },
       });
     });
