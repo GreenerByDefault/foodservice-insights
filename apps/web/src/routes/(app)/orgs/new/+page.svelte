@@ -1,4 +1,5 @@
 <script lang="ts">
+import { APP_NAME } from '@gbd/core';
 import PageHeading from '#lib/components/page-heading.svelte';
 import type { PageProps } from './$types';
 import CreateOrganizationForm from './create-organization-form.svelte';
@@ -17,11 +18,14 @@ let { data }: PageProps = $props();
      duplicate from someone who is really waiting on a colleague's invite. -->
 <div class="flex max-w-prose flex-col gap-2">
   <p>
-    An organization is your company or team. Everyone you add to it can see and upload its reports.
+    Set up an organization for your school district, hospital, company or other institution. One
+    organization can cover all your sites, and everyone you add to it can see and upload its
+    reports.
   </p>
   <p class="text-sm text-muted-foreground">
-    Joining a colleague's organization instead? Ask one of its admins to invite
-    <span class="font-medium break-words">{data.user.email}</span>.
+    Does your institution already use {APP_NAME}? Ask whoever set it up to invite
+    <span class="font-medium break-words">{data.user.email}</span>
+    instead.
   </p>
 </div>
 

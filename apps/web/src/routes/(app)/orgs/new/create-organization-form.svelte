@@ -24,7 +24,7 @@ async function handleSubmit(name: string): Promise<'done' | OrganizationNameFail
 
 <OrganizationNameForm
   initialName=""
-  description="Usually your company's name. You can change it later."
+  description="Usually your institution's name. You can change it later."
   submitLabel="Create organization"
   submittingLabel="Creating…"
   {unknownNotice}
