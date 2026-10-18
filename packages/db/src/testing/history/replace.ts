@@ -18,9 +18,11 @@ export async function replaceSyntheticHistory(
   return await withTransaction(database, async (transaction) => {
     await sql`SELECT pg_advisory_xact_lock(hashtext('seed:history'))`.execute(transaction);
 
-    // The cascade takes reports, attempts and uploads, and the user delete takes memberships.
-    // Each leaves a tombstone, which would count the old history beside the new one, so those go
-    // too, found through the ids the deletes return.
+    // The organization delete cascades to memberships, reports, attempts and their files, and the
+    // user delete to `app_user`. Reports, attempts and users each leave a tombstone, which would
+    // count the old history beside the new one, so those go too, found through the ids the deletes
+    // return. A synthetic row deleted some other way, through the app say, leaves a tombstone this
+    // cannot find, since a tombstone keeps neither slug nor address.
     const organizations = await transaction
       .deleteFrom('organization')
       .where('slug', 'like', `${SYNTHETIC_SLUG_PREFIX}%`)

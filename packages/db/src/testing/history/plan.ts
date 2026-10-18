@@ -143,7 +143,8 @@ export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
     };
   }
 
-  // Joining over the first 60% of the span, so the earliest weeks are sparse and the last ones full.
+  // Joining evenly over the first half of the span, so the earliest weeks are sparse and the last
+  // ones full.
   const organizations = ORGANIZATION_NAMES.map((name, index): PlannedOrganization => {
     const joinedMsAgo = Math.floor(
       SYNTHETIC_HISTORY_SPAN_MS -

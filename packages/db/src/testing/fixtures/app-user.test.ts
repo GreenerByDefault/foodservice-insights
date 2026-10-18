@@ -16,7 +16,7 @@ describe('insertAppUser', () => {
     });
   });
 
-  test('backdates createdAt and emailConfirmedAt on the auth.users row', async () => {
+  test('backdates createdAt, and emailConfirmedAt as the last sign-in too, on the auth.users row', async () => {
     const { row, now } = await withRollback(DATABASE, async (transaction) => {
       const user = await insertAppUser(transaction, {
         createdAt: dbMsAgo(60_000),
@@ -24,7 +24,7 @@ describe('insertAppUser', () => {
       });
       const row = await transaction
         .selectFrom('auth.users')
-        .select(['createdAt', 'emailConfirmedAt'])
+        .select(['createdAt', 'emailConfirmedAt', 'lastSignInAt'])
         .where('id', '=', user.id)
         .executeTakeFirstOrThrow();
       const { rows } = await sql<{ now: Date }>`SELECT now()`.execute(transaction);
@@ -34,20 +34,21 @@ describe('insertAppUser', () => {
     expect(row).toEqual({
       createdAt: new Date(now.getTime() - 60_000),
       emailConfirmedAt: new Date(now.getTime() - 30_000),
+      lastSignInAt: new Date(now.getTime() - 30_000),
     });
   });
 
-  test('leaves createdAt and emailConfirmedAt null when not given', async () => {
+  test('leaves createdAt, emailConfirmedAt and lastSignInAt null when not given', async () => {
     const row = await withRollback(DATABASE, async (transaction) => {
       const user = await insertAppUser(transaction);
       return await transaction
         .selectFrom('auth.users')
-        .select(['createdAt', 'emailConfirmedAt'])
+        .select(['createdAt', 'emailConfirmedAt', 'lastSignInAt'])
         .where('id', '=', user.id)
         .executeTakeFirstOrThrow();
     });
 
-    expect(row).toEqual({ createdAt: null, emailConfirmedAt: null });
+    expect(row).toEqual({ createdAt: null, emailConfirmedAt: null, lastSignInAt: null });
   });
 });
 

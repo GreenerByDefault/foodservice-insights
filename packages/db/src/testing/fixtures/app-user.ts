@@ -11,7 +11,8 @@ export async function insertAppUser(
     email?: string;
     /** Left out, null, as `auth.users` has no default for it. */
     createdAt?: Date | RawBuilder<Date>;
-    /** When the user entered their sign-in code. Left out, null: the address was never confirmed. */
+    /** When the user entered their sign-in code, which also makes it their last sign-in, as
+     * entering one is signing in. Left out, both null: the address was never confirmed. */
     emailConfirmedAt?: Date | RawBuilder<Date>;
   } = {},
 ): Promise<AppUser> {
@@ -24,6 +25,7 @@ export async function insertAppUser(
       email: overrides.email ?? `${crypto.randomUUID()}@example.test`,
       createdAt: overrides.createdAt,
       emailConfirmedAt: overrides.emailConfirmedAt,
+      lastSignInAt: overrides.emailConfirmedAt,
     })
     .returning('id')
     .executeTakeFirstOrThrow();

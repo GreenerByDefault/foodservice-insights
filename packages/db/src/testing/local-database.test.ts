@@ -16,6 +16,17 @@ describe('requireLocalConnectionString', () => {
     ).toThrow('refusing db.abcdefghijklmnop.supabase.co: not a local database');
   });
 
+  test.for(['host', 'hostaddr'])(
+    'refuses a %s query parameter, which pg connects to instead',
+    (name) => {
+      expect(() =>
+        requireLocalConnectionString(
+          `postgresql://postgres:secret@localhost:5432/postgres?${name}=db.abcdefghijklmnop.supabase.co`,
+        ),
+      ).toThrow(`refusing a ${name} query parameter: not checked as a local database`);
+    },
+  );
+
   test('refuses a string that is not a URL', () => {
     expect(() => requireLocalConnectionString('host=localhost dbname=postgres')).toThrow(
       'refusing an unparseable host: not a local database',
