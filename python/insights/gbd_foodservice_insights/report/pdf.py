@@ -160,6 +160,11 @@ class CategoryShare(NamedTuple):
     pct_of_footprint: float
 
 
+class Co2ePerHead(NamedTuple):
+    diner_or_meal: DinerOrMeal
+    kg: float
+
+
 @dataclass(frozen=True)
 class ExecutiveNarrative:
     """The facts behind the plain-English executive summary."""
@@ -168,8 +173,8 @@ class ExecutiveNarrative:
     period: str
     total_food_kg: float
     total_co2e_kg: float
-    co2e_kg_per_diner_or_meal: float
-    diner_or_meal: DinerOrMeal
+    # `None` without headcounts.
+    co2e_per_head: Co2ePerHead | None
     # Percentages of the categorised food by weight.
     plant_pct: float
     animal_pct: float
@@ -276,14 +281,20 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
     headline = _format_co2e(narrative.total_co2e_kg)
     paragraphs = []
 
-    sentence = (
+    per_head = narrative.co2e_per_head
+    paragraphs.append(
         f"Over this period the kitchen purchased about {narrative.total_food_kg:,.0f} kg "
         f"of categorised food. Producing that food released an estimated {headline} of carbon "
         "dioxide equivalent (CO₂e), the standard measure for comparing the climate impact of "
-        "different foods. That works out at roughly "
-        f"{narrative.co2e_kg_per_diner_or_meal:.2f} kg of CO₂e per {narrative.diner_or_meal}."
+        "different foods. "
+        + (
+            "No diner or meal counts were provided, so these figures are totals. Sites differ "
+            "in size, so they can't be compared directly with other sites."
+            if per_head is None
+            else f"That works out at roughly {per_head.kg:.2f} kg of CO₂e per "
+            f"{per_head.diner_or_meal}."
+        )
     )
-    paragraphs.append(sentence)
 
     top = narrative.top_categories
     if len(top) == 3:
@@ -753,8 +764,20 @@ def _wrap_text_lines(content_lines: list[str], width: int = _TEXT_PAGE_WRAP_CHAR
     return wrapped_lines or [""]
 
 
-def _how_to_read_lines(diner_or_meal: DinerOrMeal) -> list[str]:
-    """Introductory guide to reading the report, shown before the charts."""
+def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
+    """Introductory guide to reading the report, shown before the charts. `diner_or_meal` is
+    `None` without headcounts."""
+    comparing_months = (
+        [
+            "Every figure in this report is a total. Totals rise and fall with how many people",
+            "you serve, so compare months with that in mind.",
+        ]
+        if diner_or_meal is None
+        else [
+            f"The 'per {diner_or_meal}' figures are the most useful for comparing across months,",
+            f"because they account for how many {diner_or_meal}s were served each month.",
+        ]
+    )
     return [
         "The charts in this report show your catering operation's food purchasing patterns",
         "and associated carbon footprint over the reporting period.",
@@ -764,8 +787,7 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal) -> list[str]:
         "  \u2022 Which specific products are the biggest drivers within those categories.",
         "  \u2022 How purchasing volumes vary month to month.",
         "",
-        f"The 'per {diner_or_meal}' figures are the most useful for comparing across months,",
-        f"because they account for how many {diner_or_meal}s were served each month.",
+        *comparing_months,
         "",
         "The plant vs. animal breakdown shows the proportion of food purchased from",
         "plant-based vs. animal-based sources. Shifting this ratio is one of the most",
@@ -777,8 +799,17 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal) -> list[str]:
     ]
 
 
-def _methodology_lines(diner_or_meal: DinerOrMeal) -> list[str]:
-    """Methodology note for the final page of the PDF."""
+def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
+    """Methodology note for the final page of the PDF. `diner_or_meal` is `None` without
+    headcounts."""
+    normalising = (
+        []
+        if diner_or_meal is None
+        else [
+            f"  Per-{diner_or_meal} figures account for this by normalising against the number "
+            f"of {diner_or_meal}s served."
+        ]
+    )
     return [
         (
             "This report was produced by Greener By Default using procurement data provided by "
@@ -803,10 +834,7 @@ def _methodology_lines(diner_or_meal: DinerOrMeal) -> list[str]:
         "How should I interpret the monthly figures?",
         "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with",
         "  seasonal menus, catering events, term dates, and other operational factors.",
-        (
-            f"  Per-{diner_or_meal} figures account for this by normalising against the number "
-            f"of {diner_or_meal}s served."
-        ),
+        *normalising,
         "",
         "How should I use this report?",
         "  The highest-carbon categories and products are the most impactful places to focus",
@@ -879,13 +907,14 @@ def write_report_pdf(
     warnings and issues."""
     quality_status = quality_status_from_findings(report.findings)
     aggregation = report.aggregation
+    diner_or_meal = None if report.headcounts is None else report.headcounts.diner_or_meal
 
     with close_new_figures_on_error(), PdfPages(path) as pdf:
         create_title_page(pdf, client_name, "Procurement")
         create_executive_summary_page(
             pdf, _executive_narrative(report, client_name, quality_status)
         )
-        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(report.diner_or_meal))
+        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
 
         for fig in charts.figures:
             pdf.savefig(fig)
@@ -898,7 +927,7 @@ def write_report_pdf(
         if aggregation.substitution_scenarios is not None:
             create_substitution_scenarios_page(pdf, aggregation.substitution_scenarios)
 
-        methodology = _methodology_lines(report.diner_or_meal)
+        methodology = _methodology_lines(diner_or_meal)
         create_text_page(
             pdf,
             "About This Report",
@@ -914,6 +943,13 @@ def write_report_pdf(
     logger.info("PDF report saved to %s", path)
 
 
+def _co2e_per_head(report: FoodReport) -> Co2ePerHead | None:
+    kg = co2e_kg_per_diner_or_meal(report)
+    if report.headcounts is None or kg is None:
+        return None
+    return Co2ePerHead(report.headcounts.diner_or_meal, kg)
+
+
 def _executive_narrative(
     report: FoodReport, client_name: str, quality_status: QualityStatus
 ) -> ExecutiveNarrative:
@@ -927,8 +963,7 @@ def _executive_narrative(
         period=date_range_label(report.rows),
         total_food_kg=float(report.rows[KILOS.column].sum()),
         total_co2e_kg=total_co2e,
-        co2e_kg_per_diner_or_meal=co2e_kg_per_diner_or_meal(report),
-        diner_or_meal=report.diner_or_meal,
+        co2e_per_head=_co2e_per_head(report),
         plant_pct=report.plant_animal_split.plant_pct,
         animal_pct=report.plant_animal_split.animal_pct,
         any_animal=report.plant_animal_split.animal_total > 0,

@@ -6,8 +6,10 @@
       "period": "Oct 2023 – Dec 2023",
       "total_food_kg": 177.522301,
       "total_co2e_kg": 513.260939,
-      "co2e_kg_per_diner_or_meal": 0.17108698,
-      "diner_or_meal": "diner",
+      "co2e_per_head": [
+        "diner",
+        0.17108698
+      ],
       "plant_pct": 71.9,
       "animal_pct": 28.1,
       "any_animal": true,

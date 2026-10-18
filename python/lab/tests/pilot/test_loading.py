@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.food_report import build_food_report
 from gbd_foodservice_insights.report.metric import KILOS
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
 from gbd_foodservice_insights_lab.food_report import pipeline
 from gbd_foodservice_insights_lab.food_report.serving import SERVINGS, build_serving_report
 from gbd_foodservice_insights_lab.pilot.analysis import (
@@ -49,15 +49,15 @@ def _write_qa_workbook(
         if serving
         else build_food_report(
             _rows(rows, KILOS.column),
-            diner_meal_mapping=counts,
+            headcounts=Headcounts(diner_or_meal, counts),
             region="us",
-            diner_or_meal=diner_or_meal,
             top_n_drivers=5,
         )
     )
     return pipeline._write_qa_workbook(
         report,
         str(path),
+        headcounts=Headcounts(diner_or_meal, counts),
         metric=SERVINGS if serving else KILOS,
         quality_findings=[],
         potential_name_splits=pd.DataFrame(),

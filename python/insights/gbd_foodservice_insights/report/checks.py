@@ -8,7 +8,7 @@ import pandas as pd
 
 from gbd_foodservice_insights.report.metric import KILOS, Metric
 from gbd_foodservice_insights.report.quality import Finding, make_finding
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
 
 logger = logging.getLogger(__name__)
@@ -758,19 +758,17 @@ def check_date_distribution(df: pd.DataFrame) -> list[Finding]:
     return findings
 
 
-def run_all_diagnostics(
-    df: pd.DataFrame,
-    diner_meal_mapping: Mapping[pd.Period, float],
-    diner_or_meal: DinerOrMeal,
-) -> list[Finding]:
-    """Run report diagnostics on rows whose `month_year` is already `Period[M]`."""
+def run_all_diagnostics(df: pd.DataFrame, headcounts: Headcounts | None) -> list[Finding]:
+    """Run report diagnostics on rows whose `month_year` is already `Period[M]`. Without
+    headcounts there are no counts to check: that is the uploader's choice, not a finding."""
     findings: list[Finding] = []
     findings.extend(detect_month_over_month_total_volatility(df, KILOS))
     findings.extend(check_missing_internal_months(df))
-    denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(
-        df, diner_meal_mapping, KILOS.column, diner_or_meal=diner_or_meal
-    )
-    findings.extend(denominator_reasonableness_findings)
+    if headcounts is not None:
+        denominator_reasonableness_findings, _ = check_diner_meal_reasonableness(
+            df, headcounts.by_month, KILOS.column, diner_or_meal=headcounts.diner_or_meal
+        )
+        findings.extend(denominator_reasonableness_findings)
     unusual_sales_findings, _ = detect_unusual_sales(
         df,
         KILOS,

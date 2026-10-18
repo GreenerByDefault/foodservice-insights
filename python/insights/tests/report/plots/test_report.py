@@ -1,12 +1,13 @@
 from collections.abc import Callable
 
 import pandas as pd
+import pytest
 from gbd_foodservice_insights.report.aggregation import Aggregation, PlantAnimalSplit
 from gbd_foodservice_insights.report.plots import report
+from gbd_foodservice_insights.report.schema import Headcounts
 from matplotlib.figure import Figure
 
 JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
-DINER_MEALS = {JAN: 100, FEB: 100}
 EMISSIONS_SUMMARY = pd.DataFrame(
     {"category": ["fruit", "juice"], "total_kg_co2e": [75, 13], "pct_of_total": [85.2, 14.8]}
 )
@@ -47,20 +48,28 @@ def _aggregation(
     )
 
 
+@pytest.mark.parametrize(
+    ("headcounts", "headcounts_chart"),
+    [
+        (Headcounts("diner", {JAN: 100, FEB: 100}), ["Number of Diners by Month"]),
+        (None, []),
+    ],
+)
 def test_generate_all_report_plots_orders_every_page(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
+    headcounts: Headcounts | None,
+    headcounts_chart: list[str],
 ):
     plots_output = report.generate_all_report_plots(
         aggregation=_aggregation(fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8])),
-        diner_meal_mapping=DINER_MEALS,
+        headcounts=headcounts,
         emissions_summary=EMISSIONS_SUMMARY,
         plant_animal_split=PLANT_SPLIT,
         plant_protein_share=None,
-        diner_or_meal="diner",
     )
 
     assert [_figure_title(fig) for fig in plots_output] == [
-        "Number of Diners by Month",
+        *headcounts_chart,
         "Kilos Over Time",
         "Kilos by Category Across All Months",
         "Carbon Emissions by Category",

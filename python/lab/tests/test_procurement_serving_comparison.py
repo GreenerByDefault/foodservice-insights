@@ -6,7 +6,7 @@ import pytest
 from gbd_foodservice_insights.report.excel import write_client_workbook
 from gbd_foodservice_insights.report.food_report import build_food_report
 from gbd_foodservice_insights.report.metric import KILOS
-from gbd_foodservice_insights.report.schema import DinerOrMeal
+from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
 from gbd_foodservice_insights_lab.food_report.serving import (
     SERVINGS,
     build_serving_report,
@@ -68,9 +68,8 @@ def _make_baseline_pair(
     write_client_workbook(
         build_food_report(
             _rows(procurement_rows, KILOS.column),
-            diner_meal_mapping=procurement_counts or default_counts,
+            headcounts=Headcounts(diner_or_meal, procurement_counts or default_counts),
             region="us",
-            diner_or_meal=diner_or_meal,
             top_n_drivers=5,
         ),
         _workbook_path(baseline / "purchasing-procurement data"),

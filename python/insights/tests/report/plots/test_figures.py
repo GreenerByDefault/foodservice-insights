@@ -7,6 +7,7 @@ import pytest
 from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
 from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.plots import figures
+from gbd_foodservice_insights.report.schema import Headcounts
 from matplotlib.figure import Figure
 
 JAN, FEB = pd.period_range("2023-01", periods=2, freq="M")
@@ -114,7 +115,7 @@ def test_food_and_drink_comparison_page_puts_totals_above_per_diner(
     fig = figures.plot_food_and_drink_comparison_page(
         fruit_and_juice_months(),
         metric=KILOS,
-        diner_meal_mapping={JAN: 100, FEB: 100},
+        headcounts=Headcounts("diner", {JAN: 100, FEB: 100}),
     )
 
     assert _figure_title(fig) == "Kilos Over Time"
@@ -122,12 +123,23 @@ def test_food_and_drink_comparison_page_puts_totals_above_per_diner(
     assert _is_stacked(*fig.axes)
 
 
+def test_food_and_drink_comparison_page_without_headcounts_has_only_totals(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    fig = figures.plot_food_and_drink_comparison_page(
+        fruit_and_juice_months(), metric=KILOS, headcounts=None
+    )
+
+    assert _figure_title(fig) == "Kilos Over Time"
+    assert [ax.get_title() for ax in fig.axes] == ["Total Kilos"]
+
+
 def test_emissions_summary_page_puts_total_above_per_diner(
     fruit_and_juice_months: Callable[..., pd.DataFrame],
 ):
     fig = figures.plot_emissions_summary_over_time(
         fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]),
-        {JAN: 100, FEB: 100},
+        Headcounts("diner", {JAN: 100, FEB: 100}),
     )
 
     assert _figure_title(fig) == "Carbon Emissions Over Time"
@@ -136,6 +148,17 @@ def test_emissions_summary_page_puts_total_above_per_diner(
         "Carbon Emissions per Diner Over Time",
     ]
     assert _is_stacked(*fig.axes)
+
+
+def test_emissions_summary_page_without_headcounts_has_only_the_total(
+    fruit_and_juice_months: Callable[..., pd.DataFrame],
+):
+    fig = figures.plot_emissions_summary_over_time(
+        fruit_and_juice_months(emissions_kg_co2e=[30, 5, 45, 8]), None
+    )
+
+    assert _figure_title(fig) == "Carbon Emissions Over Time"
+    assert [ax.get_title() for ax in fig.axes] == ["Total Carbon Emissions Over Time"]
 
 
 def test_plant_breakdown_overview_puts_the_split_above_protein_with_monthly_on_the_right():

@@ -18,6 +18,7 @@ from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import (
     DiagnosticStatus,
     DinerOrMeal,
+    Headcounts,
     quality_status_from_findings,
 )
 from gbd_foodservice_insights.report.thresholds import get_diagnostic_threshold
@@ -769,7 +770,7 @@ def _weights_either_side_of_2_to_10_kg() -> dict[str, object]:
             "kilos_total": [1.5, 10.0, 11.0],
         }
     )
-    findings = run_all_diagnostics(df, {}, "diner")
+    findings = run_all_diagnostics(df, None)
     bounds = next(f for f in findings if f["category"] == "per_product_weight_bounds")
     return {
         "status": bounds["status"],
@@ -902,7 +903,8 @@ def test_checks_read_their_thresholds_from_yaml(
 # ----------------------------------------------------------------------
 
 
-def test_run_all_diagnostics_returns_every_checks_findings_in_order():
+@pytest.mark.parametrize("with_headcounts", [True, False])
+def test_run_all_diagnostics_returns_every_checks_findings_in_order(with_headcounts: bool):
     # Shaped like what `build_food_report` hands over: parsed dates, Period months, and a
     # Period-keyed mapping. March is short, so the date distribution check, which stays silent
     # on clean data, reports too.
@@ -931,14 +933,15 @@ def test_run_all_diagnostics_returns_every_checks_findings_in_order():
 
     findings = run_all_diagnostics(
         df=df,
-        diner_meal_mapping={jan: 100.0, feb: 100.0, mar: 100.0},
-        diner_or_meal="diner",
+        headcounts=Headcounts("diner", dict.fromkeys((jan, feb, mar), 100.0))
+        if with_headcounts
+        else None,
     )
 
     assert [(finding["category"], finding["status"]) for finding in findings] == [
         ("month_over_month_total_volatility", "warning"),
         ("missing_internal_months", "success"),
-        ("diner_meal_count_reasonableness", "success"),
+        *([("diner_meal_count_reasonableness", "success")] if with_headcounts else []),
         ("outlier_line_items", "success"),
         ("per_product_weight_bounds", "success"),
         ("date_distribution", "warning"),

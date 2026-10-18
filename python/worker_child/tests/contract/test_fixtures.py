@@ -441,6 +441,14 @@ def test_telemetry_payload_refuses_what_the_parent_would(state: TelemetryState) 
         telemetry_payload(state, peak_memory_kib=412345)
 
 
+# No fixture: the contract still requires the figure, and the next change to it makes null valid.
+def test_telemetry_payload_refuses_a_report_without_a_per_head_figure() -> None:
+    state = replace(FINISHED, report=replace(REPORT, co2e_kg_per_diner_or_meal=None))
+
+    with pytest.raises(ContractError, match="co2eKgPerDinerOrMeal"):
+        telemetry_payload(state, peak_memory_kib=412345)
+
+
 def test_telemetry_payload_refuses_zero_peak_memory() -> None:
     with pytest.raises(ContractError):
         telemetry_payload(FINISHED, peak_memory_kib=0)

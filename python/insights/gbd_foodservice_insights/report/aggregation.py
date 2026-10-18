@@ -1,6 +1,5 @@
 """Canonical aggregation functions for food-report generation."""
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -14,7 +13,7 @@ from gbd_foodservice_insights.categories import (
 )
 from gbd_foodservice_insights.emissions import get_emission_factor
 from gbd_foodservice_insights.report.metric import KILOS
-from gbd_foodservice_insights.report.schema import DinerOrMeal, Region
+from gbd_foodservice_insights.report.schema import Headcounts, Region
 
 _RUMINANT_SWAP_SOURCE_CATEGORIES = (
     "Beef and Buffalo Meat",
@@ -443,21 +442,22 @@ def calculate_milk_oat_swap_scenarios(
 
 def run_aggregation_pipeline(
     df: pd.DataFrame,
-    diner_meal_mapping: Mapping[pd.Period, float],
+    headcounts: Headcounts | None,
     top_n: int = 5,
     *,
     region: Region = "us",
-    diner_or_meal: DinerOrMeal,
 ) -> Aggregation:
     """Run the full report aggregation pipeline on a ``df`` that already carries
-    ``emissions_kg_co2e``."""
+    ``emissions_kg_co2e``. The monthly tables have a per-head column only with headcounts."""
 
     def monthly(group_by: Literal["product", "category"]) -> pd.DataFrame:
         agg = aggregate_data(df, group_by=group_by, metric=KILOS.column)
+        if headcounts is None:
+            return agg
         return agg.assign(
             **{
-                KILOS.per_head(diner_or_meal): agg[KILOS.column]
-                / agg["month_year"].map(diner_meal_mapping)
+                KILOS.per_head(headcounts.diner_or_meal): agg[KILOS.column]
+                / agg["month_year"].map(headcounts.by_month)
             }
         )
 
