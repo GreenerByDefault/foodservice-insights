@@ -39,14 +39,14 @@ let viewerUserId = $derived(data.members.find((member) => member.isYou)?.userId)
 
   {#if data.invites}
     <section class="flex flex-col gap-3">
-      <h2 class="font-medium">Pending invitations</h2>
+      <h2 class="text-lg font-medium">Pending invitations</h2>
       <PendingInvites invites={data.invites} organizationSlug={data.organization.slug} />
     </section>
   {/if}
 
   {#if viewerUserId}
     <section class="flex flex-col gap-3">
-      <h2 class="font-medium">Your membership</h2>
+      <h2 class="text-lg font-medium">Your membership</h2>
       <YourMembership
         organizationSlug={data.organization.slug}
         {viewerUserId}

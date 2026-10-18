@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@fontsource-variable/inter": "catalog:",
+    "@fontsource-variable/jost": "catalog:",
     "@gbd/browser-testing": "workspace:*",
     "@internationalized/date": "catalog:",
     "@lucide/svelte": "catalog:",

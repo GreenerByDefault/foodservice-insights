@@ -22,7 +22,7 @@ const ROW_CLASS = 'flex flex-col gap-y-1 sm:col-span-2 sm:grid sm:grid-cols-subg
 </script>
 
 <section aria-labelledby={headingId} class="mt-6 flex w-full flex-col gap-4 border-t pt-6">
-  <h2 id={headingId} class="font-medium">Upload details</h2>
+  <h2 id={headingId} class="text-lg font-medium">Upload details</h2>
 
   <dl class="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-[max-content_1fr]">
     <div class={ROW_CLASS}>

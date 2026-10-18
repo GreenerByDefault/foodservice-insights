@@ -30,7 +30,7 @@ let hasScrollableDetail = $derived(
     <!-- A rejection is a finished verdict, not a live update — README.md § Errors rules out a live
          region for a document this long, so the fix is moving focus, once, to the heading that
          names it. -->
-    <h2 {@attach (node) => node.focus()} tabindex="-1" class="text-lg font-semibold outline-none">
+    <h2 {@attach (node) => node.focus()} tabindex="-1" class="text-lg font-medium outline-none">
       {rejection.summary}
     </h2>
     {#if hasScrollableDetail}
