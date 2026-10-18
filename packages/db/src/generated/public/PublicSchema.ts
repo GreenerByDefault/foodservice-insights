@@ -23,8 +23,6 @@ export default interface PublicSchema {
 
   analysisAttemptTelemetry: AnalysisAttemptTelemetryTable;
 
-  analysisAttemptQualityCheck: AnalysisAttemptQualityCheckTable;
-
   appUser: AppUserTable;
 
   report: ReportTable;
@@ -34,6 +32,8 @@ export default interface PublicSchema {
   unitWeight: UnitWeightTable;
 
   organizationMember: OrganizationMemberTable;
+
+  analysisAttemptQualityCheck: AnalysisAttemptQualityCheckTable;
 
   resultFile: ResultFileTable;
 

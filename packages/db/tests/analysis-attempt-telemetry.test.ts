@@ -474,6 +474,13 @@ describe('analysis_attempt_quality_check', () => {
     });
   });
 
+  test.each(['success' as const, 'info' as const])('rejects a status of %s', async (status) => {
+    await expectConstraintViolation(
+      withRollback(DATABASE, (transaction) => insertAttemptQualityCheck(transaction, { status })),
+      'analysis_attempt_quality_check_status_is_warning_or_error',
+    );
+  });
+
   test('rejects zero findings', async () => {
     await expectConstraintViolation(
       withRollback(DATABASE, (transaction) =>
