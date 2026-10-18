@@ -9,6 +9,7 @@
  * second field for the server to store unopened — see ARCHITECTURE.md § Input file upload.
  */
 
+import type { UnitSystem } from '@gbd/db';
 import { describeUnreadableFile } from './csv/describe/index.ts';
 import { normalizeCsv } from './csv/normalize.ts';
 import {
@@ -24,7 +25,13 @@ import type { RejectedUploadRecord } from './rejection.ts';
 import { spreadsheetSignature } from './signatures.ts';
 
 export type FileInspection =
-  | { ok: true; months: MonthsFromFile; upload: { csvFile: File; workbook?: File } }
+  | {
+      ok: true;
+      months: MonthsFromFile;
+      /** Present only when the file's weight header names a unit. */
+      weightUnit?: UnitSystem;
+      upload: { csvFile: File; workbook?: File };
+    }
   | { ok: false; rejection: RejectedUploadRecord };
 
 export async function inspectFile(file: File): Promise<FileInspection> {
@@ -54,7 +61,12 @@ export async function inspectFile(file: File): Promise<FileInspection> {
     return { ok: false, rejection };
   }
 
-  return { ok: true, months: csv.months, upload: prepared.upload };
+  return {
+    ok: true,
+    months: csv.months,
+    ...(csv.weightUnit && { weightUnit: csv.weightUnit }),
+    upload: prepared.upload,
+  };
 }
 
 type PreparedUpload =

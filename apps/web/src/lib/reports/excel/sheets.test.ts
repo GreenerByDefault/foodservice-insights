@@ -117,6 +117,17 @@ describe('chooseSheet', () => {
       });
     });
 
+    test('a weight in a unit we cannot use still counts as naming the weight', () => {
+      const ounces = sheet('Orders', ['Product', 'Date ordered', 'Weight (oz)']);
+
+      expect(chooseSheet([sheet('Draft', ['Product', 'Date ordered']), ounces])).toEqual({
+        kind: 'read',
+        chosen: ounces,
+        basis: 'closest',
+        others: ['Draft'],
+      });
+    });
+
     test('a tie leaves the earlier tab in front', () => {
       const earlier = sheet('January', ['Product', 'Date ordered']);
 

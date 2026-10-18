@@ -13,6 +13,8 @@ describe('resolveHeader', () => {
     ['item', 'product'],
     ['ITEM_NAME', 'product'],
     ['description', 'product'],
+    ['Product Description', 'product'],
+    ['item_description', 'product'],
     ['date', 'date'],
     ['Date Ordered', 'date'],
     ['order-date', 'date'],
@@ -22,6 +24,78 @@ describe('resolveHeader', () => {
     expect(resolveHeader(headerFor(alias, column))).toEqual({
       ok: true,
       columns: { product: 0, date: 1, weight: 2 },
+    });
+  });
+
+  describe('a weight header naming its unit', () => {
+    test.for([
+      ['Weight (lbs)', 'lb'],
+      ['Weight(lb)', 'lb'],
+      ['Weight lbs', 'lb'],
+      ['weight_pounds', 'lb'],
+      ['Weight (in pounds)', 'lb'],
+      ['Product Weight (lbs.)', 'lb'],
+      ['WEIGHT POUND', 'lb'],
+      ['Weight (kg)', 'kg'],
+      ['weight_kg', 'kg'],
+      ['Weight KGS', 'kg'],
+      ['Weight (in kilograms)', 'kg'],
+      ['Weight kilo', 'kg'],
+      ['product-weight-kilos', 'kg'],
+    ] as const)('reads "%s" as the weight, in %s', ([header, weightUnit]) => {
+      expect(resolveHeader(['product', 'date', header])).toEqual({
+        ok: true,
+        columns: { product: 0, date: 1, weight: 2 },
+        weightUnit,
+      });
+    });
+
+    test.for([
+      'weight class',
+      'weight (approx)',
+      'weight in',
+      'net weight lbs',
+      'weight lbs total',
+    ])('refuses "%s", which is not "weight" and a unit', (header) => {
+      expect(resolveHeader(['product', 'date', header])).toEqual({
+        ok: false,
+        fault: { kind: 'missing', columns: ['weight'] },
+      });
+    });
+
+    test.for([
+      ['Weight (oz)', 'ounces'],
+      ['weight_ounces', 'ounces'],
+      ['Weight (g)', 'grams'],
+      ['Weight grams', 'grams'],
+      ['Weight (tons)', 'tons'],
+    ] as const)('names "%s" as a weight in %s, rather than missing', ([header, unit]) => {
+      expect(resolveHeader(['product', 'date', header])).toEqual({
+        ok: false,
+        fault: { kind: 'unsupported-unit', header, unit },
+      });
+    });
+
+    test('names the missing columns when a unit we cannot use is not the only problem', () => {
+      expect(resolveHeader(['vendor', 'date', 'Weight (oz)'])).toEqual({
+        ok: false,
+        fault: { kind: 'missing', columns: ['product', 'weight'] },
+      });
+    });
+
+    test('reads a weight column we can use beside one we cannot', () => {
+      expect(resolveHeader(['product', 'date', 'Weight (oz)', 'Weight (lbs)'])).toEqual({
+        ok: true,
+        columns: { product: 0, date: 1, weight: 3 },
+        weightUnit: 'lb',
+      });
+    });
+
+    test('refuses to choose between a plain weight and one naming a unit', () => {
+      expect(resolveHeader(['product', 'date', 'weight', 'Weight (kg)'])).toEqual({
+        ok: false,
+        fault: { kind: 'ambiguous', column: 'weight', headers: ['weight', 'Weight (kg)'] },
+      });
     });
   });
 
@@ -55,6 +129,17 @@ describe('resolveHeader', () => {
     expect(resolveHeader(['item', 'Product Name', 'date', 'weight'])).toEqual({
       ok: false,
       fault: { kind: 'ambiguous', column: 'product', headers: ['item', 'Product Name'] },
+    });
+  });
+
+  test('refuses to choose between a product and its description', () => {
+    expect(resolveHeader(['Product', 'Product Description', 'date', 'weight'])).toEqual({
+      ok: false,
+      fault: {
+        kind: 'ambiguous',
+        column: 'product',
+        headers: ['Product', 'Product Description'],
+      },
     });
   });
 

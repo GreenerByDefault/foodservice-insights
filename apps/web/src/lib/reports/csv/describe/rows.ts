@@ -59,13 +59,13 @@ const WEIGHT_CLAUSES: Record<WeightFault, Clause> = {
  */
 const DATE_CLAUSES: Record<DateFault, Clause> = {
   empty: { clause: 'is empty' },
-  'unknown-month-name': { clause: 'has a month name we do not recognise' },
+  'unknown-month-name': { clause: 'has a month name we do not recognize' },
   'date-serial': {
     clause: 'looks like an unconverted date serial',
     advice: 'Format the column as a date in your spreadsheet and save it again.',
   },
   unrecognized: {
-    clause: 'is not a date we recognise',
+    clause: 'is not a date we recognize',
     advice: 'Use YYYY-MM-DD.',
   },
   'not-a-real-date': { clause: 'is not a real calendar date' },

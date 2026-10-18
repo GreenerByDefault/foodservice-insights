@@ -1,5 +1,6 @@
 /** Choosing the delimiter and finding the header, before anything about individual rows matters. */
 
+import type { UnitSystem } from '@gbd/db';
 import { MAX_COLUMNS, MAX_HEADER_SEARCH_LINES } from '../../limits.ts';
 import { type ColumnIndexes, type HeaderFault, resolveHeader } from './columns.ts';
 import { type CsvDelimiter, CsvParseError, type CsvRecord, parseCsv } from './parse.ts';
@@ -19,6 +20,8 @@ export type Layout = {
    * records starts after this line rather than after line 1.
    */
   headerLine: number;
+  /** Present only when the weight header names a unit, as `Weight (lbs)` does. */
+  weightUnit?: UnitSystem;
 };
 
 /** Where an ambiguous row was found, for the error message — not enough to open the file with. */
@@ -51,6 +54,7 @@ export function readLayout(text: string): LayoutDecision {
         columns: candidate.columns,
         width: candidate.record.fields.length,
         headerLine: candidate.record.line,
+        ...(candidate.weightUnit && { weightUnit: candidate.weightUnit }),
       },
     };
   }
@@ -75,7 +79,12 @@ type Probe = {
 };
 
 /** A row within the search window that names all three required columns, under one delimiter. */
-type Candidate = { delimiter: CsvDelimiter; record: CsvRecord; columns: ColumnIndexes };
+type Candidate = {
+  delimiter: CsvDelimiter;
+  record: CsvRecord;
+  columns: ColumnIndexes;
+  weightUnit?: UnitSystem;
+};
 
 function probe(text: string, delimiter: CsvDelimiter): Probe {
   try {
@@ -89,9 +98,9 @@ function probe(text: string, delimiter: CsvDelimiter): Probe {
 function headerCandidates(probe: Probe): Candidate[] {
   return probe.records.flatMap((record) => {
     const resolution = resolveHeader(record.fields);
-    return resolution.ok
-      ? [{ delimiter: probe.delimiter, record, columns: resolution.columns }]
-      : [];
+    if (!resolution.ok) return [];
+    const { columns, weightUnit } = resolution;
+    return [{ delimiter: probe.delimiter, record, columns, ...(weightUnit && { weightUnit }) }];
   });
 }
 

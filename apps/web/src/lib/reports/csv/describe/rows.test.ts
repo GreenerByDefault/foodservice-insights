@@ -33,9 +33,9 @@ describe('the rule a finding becomes', () => {
   describe('every date fault, to its sentence', () => {
     test.for([
       ['empty', 'The date is empty'],
-      ['unknown-month-name', 'The date has a month name we do not recognise'],
+      ['unknown-month-name', 'The date has a month name we do not recognize'],
       ['date-serial', 'The date looks like an unconverted date serial'],
-      ['unrecognized', 'The date is not a date we recognise'],
+      ['unrecognized', 'The date is not a date we recognize'],
       ['not-a-real-date', 'The date is not a real calendar date'],
       ['too-old', `The date is before ${EARLIEST_DATE}`],
       ['too-far-ahead', `The date is more than ${MAX_FUTURE_DAYS} days from now`],

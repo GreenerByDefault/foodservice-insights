@@ -167,6 +167,21 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
   const csv = normalizeCsv(bytes);
   if (!csv.ok) return { ok: false, fileDescription, bytes, rejection: csv.rejection };
 
+  // A request can name either unit whatever the file's header says, and weights saved under the
+  // wrong one make every figure in the report wrong by a factor of 2.2.
+  if (csv.weightUnit && csv.weightUnit !== parsed.output.unitSystem) {
+    return {
+      ok: false,
+      fileDescription,
+      bytes,
+      rejection: {
+        reason: 'invalid_metadata',
+        summary: `Your file's weight column is in ${csv.weightUnit}, but the form says ${parsed.output.unitSystem}. Choose ${csv.weightUnit} and upload again.`,
+        rejectionDetail: `file weight unit ${csv.weightUnit}, form unit ${parsed.output.unitSystem}`,
+      },
+    };
+  }
+
   const uncounted = monthsWithoutCounts(csv.months, parsed.output.monthlyCounts);
   if (uncounted) return { ok: false, fileDescription, bytes, rejection: uncounted };
 

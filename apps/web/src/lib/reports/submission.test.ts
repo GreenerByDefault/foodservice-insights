@@ -52,6 +52,36 @@ describe('validateSubmission', () => {
     });
   });
 
+  describe('a file whose weight header names a unit', () => {
+    const LBS_CSV = 'product,date,Weight (lbs)\nbeef,2026-01-05,12\n';
+
+    function withWeightUnitHeader(unitSystem: string): RawSubmission {
+      return aSubmission({ unitSystem, csvFile: new File([LBS_CSV], 'lbs.csv') });
+    }
+
+    test('is accepted when the form names the same unit', async () => {
+      const outcome = await validateSubmission(withWeightUnitHeader('lb'));
+
+      expect(outcome).toMatchObject({ ok: true, metadata: { unitSystem: 'lb' } });
+    });
+
+    test('is rejected when the form names the other unit', async () => {
+      const outcome = await validateSubmission(withWeightUnitHeader('kg'));
+
+      expect(outcome).toEqual({
+        ok: false,
+        fileDescription: { originalFilename: 'lbs.csv', byteSize: LBS_CSV.length },
+        bytes: new TextEncoder().encode(LBS_CSV),
+        rejection: {
+          reason: 'invalid_metadata',
+          summary:
+            "Your file's weight column is in lb, but the form says kg. Choose lb and upload again.",
+          rejectionDetail: 'file weight unit lb, form unit kg',
+        },
+      });
+    });
+  });
+
   test('truncates an absurd filename rather than rejecting it', async () => {
     const outcome = await validateSubmission(
       aSubmission({ csvFile: new File([CSV], `${'x'.repeat(500)}.csv`, { type: 'text/csv' }) }),

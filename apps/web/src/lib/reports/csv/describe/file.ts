@@ -81,8 +81,9 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
     case 'ambiguous':
       return {
         reason: 'bad_columns',
-        summary:
-          "We can't tell what separates your columns — this file could be split into columns more than one way. Save it as CSV (comma separated values) and upload it again.",
+        summary: oneDelimiter(fault.candidates)
+          ? `Lines ${listOf(fault.candidates.map(({ line }) => String(line)))} each look like a header row. Keep the one that names your columns, delete the rest, and upload it again.`
+          : "We can't tell what separates your columns — this file could be split into columns more than one way. Save it as CSV (comma separated values) and upload it again.",
         rejectionDetail: describeAmbiguousDelimiters(fault.candidates),
       };
     case 'empty':
@@ -98,6 +99,12 @@ function layoutRejection(fault: LayoutFault): RejectedUploadRecord {
   }
 }
 
+/** Every candidate splits the file the same way, so it is the header row we cannot choose, not
+ * the delimiter. */
+function oneDelimiter(candidates: readonly HeaderCandidate[]): boolean {
+  return new Set(candidates.map(({ delimiter }) => delimiter)).size === 1;
+}
+
 function describeAmbiguousDelimiters(candidates: readonly HeaderCandidate[]): string {
   return candidates
     .map(({ delimiter, line }) => `${JSON.stringify(delimiter)} at line ${line}`)
@@ -105,19 +112,27 @@ function describeAmbiguousDelimiters(candidates: readonly HeaderCandidate[]): st
 }
 
 function describeHeaderFault(fault: HeaderFault): string {
-  if (fault.kind === 'missing') {
-    return `Your file needs a column for ${listOf(fault.columns.map(headerLabel))}.`;
+  switch (fault.kind) {
+    case 'missing':
+      return `Your file needs a column for ${listOf(fault.columns.map(headerLabel))}.`;
+    case 'ambiguous':
+      return `Two columns could be the ${headerLabel(fault.column)}: ${listOf(
+        fault.headers.map((header) => `"${header}"`),
+      )}. Remove or rename one.`;
+    case 'unsupported-unit':
+      return `Your weight column "${fault.header}" is in ${fault.unit}. Convert the weights to lb or kg, and name the column "Weight".`;
   }
-  return `Two columns could be the ${headerLabel(fault.column)}: ${listOf(
-    fault.headers.map((header) => `"${header}"`),
-  )}. Remove or rename one.`;
 }
 
 function describeHeaderFaultDetail(fault: HeaderFault): string {
-  if (fault.kind === 'missing') {
-    return `missing column(s): ${fault.columns.join(', ')}`;
+  switch (fault.kind) {
+    case 'missing':
+      return `missing column(s): ${fault.columns.join(', ')}`;
+    case 'ambiguous':
+      return `ambiguous column: ${fault.column} (${fault.headers.join(' | ')})`;
+    case 'unsupported-unit':
+      return `unsupported weight unit: ${fault.unit} (${fault.header})`;
   }
-  return `ambiguous column: ${fault.column} (${fault.headers.join(' | ')})`;
 }
 
 /** Deliberately a different label set from the row-problem wording in `rows.ts`: a header

@@ -4,6 +4,7 @@
  * rejected for the first one it fails.
  */
 
+import type { UnitSystem } from '@gbd/db';
 import { MAX_COLUMNS, MAX_DATA_ROWS, MAX_FREE_TEXT_LENGTH } from '../limits.ts';
 import type { MonthsFromFile } from '../metadata.ts';
 import type { RejectedUploadRecord } from '../rejection.ts';
@@ -42,8 +43,10 @@ import {
 } from './rules/index.ts';
 import { encodeNormalizedCsv, type NormalizedRow } from './write.ts';
 
+/** `weightUnit` is present only when the file's weight header names one, as `Weight (lbs)` does.
+ * The normalized CSV never carries it: its header is always plain `weight`. */
 export type CsvNormalization =
-  | { ok: true; normalized: Uint8Array; months: MonthsFromFile }
+  | { ok: true; normalized: Uint8Array; months: MonthsFromFile; weightUnit?: UnitSystem }
   | { ok: false; rejection: RejectedUploadRecord };
 
 export function normalizeCsv(
@@ -128,7 +131,12 @@ function readRows(
     return unreadable({ kind: 'all-weights-zero' });
   }
 
-  return { ok: true, normalized: encodeNormalizedCsv(resolved.rows), months: resolved.months };
+  return {
+    ok: true,
+    normalized: encodeNormalizedCsv(resolved.rows),
+    months: resolved.months,
+    ...(layout.weightUnit && { weightUnit: layout.weightUnit }),
+  };
 }
 
 function readRow(

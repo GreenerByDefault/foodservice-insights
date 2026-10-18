@@ -112,12 +112,13 @@ function columnsNamed(sheet: Sheet): number {
 }
 
 /** Read off `resolveHeader`'s verdict rather than matching aliases a second time. A `missing`
- * fault lists the columns nothing matched, and an `ambiguous` one can only be raised once
- * `resolveHeader` has ruled out `missing` — so it means all three were named, one of them twice.
+ * fault lists the columns nothing matched. The other faults can only be raised once
+ * `resolveHeader` has ruled out `missing`, so all three were named: one of them twice, or the
+ * weight in a unit we cannot use.
  */
 function columnsNamedBy(fields: readonly string[]): number {
   const read = resolveHeader(fields);
-  if (read.ok || read.fault.kind === 'ambiguous') return REQUIRED_COLUMNS.length;
+  if (read.ok || read.fault.kind !== 'missing') return REQUIRED_COLUMNS.length;
   return REQUIRED_COLUMNS.length - read.fault.columns.length;
 }
 
