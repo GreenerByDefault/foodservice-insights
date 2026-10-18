@@ -694,7 +694,14 @@ def get_previously_classified_weights() -> pd.DataFrame:
         )
         return _empty_previously_classified_weights()
 
-    previously_classified_weights = pd.read_csv(path)
+    # Only an empty cell is missing, so a unit of `N/A` or `null` stays one rather than matching
+    # every unit-less row, and a unit of `12` stays text.
+    previously_classified_weights = pd.read_csv(
+        path,
+        dtype={"original_unit": str, "llm_extracted_weight": float},
+        keep_default_na=False,
+        na_values=[""],
+    )
 
     print(
         "previously_classified_weights file has: "

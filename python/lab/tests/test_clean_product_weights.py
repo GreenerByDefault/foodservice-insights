@@ -39,6 +39,7 @@ import pytest
 from gbd_foodservice_insights_lab import clean_product_weights
 from gbd_foodservice_insights_lab.clean_product_weights import (
     _build_unit_mapping,
+    classify_units_using_historical_weights,
     get_previously_classified_weights,
 )
 
@@ -143,6 +144,44 @@ def test_get_previously_classified_weights_returns_empty_when_missing(tmp_path, 
         "example_products",
     ]
     assert "not found" in caplog.text
+
+
+def test_historical_weights_match_null_like_and_numeric_units_as_text(tmp_path):
+    weights_path = tmp_path / "weights.csv"
+    weights_path.write_text(
+        "original_unit,llm_cleaned_unit,llm_extracted_weight,example_products\n"
+        "N/A,each,,\n"
+        "12,each,12.0,EGGS\n"
+    )
+    units = pd.DataFrame({"original_unit": [np.nan, "N/A", "12"]})
+
+    with patch.object(
+        clean_product_weights,
+        "get_previously_classified_weights_location",
+        return_value=weights_path,
+    ):
+        result, _ = classify_units_using_historical_weights(units)
+
+    assert result.astype(object).where(result.notna(), None).to_dict("records") == [
+        {
+            "original_unit": None,
+            "llm_cleaned_unit": None,
+            "llm_extracted_weight": None,
+            "previously_classified": False,
+        },
+        {
+            "original_unit": "N/A",
+            "llm_cleaned_unit": "each",
+            "llm_extracted_weight": None,
+            "previously_classified": True,
+        },
+        {
+            "original_unit": "12",
+            "llm_cleaned_unit": "each",
+            "llm_extracted_weight": 12.0,
+            "previously_classified": True,
+        },
+    ]
 
 
 def test_build_unit_mapping_with_known_units(
