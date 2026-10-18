@@ -17,6 +17,7 @@ import logging
 
 from dotenv import find_dotenv, load_dotenv
 from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
+from gbd_foodservice_insights_lab.cache_sync import pull_caches_if_configured
 from gbd_foodservice_insights_lab.categorization.spreadsheet import categorize_spreadsheet_to_csvs
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     setup_api_clients,
@@ -59,6 +60,7 @@ def main() -> None:
     # Load .env and set up API clients
     env_path = find_dotenv(usecwd=True)
     load_dotenv(dotenv_path=env_path)
+    pull_caches_if_configured()
     clients = setup_api_clients(gemini=(args.data_type == "serving"))
 
     logger.info("Input:  %s", args.input)

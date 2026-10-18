@@ -97,6 +97,7 @@ person verifies in Supabase Studio before any run uses it.
   reports.
 - `WORKER_MODE=mock-llm` and `stubbed` ignore it with a warning, so their keyword and fake
   answers never reach the shared cache, and use your local one.
+- The lab reads the same variable; see [`python/lab/README.md`](python/lab/README.md#working-on-a-client).
 
 Without the string, you can load a CSV copy of the cache into your local database with the
 [temporary go-live import](packages/db/scripts/temporary-go-live-cache-import/README.md).
