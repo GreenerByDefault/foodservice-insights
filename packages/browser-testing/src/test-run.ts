@@ -21,6 +21,7 @@ import {
   ensureTemplateDatabase,
   sweepStaleGoTrueUsers,
   sweepStaleRunDatabases,
+  sweepStaleTemplateBuilds,
 } from '@gbd/db/testing';
 import { type BlobStoreConfig, initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { createRunBucket, deleteRunBucket, sweepStaleRunBuckets } from '@gbd/storage/testing';
@@ -89,6 +90,13 @@ async function sweepStaleResources(connectionString: string, s3: BlobStoreConfig
     if (dropped.length > 0) console.log(`swept ${dropped.length} stale run database(s)`);
   } catch (error) {
     console.warn('test-run: sweeping stale run databases failed, continuing anyway', error);
+  }
+
+  try {
+    const dropped = await sweepStaleTemplateBuilds(connectionString);
+    if (dropped.length > 0) console.log(`swept ${dropped.length} abandoned template build(s)`);
+  } catch (error) {
+    console.warn('test-run: sweeping abandoned template builds failed, continuing anyway', error);
   }
 
   try {

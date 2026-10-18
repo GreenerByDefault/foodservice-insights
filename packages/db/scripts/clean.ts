@@ -5,8 +5,8 @@
  *
  * The escape hatch for a template stuck in a bad state (see `run-database.ts`'s note on why
  * `ensureTemplateDatabase` only checks existence) or just for reclaiming disk. Nothing calls this
- * automatically — `sweepStaleRunDatabases` in `apps/web/scripts/test-run.ts` is what runs on
- * every Playwright invocation instead, and it never touches a template.
+ * automatically — `sweepStaleRunDatabases` in `packages/browser-testing/src/test-run.ts` is what
+ * runs on every Playwright invocation instead, and it never touches a template.
  */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';

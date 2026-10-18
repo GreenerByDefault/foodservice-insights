@@ -379,9 +379,8 @@ All in `packages/db`.
   The file's header carries the reasoning from Decisions: why views, the rejected alternatives,
   the role race, and where the password is set. It also says that hard-deleted rows drop out
   until PR 2 adds their tombstones.
-- `scripts/dump-public-schema.ts` takes the schema as an argument, and is renamed to match;
-  `dump-auth-schema.ts`'s header names it. `gen-types` dumps `metrics` into `metrics-schema.sql`,
-  and the `ts-db-types` job adds that file to the ones it diffs.
+- `scripts/dump-schema.ts` also dumps `metrics` into `metrics-schema.sql`, and the `ts-db-types`
+  job adds that file to the ones it diffs.
 - `tests/metrics.test.ts`. Each view gets seeded rows inside `withRollback`, and a `toEqual` on
   the view's rows filtered to the seeded ids, because a view also sees rows other tests
   committed. Timestamps come from `dbMsAgo`, so the durations are exact. Cases:
