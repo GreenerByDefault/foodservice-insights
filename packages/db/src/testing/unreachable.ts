@@ -8,5 +8,6 @@ export function unreachableDatabase(): Kysely<Database> {
   return initializeDatabase({
     connectionString: `postgres://nobody:nothing@${LOCALHOST}:${UNREACHABLE_PORT}/nothing`,
     log: 'console',
+    siteUrl: process.env.SITE_URL,
   });
 }

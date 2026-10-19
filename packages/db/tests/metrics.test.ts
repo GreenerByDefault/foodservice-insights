@@ -326,6 +326,7 @@ describe('tombstones', () => {
       connectionString: authAdminConnectionString(),
       limits: { minConnections: 0, maxConnections: 1 },
       log: 'console',
+      siteUrl: process.env.SITE_URL,
     });
     afterAll(async () => {
       await shutdownDatabase(authAdmin);

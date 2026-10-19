@@ -14,7 +14,7 @@ instead.
 
 **Recorded facts** (from the repo and Supabase docs):
 
-- Every TS connection goes through `buildPoolConfig` in `packages/db/src/client.ts:77-99`. It
+- Every TS connection goes through `buildPoolConfig` in `packages/db/src/client.ts`. It
   already sends `-c` startup options and `application_name`. Connections are direct, not pooled,
   so startup options reach the server.
 - The apps depend on `postgres` specifically. It has `BYPASSRLS` and DML grants on `auth.users`,
@@ -26,7 +26,7 @@ instead.
 - The hosted SQL editor logs in as `postgres`, as `session_user` and not through `SET ROLE`,
   with `application_name = 'supabase/dashboard-query-editor'` (probed 2026-10-19). So a check on
   `session_user` sees the dashboard. `postgres` is not a superuser on Supabase (`budget.ts`), and
-  can create event triggers through supautils; PR 3's production check confirms the DDL guard
+  can create event triggers through supautils; PR 2's production check confirms the DDL guard
   fires for the dashboard.
 - Event triggers don't fire on shared objects, so `ALTER ROLE … PASSWORD` stays available for
   rotating `cache_client` and `metrics_reader`.
@@ -46,65 +46,29 @@ Two layers that compose:
      (edit, tick `is_verified`, delete) keeps working.
    - Writing by hand is a deliberate opt-in:
      `begin; set local gbd.writer = 'manual:<name>'; …; commit;`
-2. **Local code can't reach production as `postgres`.** This is the user's idea.
-   `initializeDatabase` refuses a hosted connection string unless one of these holds:
-   - its user is `cache_client`;
-   - `SITE_URL` is set to a non-local host, which is true only in deployed services and in CI's
-     deploy job.
-
+2. **Local code can't reach production as `postgres`.** This layer has landed.
+   `initializeDatabase` calls `requirePermittedConnectionString`
+   (`packages/db/src/connection-string.ts`) before it builds a pool, and refuses a hosted
+   connection string unless its user is `cache_client` (or the pooler's `cache_client.<ref>`) or
+   `DatabaseConfig.siteUrl` is a non-local host. Only the deployed services and CI's deploy job
+   set `SITE_URL` that way, which is why the Migrate and Seed steps of `deploy.yml` now carry it.
    Without this, our own tooling (`truncate.ts`, `clean.ts`, `migrate.ts`) would set the
-   `gbd.writer` marker automatically when pointed at production. The lab's
-   `cache_sync.connect()` gets the same rule.
+   `gbd.writer` marker automatically when pointed at production. The lab's `cache_sync.connect()`
+   applies the same rule in Python. The go-live cache import is the one exception, through
+   `hostedFromACheckout: 'temporary-go-live-cache-import'`, deleted with that script.
 
-The error message names the runbook and says: "AI agents: stop and ask a human." It does not
+The guard's error message names the runbook and says: "AI agents: stop and ask a human." It does not
 spell out the opt-in.
 
-## PR 1 — refuse hosted `postgres` from a local checkout
-
-- **Move the URL parsing out of `testing/`.** Move it from `packages/db/src/testing/local-database.ts`
-  into a non-testing module, e.g. `packages/db/src/connection-string.ts`. Keep
-  `requireLocalConnectionString` for `scripts/seed-history.ts`, and reuse its `LOCAL_HOSTS` and
-  the refusal of a `host` or `hostaddr` query parameter. Add a pure check over (connection
-  string, site URL):
-  - a local host is always allowed;
-  - a hosted host is allowed if the user is `cache_client` (also `cache_client.<ref>`, for the
-    pooler form);
-  - otherwise it is allowed only if the site URL is set and its host is not local.
-  - Refuse a `user` query parameter for the same reason as the host ones.
-- **Call the check in `initializeDatabase` before creating the pool.**
-  - `DatabaseConfig` gains a required `siteUrl: string | undefined`, required for the same reason
-    `log` is.
-  - The web passes it from its env (`apps/web/src/env.ts` already declares `SITE_URL`), the
-    worker from its env, and the scripts and test helpers from `process.env`.
-  - Callers to update: `apps/web/src/lib/server/db.ts`, `apps/worker/src/db.ts`,
-    `packages/db/src/env.ts`, `packages/db/scripts/migrate.ts`, and
-    `packages/db/src/testing/{run-database,breakable,unreachable}.ts`.
-  - Also `packages/browser-testing/src/identity.ts`.
-  - If `temporary-go-live-cache-import/main.ts` still exists, give it an explicit named opt-out.
-    It already demands a TTY and a typed `COMMIT`. Otherwise, land this after the caches plan's
-    PR 2 deletes it.
-- **CI:** add `SITE_URL: ${{ vars.SITE_URL }}` to the Migrate and Seed steps in
-  `.github/workflows/deploy.yml`, and make sure `turbo.json` passes it through to the `migrate`
-  and `seed:identity` tasks (strict env mode). This touches CI, which this task needs.
-- **Python:** `cache_sync.connect()`
-  (`python/lab/gbd_foodservice_insights_lab/cache_sync.py:87-99`) refuses a non-local host whose
-  user isn't `cache_client`. Parse it with `psycopg.conninfo.conninfo_to_dict`.
-- **Tests:**
-  - table-driven unit tests for the pure check, in the style of `local-database.test.ts`: local,
-    hosted as `postgres`, hosted as `cache_client`, deployed `SITE_URL`, a localhost `SITE_URL`,
-    and the query-parameter overrides;
-  - one test that `initializeDatabase` throws before connecting;
-  - a pytest for `connect()`'s refusal.
-
-## PR 2 — mark app connections (prefactor, no behaviour change)
+## PR 1 — mark app connections (prefactor, no behaviour change)
 
 - `buildPoolConfig` appends `-c gbd.writer=${applicationName ?? 'app'}` to `options`. Update the
   test of `buildPoolConfig` (`toEqual`).
 - **Deploy order matters.** After merging, the web deploys itself. **Dispatch the worker deploy by
-  hand.** PR 3 must not merge until both services run with this, or the old worker's writes start
+  hand.** PR 2 must not merge until both services run with this, or the old worker's writes start
   failing.
 
-## PR 3 — the guard
+## PR 2 — the guard
 
 - **New migration `packages/db/migrations/012_write_guard.ts`:**
   - `forbid_unmarked_write()`: plpgsql, `SET search_path = ''`, statement-level, returns NULL.
@@ -132,7 +96,8 @@ spell out the opt-in.
     `handle_new_auth_user`.
   - Cost: a handful of rolled-back statements, about 10 ms in total.
 - **Python:** check that `python/lab/tests/conftest.py`'s `test_database` fixture writes only to
-  cache tables (it connects as `postgres`, unmarked). If it writes anywhere else, have it set
+  cache tables (it connects as `postgres` through `psycopg.connect` directly, so unmarked, and
+  `cache_sync.connect()`'s refusal does not see it). If it writes anywhere else, have it set
   `gbd.writer`.
 - **Regenerate** `packages/db/public-schema.sql`, `metrics-schema.sql` and `auth-schema.sql`
   (`dump-schema`).
@@ -155,15 +120,13 @@ spell out the opt-in.
 ## Verification
 
 - **Each PR:** `pnpm lint && pnpm check && pnpm test`. Add `just lint && just check && just test`
-  and `TEST_DB=1 just test-lab` for PRs 1 and 3, which touch Python.
-- **Locally after PR 1:** with a fake `db.x.supabase.co` string in `DB_CONNECTION_STRING`,
-  `pnpm --filter @gbd/db migrate` refuses before any network call.
-- **Locally after PR 3:** with `psql` as `postgres` against the dev stack:
+  and `TEST_DB=1 just test-lab` for PR 2, which touches Python.
+- **Locally after PR 2:** with `psql` as `postgres` against the dev stack:
   - `update app_user …` and `create table t()` fail with `42501`;
   - an update to a cache row succeeds;
   - `truncate product_categorization` fails;
   - the `begin; set local …; rollback;` form allows the write.
-- **Production after PR 3 deploys:**
+- **Production after PR 2 deploys:**
   - in the Table Editor, editing an `app_user` cell shows the guard's error, while ticking
     `is_verified` on a cache row works;
   - in the SQL editor, `create table guard_probe()` fails, and succeeds inside the opt-in form

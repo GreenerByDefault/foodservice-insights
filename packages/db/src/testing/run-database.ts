@@ -222,6 +222,7 @@ async function buildTemplateDatabase(
   const stagingDatabase = initializeDatabase({
     connectionString: appStagingConnectionString,
     log: 'console',
+    siteUrl: process.env.SITE_URL,
   });
   try {
     await migrateToLatest(stagingDatabase);

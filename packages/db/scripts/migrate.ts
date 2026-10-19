@@ -20,6 +20,7 @@ const database = initializeDatabase({
   applicationName: 'migrate',
   limits: MIGRATE_DB_LIMITS,
   log: 'console',
+  siteUrl: process.env.SITE_URL,
 });
 
 try {

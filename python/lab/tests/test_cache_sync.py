@@ -256,6 +256,48 @@ def test_set_pulls_over_a_new_connection(monkeypatch: pytest.MonkeyPatch) -> Non
     assert pulled == [connection]
 
 
+@pytest.mark.parametrize(
+    "conninfo",
+    [
+        "postgresql://postgres:secret@db.abcdefghijklmnop.supabase.co:5432/postgres",
+        "postgresql://postgres@localhost/postgres?hostaddr=203.0.113.1",
+        "host=db.abcdefghijklmnop.supabase.co user=cache_client_admin",
+    ],
+)
+def test_connect_refuses_a_hosted_database_as_anyone_but_cache_client(
+    monkeypatch: pytest.MonkeyPatch, conninfo: str
+) -> None:
+    monkeypatch.setenv(VARIABLE, conninfo)
+    monkeypatch.setattr(psycopg, "connect", _never_connects)
+
+    with pytest.raises(cache_sync.CachePullError, match="AI agents: stop and ask a human"):
+        cache_sync.connect()
+
+
+@pytest.mark.parametrize(
+    "conninfo",
+    [
+        "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+        "postgresql://cache_client:secret@db.abcdefghijklmnop.supabase.co:5432/postgres",
+        "postgresql://cache_client.abcdefghijklmnop:secret@aws-0-us-east-1.pooler.supabase.com/postgres",
+    ],
+)
+def test_connect_accepts_a_local_stack_or_cache_client(
+    monkeypatch: pytest.MonkeyPatch, conninfo: str
+) -> None:
+    monkeypatch.setenv(VARIABLE, conninfo)
+    connected: list[str] = []
+    monkeypatch.setattr(psycopg, "connect", lambda conninfo, **_: connected.append(conninfo))
+
+    cache_sync.connect()
+
+    assert connected == [conninfo]
+
+
+def _never_connects(*_: object, **__: object) -> None:
+    raise AssertionError("connect() reached psycopg.connect")
+
+
 def test_connect_names_the_variable_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(VARIABLE, raising=False)
 

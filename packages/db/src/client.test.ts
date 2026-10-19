@@ -99,6 +99,16 @@ describe('shutdownDatabase', () => {
 });
 
 describe('initializeDatabase', () => {
+  test('refuses a hosted database as postgres from a checkout, before any connection', () => {
+    expect(() =>
+      initializeDatabase({
+        connectionString: 'postgresql://postgres:secret@db.abcdefghijklmnop.supabase.co/postgres',
+        log: 'console',
+        siteUrl: 'http://localhost:5173',
+      }),
+    ).toThrow('refusing to connect to db.abcdefghijklmnop.supabase.co as postgres');
+  });
+
   // `buildPoolConfig`'s `options` string is not type-checked by `pg` — a typo'd flag name there
   // would build without error and fail silently against a real server. This runs the assembled
   // string against one, so a bad flag would show up as the timeout never firing.
@@ -107,6 +117,7 @@ describe('initializeDatabase', () => {
       connectionString: requireEnv('DB_CONNECTION_STRING'),
       limits: { statementTimeoutMs: 100 },
       log: 'console',
+      siteUrl: process.env.SITE_URL,
     });
 
     try {
@@ -131,6 +142,7 @@ describe('initializeDatabase', () => {
       limits: { lockTimeoutMs: 1_234 },
       applicationName: 'client.test',
       log: 'console',
+      siteUrl: process.env.SITE_URL,
     });
 
     try {
@@ -150,6 +162,7 @@ describe('initializeDatabase', () => {
       connectionString: requireEnv('DB_CONNECTION_STRING'),
       limits: { minConnections: 1, maxConnections: 1 },
       log: sink.log,
+      siteUrl: process.env.SITE_URL,
     });
 
     try {

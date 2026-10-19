@@ -117,6 +117,7 @@ export async function breakableDatabase(): Promise<Breakable<Kysely<Database>>> 
   const service = initializeDatabase({
     connectionString: proxied.toString(),
     log: 'console',
+    siteUrl: process.env.SITE_URL,
   });
 
   return {
