@@ -24,7 +24,7 @@ pnpm grafana
 Open <http://localhost:55331>, not Grafana's own port: the dashboards are served from
 `resources/` by `gcx dev serve`, a proxy in front of a Grafana in Docker, and Grafana itself has
 none. Queries run against the dev database. Ctrl-C stops the proxy; `pnpm grafana:stop` stops
-Grafana.
+Grafana, which you need before a change to [`compose.yaml`](compose.yaml) takes effect.
 
 The files and the browser stay in step both ways:
 

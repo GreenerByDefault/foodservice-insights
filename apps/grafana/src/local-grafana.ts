@@ -24,13 +24,34 @@ const COMPOSE_FILE = join(import.meta.dirname, '..', 'compose.yaml');
 const READY_TIMEOUT_MS = 120_000;
 const READY_POLL_INTERVAL_MS = 500;
 
+/** How many times `startGrafana` runs `compose up`, for the race it describes. */
+const UP_ATTEMPTS = 5;
+
 export function grafanaUrl(grafana: LocalGrafana): string {
   return `http://127.0.0.1:${grafana.port}`;
 }
 
-/** Start the container if it is not running, and wait until Grafana answers. */
+/** Start the container if it is not running, and wait until Grafana answers.
+ *
+ * Safe to call from several worktrees at once:
+ * - `--no-recreate`, because worktrees on different branches can hold different `compose.yaml`s,
+ *   and Compose would otherwise replace the container whenever its config differs from the
+ *   caller's. That would take Grafana down mid-run for every other worktree, along with the data
+ *   sources they upserted. So a running container keeps its config until `stopGrafana`.
+ * - Retries: callers that find no container race to create it, then to start it, and a loser fails
+ *   on the container's name or its port. Once the winner's container is running, `up` just finds
+ *   it.
+ */
 export async function startGrafana(grafana: LocalGrafana): Promise<void> {
-  await compose(grafana, ['up', '--detach']);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await compose(grafana, ['up', '--detach', '--no-recreate']);
+      break;
+    } catch (cause) {
+      if (attempt === UP_ATTEMPTS) throw cause;
+      await new Promise((resolve) => setTimeout(resolve, READY_POLL_INTERVAL_MS));
+    }
+  }
   await waitUntilHealthy(grafana);
 }
 

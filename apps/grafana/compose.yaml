@@ -4,7 +4,8 @@
 services:
   grafana:
     # A 13.x tag: `grafana/grafana-oss` stopped updating at 12.4. Grafana Cloud always runs ahead of
-    # any pin, so bump this when a dashboard needs something newer.
+    # any pin, so bump this when a dashboard needs something newer. A running container keeps its
+    # config (`startGrafana` says why), so `pnpm grafana:stop` after changing this file.
     image: grafana/grafana:13.2.4
     ports:
       - 127.0.0.1:${GRAFANA_PORT:?}:3000

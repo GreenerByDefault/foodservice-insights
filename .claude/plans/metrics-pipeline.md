@@ -62,8 +62,14 @@ local Grafana tried 2026-10-19) that shape the design:
   Grafana, upserts the `metrics` data source, and runs `gcx dev serve` over `resources/`, which
   holds the folder and `product`, whose one panel is reports per week. The pieces later PRs reuse:
   - [`src/local-grafana.ts`](../../apps/grafana/src/local-grafana.ts): `LocalGrafana`, a Compose
-    project and a port; `DEV_GRAFANA`, on 55330; `startGrafana`, which is `compose up --detach`
-    and a wait on `/api/health`; `stopGrafana`; `grafanaUrl`.
+    project and a port; `DEV_GRAFANA`, on 55330; `startGrafana`; `stopGrafana`; `grafanaUrl`.
+    `startGrafana` is safe to call from several worktrees at once, as the test Grafana's callers
+    will. Tried with two worktrees on 2026-10-19: with a plain `compose up`, simultaneous cold
+    starts failed every time on the container's name, and a worktree whose `compose.yaml` differed
+    recreated the container, taking Grafana down for about two seconds and every other run's
+    data source with it. So it runs `up --no-recreate`, retried a few times, and 45 cold starts
+    from three callers then all succeeded. A running container keeps its config until
+    `stopGrafana`; CI starts from nothing, so it always runs the pinned one.
   - [`src/data-source.ts`](../../apps/grafana/src/data-source.ts): `buildDataSource(connectionString)`
     and `upsertDataSource(grafanaUrl, dataSource)`, which sends no credentials yet.
     `buildDataSource` always names its result `DATA_SOURCE_UID` (`metrics`), with a pool of 4. It
@@ -334,9 +340,6 @@ exist and the tombstones keep the ones a delete removes.
 - `buildDataSource` takes the uid and the pool limits as arguments, so the test names its run's
   data source and passes one connection and no idle ones, while dev and Cloud keep `metrics` and
   theirs.
-- **Open:** two worktrees starting the test Grafana at once each run `compose up` on one project,
-  and may race to create its container. Serialize the start, as the screenshot suite's
-  `browser-container.ts` does, if that turns out to fail.
 - `@gbd/grafana` depends on `@gbd/db`, so Turbo's affected filter reruns the check when a
   migration changes. The `ts-unit` job needs no change beyond Docker, which its runner already
   has for Supabase.

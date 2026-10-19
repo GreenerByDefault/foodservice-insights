@@ -91,9 +91,10 @@ python_lab:
   - *docker_files
   - *non_code
 
-# Whole-stack e2e depends on nearly everything; the lab is the one real exclusion, since nothing
-# imports it and it's not in the worker image.
+# Whole-stack e2e depends on nearly everything. The exclusions are what neither image contains and
+# nothing in them imports: the lab, and the dashboards.
 system:
   - '**'
   - '!python/lab/**'
+  - '!apps/grafana/**'
   - *docs_and_agent_files
