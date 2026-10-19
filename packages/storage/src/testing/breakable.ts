@@ -14,13 +14,6 @@ import { initializeBlobStore, shutdownBlobStore } from '../client.ts';
 
 export type { Breakable } from '@gbd/db/testing';
 
-const FAST_STORAGE_LIMITS = {
-  connectionTimeoutMs: 100,
-  attemptTimeoutMs: 200,
-  retryDelayBaseMs: 1,
-  requestDeadlineMs: 1_000,
-};
-
 const NOTHING_LISTENS_HERE = { hostname: LOCALHOST, port: UNREACHABLE_PORT };
 
 /** A `BlobStore` whose requests can be redirected to a dead address and back, so `break()`
@@ -42,7 +35,11 @@ export async function breakableBlobStore(): Promise<Breakable<BlobStore>> {
     accessKeyId: requireEnv('S3_ACCESS_KEY_ID'),
     secretAccessKey: requireEnv('S3_SECRET_ACCESS_KEY'),
     bucket: requireEnv('S3_BUCKET'),
-    limits: FAST_STORAGE_LIMITS,
+    // Only the backoff is shortened. The broken address refuses the connection outright, so a
+    // connection or attempt timeout never decides how fast `break()` fails; one would only cap
+    // the restored path against the real store, whose first request on a cold CI runner has taken
+    // over 400ms. A 200ms cap there failed every attempt.
+    limits: { retryDelayBaseMs: 1 },
   });
 
   let broken = false;
