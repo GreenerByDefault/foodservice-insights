@@ -7,6 +7,7 @@ import {
   SYNTHETIC_EMAIL_DOMAIN,
   SYNTHETIC_SLUG_PREFIX,
 } from './insert.ts';
+import { planSyntheticHistory, SYNTHETIC_HISTORY_SEED, type SyntheticHistoryPlan } from './plan.ts';
 
 /** Swap the synthetic history for a fresh one, ending today, so running this twice leaves what
  * running it once does. Rows anyone made by hand, the placeholder identity included, are untouched.
@@ -14,6 +15,7 @@ import {
  * One transaction, under a lock, so two runs at once cannot interleave into two histories. */
 export async function replaceSyntheticHistory(
   database: DatabaseExecutor,
+  plan: SyntheticHistoryPlan = planSyntheticHistory(SYNTHETIC_HISTORY_SEED),
 ): Promise<InsertedSyntheticHistory> {
   return await withTransaction(database, async (transaction) => {
     await sql`SELECT pg_advisory_xact_lock(hashtext('seed:history'))`.execute(transaction);
@@ -51,6 +53,6 @@ export async function replaceSyntheticHistory(
       `.execute(transaction);
     }
 
-    return await insertSyntheticHistory(transaction);
+    return await insertSyntheticHistory(transaction, plan);
   });
 }
