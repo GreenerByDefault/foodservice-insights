@@ -108,6 +108,14 @@
       "dependsOn": ["^build"],
       "cache": false
     },
+    "grafana": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "grafana:stop": {
+      "cache": false
+    },
     "truncate": {
       "dependsOn": ["^build"],
       "cache": false

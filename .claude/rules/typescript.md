@@ -87,7 +87,8 @@ finishes: two concurrent builds of `apps/web` write the same `.svelte-kit/output
 
 ## Database
 
-Applies to `packages/db` and every app or package that imports it (`apps/web`, `apps/worker`).
+Applies to `packages/db` and every app or package that imports it (`apps/web`, `apps/worker`,
+`apps/grafana`).
 
 - **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, `migrate` and `truncate`,
   Kanel, and vitest. Without it, you are pointed at the dev database and blob store. The
@@ -133,9 +134,9 @@ Applies to `packages/storage` and every app or package that imports it.
 - **Quote parentheses in shell commands.** Route groups mean paths like
   `'src/routes/(app)'` need quoting or the shell mangles them.
 - **`lint` and `fmt` exist only at the root** — Biome runs repo-wide, so there is no per-package
-  lint. Every package has `check`, and every one but `tests/e2e` has `build`; every one has `test`
-  except `@gbd/browser-testing`, which has no tests, and `tests/e2e`, whose suite is
-  `test:system`. Scope one with `pnpm --filter @gbd/<pkg> test`, using the full `@gbd/` name.
+  lint. Every package has `check`, and every one but `tests/e2e` and `apps/grafana` has
+  `build`; every one has `test` except `@gbd/browser-testing`, which has no tests, and
+  `tests/e2e`, whose suite is `test:system`. Scope one with `pnpm --filter @gbd/<pkg> test`, using the full `@gbd/` name.
 
 ## Svelte and SvelteKit (`apps/web` only)
 

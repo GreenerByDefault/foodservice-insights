@@ -56,7 +56,9 @@ Classify a failure with `isTransientDatabaseError` or `isPermanentDatabaseError`
   the attempt, for reasons in [`migrations/003_attempt_telemetry.ts`](migrations/003_attempt_telemetry.ts).
 - **Audit.** `audit_event` is an append-only trail of key auth events.
 - **Metrics.** The `metrics` schema holds views for dashboards and alerts, read only by the
-  `metrics_reader` role. The reasoning is in [`migrations/009_metrics.ts`](migrations/009_metrics.ts).
+  `metrics_reader` role. The reasoning is in [`migrations/009_metrics.ts`](migrations/009_metrics.ts),
+  and the dashboards, with the steps for adding a metric, are in
+  [`apps/grafana/`](../../apps/grafana/README.md).
 
 ## Conventions
 

@@ -8,13 +8,13 @@ metric definitions in the database, a read-only role to read them, a Grafana tha
 against the dev stack, a check that runs every panel's query, and the push that ships dashboards
 to Grafana Cloud, which the team chose (`ARCHITECTURE.md` § Stack). The definitions and the role
 have landed, with the three base views every later view joins and the tombstones that keep them
-counting through hard deletes, and so has the synthetic history a local dashboard draws; what
-remains builds the rest of the pipe around one panel. What the
-dashboards show is [`dashboards.md`](dashboards.md). Nothing before the last PR needs a vendor
+counting through hard deletes. So have the synthetic history a local dashboard draws, and the
+local Grafana that draws it, with the first panel. What remains is the check that runs every
+panel's query, and the push to Grafana Cloud. What the dashboards show is [`dashboards.md`](dashboards.md). Nothing before the last PR needs a vendor
 account, and that PR needs only a Grafana Cloud stack.
 
-Facts from the tree (2026-09-27, with the attempt columns rechecked 2026-10-15) that shape the
-design:
+Facts from the tree (2026-09-27, with the attempt columns rechecked 2026-10-15, and gcx and the
+local Grafana tried 2026-10-19) that shape the design:
 
 - **The database is already an event log.** `analysis_attempt` carries `created_at`,
   `claimed_at` and `finished_at` under ordering constraints, plus `status`, `failure_reason` and
@@ -57,7 +57,41 @@ design:
   and `migrateToLatest` runs each batch in one transaction. When two migrations race on one
   `CREATE ROLE`, the loser waits on the winner's uncommitted row in `pg_authid` and then fails with
   `unique_violation`, not `duplicate_object`.
-- **Nothing runs Grafana locally.**
+- **The local Grafana has landed, in [`apps/grafana`](../../apps/grafana/)** (`@gbd/grafana`),
+  whose README is what a developer runs. `pnpm grafana` sets the local role password, starts
+  Grafana, upserts the `metrics` data source, and runs `gcx dev serve` over `resources/`, which
+  holds the folder and `product`, whose one panel is reports per week. The pieces later PRs reuse:
+  - [`src/local-grafana.ts`](../../apps/grafana/src/local-grafana.ts): `LocalGrafana`, a Compose
+    project and a port; `DEV_GRAFANA`, on 55330; `startGrafana`; `stopGrafana`; `grafanaUrl`.
+    `startGrafana` is safe to call from several worktrees at once, as the test Grafana's callers
+    will. Tried with two worktrees on 2026-10-19: with a plain `compose up`, simultaneous cold
+    starts failed every time on the container's name, and a worktree whose `compose.yaml` differed
+    recreated the container, taking Grafana down for about two seconds and every other run's
+    data source with it. So it runs `up --no-recreate`, retried a few times, and 45 cold starts
+    from three callers then all succeeded. A running container keeps its config until
+    `stopGrafana`; CI starts from nothing, so it always runs the pinned one.
+  - [`src/data-source.ts`](../../apps/grafana/src/data-source.ts): `buildDataSource(connectionString)`
+    and `upsertDataSource(grafanaUrl, dataSource)`, which sends no credentials yet.
+    `buildDataSource` always names its result `DATA_SOURCE_UID` (`metrics`), with a pool of 4. It
+    takes `sslmode` from the string and refuses any other parameter, rather than drop one.
+  - [`src/local-metrics-reader.ts`](../../apps/grafana/src/local-metrics-reader.ts):
+    `setLocalMetricsReaderPassword(connectionString)` and
+    `localMetricsConnectionString(connectionString)`, which turns a local stack's
+    `DB_CONNECTION_STRING`, or a run database's, into the address Grafana's container logs in at,
+    as `metrics_reader`. Both refuse a host that is not local.
+  - [`gcx.yaml`](../../apps/grafana/gcx.yaml): gcx's config for the dev Grafana, passed with
+    `--config` so a developer's own Cloud context is never the target.
+- **gcx 1.6.0's dev server serves only `dashboard.grafana.app/v2beta1`.** Its proxy answers 404 to
+  Grafana's API discovery, so the frontend falls back to asking for `v2beta1`, and the proxy
+  converts nothing: a `v2` file renders as "not found". Grafana itself takes a pushed `v2beta1`
+  file and converts it.
+- **Neither gcx nor Grafana fills in defaults.** A file missing a field Grafana expects, such as
+  `links`, fails to render. A UI save through the dev server writes the file back in gcx's
+  canonical form, keys sorted and every default spelled out, so it keeps no comment. A file
+  already in that form gets a diff of only what changed.
+- **gcx reads its target from the environment**: `GRAFANA_SERVER`, `GRAFANA_TOKEN`, and
+  `GRAFANA_STACK_ID` for a Grafana Cloud stack's namespace, layered over the selected context.
+  Against the local Grafana it needs no credentials, since every visitor is an admin.
 - **The synthetic history has landed**, in
   [`src/testing/history/`](../../packages/db/src/testing/history/).
   `insertSyntheticHistory(database)`, exported from `@gbd/db/testing`, writes six months of
@@ -66,8 +100,8 @@ design:
   `SYNTHETIC_HISTORY_SPAN_MS`, exported beside it, is how far back it reaches. `pnpm seed:history`
   replaces the dev database's copy through `replaceSyntheticHistory`, and refuses a host that is
   not local through `requireLocalConnectionString`
-  ([`local-database.ts`](../../packages/db/src/testing/local-database.ts)), which is not yet
-  exported from `@gbd/db/testing`.
+  ([`local-database.ts`](../../packages/db/src/testing/local-database.ts)), exported from
+  `@gbd/db/testing`.
 - **The test stack's `postgres` database is shared by every worktree, whatever its branch.**
   Each package's vitest `globalSetup` migrates it and nothing truncates it; isolation comes from
   `withRollback`, and from claim and sweep tests narrowing to their own reports. So it can hold
@@ -127,13 +161,14 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
   what lets several worktrees' panel checks, one connection each, run at once against the
   cluster-wide limit.
 - **The password is never in a migration.** On the hosted project it is set once, by hand, in
-  the SQL editor. On the two local stacks the Grafana scripts set a fixed local password before
-  anything connects. That password is committed in the same spirit as `.env.test`'s S3 keys:
-  it opens nothing that is not already open on localhost.
-  Setting it is an `ALTER ROLE` on the same shared catalog row, so concurrent sessions would race
-  on it as they do on `CREATE ROLE`. The helper first tries to log in as `metrics_reader`, and
-  only if that fails takes an advisory lock in the `postgres` database and sets the password. A
-  stack that already has it, which is nearly every call, writes nothing.
+  the SQL editor. On the two local stacks `setLocalMetricsReaderPassword` sets a fixed one,
+  `LOCAL_METRICS_READER_PASSWORD`, before anything connects. It is committed in the same spirit as
+  `.env.test`'s S3 keys: it opens nothing that is not already open on localhost.
+  Setting it is an `ALTER ROLE` on one shared catalog row, and concurrent ones fail with "tuple
+  concurrently updated", so every call takes an advisory lock in the `postgres` database first.
+  The test of four concurrent calls fails every time without it.
+  *Rejected: trying to log in first, and writing only on failure.* It saves one catalog write per
+  call, at the cost of a second connection and a branch to test.
 
 ### Grafana, locally
 
@@ -144,7 +179,8 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
     `host.docker.internal`.
   - Both are bound to 127.0.0.1, with anonymous Admin access, so there is no login.
   - Neither mounts anything from a worktree, so all worktrees share them, as they share the
-    Supabase stacks.
+    Supabase stacks. Neither keeps a volume either: the data source is upserted on every start
+    and the dashboards are served from disk, so Grafana holds nothing worth keeping.
   - The image is pinned to a 13.x tag; `grafana/grafana-oss` stopped updating at 12.4. Grafana
     Cloud always runs ahead of any pin, so bump the pin when a dashboard needs something newer.
 - **Dashboards are files in Grafana's Kubernetes resource format**, one file per dashboard:
@@ -154,12 +190,15 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
   ([#122663](https://github.com/grafana/grafana/issues/122663)). The wrapper states which model a
   file is in, so the model cannot change without showing in the diff. It is also the one format
   that gcx, Git Sync and Grafana's API all read.
-  Files use the **v2 model** (`dashboard.grafana.app/v2`): it is what a UI save produces in
-  Grafana 13, so a save through the dev server never converts a file between models.
+  Files use the **v2 model at `dashboard.grafana.app/v2beta1`**, the one version the dev server
+  can serve (§ Context), and the one a UI save through it writes. Each file is in the canonical
+  form a save writes, so a later save's diff is only its change. Panel queries sit at
+  `spec.elements.<name>.spec.data.spec.queries[].spec.query.spec.rawSql`, which is where the
+  panel check reads them.
+  *Rejected: `v2`, the version Grafana 13 stores.* The dev server renders nothing at it. Move to
+  it once a gcx release converts between versions, or answers discovery.
   *Rejected: v1, the classic model.* Every older Grafana example and most of an agent's training
-  data use it, but it is the legacy model now. Storing it would mean converting on every UI save,
-  and whether that conversion is lossless is unverified. The panel check reads queries at their
-  v2 path.
+  data use it, but it is the legacy model now, and the dev server cannot serve it either.
 - **The local loop is `gcx dev serve`**, the dev server in Grafana's CLI. `pnpm grafana` starts
   the container, pushes the data source to it, and then runs the dev server. It is a proxy in
   front of the local Grafana that:
@@ -168,21 +207,22 @@ Out of scope: the panels beyond the first, and every view beyond the three base 
   - writes a save made in the UI back to the file.
 
   So an agent's edit appears in the open browser tab on its own, and a person's save in the UI
-  appears as a diff. Queries still run through the real Grafana, against the dev database.
-  **Open, verify in PR 1:** the write-back. gcx documents it, but nobody here has seen it work.
-  If it disappoints, the fallback is to save in Grafana directly and run `gcx resources pull`,
-  which is the same tool writing the same files.
+  appears as a diff. Queries still run through the real Grafana, against the dev database. All
+  three were seen working, with gcx 1.6.0 and Grafana 13.2.4.
   gcx is one Go binary: installed with Homebrew locally, and pinned, with its checksum verified,
   in CI. Only working on dashboards and deploying need it; `pnpm test` does not.
 - **The data source is code, not a file**, because its connection is the one thing that
   differs between environments, and gcx reads only a data source's secrets from the
   environment.
-  - A function in `apps/grafana/src/` builds it: its type, its uid (`metrics`, which every panel
-    names) and its pool limits.
-  - It reads `METRICS_DB_CONNECTION_STRING`, the address as Grafana sees it:
-    `host.docker.internal` in `.env.example` and `.env.test`, and in a GitHub secret the hosted
-    project's direct connection as `metrics_reader`, carrying TLS as `sslmode` and `sslrootcert`
-    the way every hand-composed string does ([`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Supabase).
+  - `buildDataSource` builds it from a connection string, the address as Grafana sees it: its
+    type, its uid (`metrics`, which every panel names) and its pool limits.
+  - Locally that string is derived, by `localMetricsConnectionString`, from the stack's own
+    `DB_CONNECTION_STRING`, so there is no second variable to keep in step with it. On Grafana
+    Cloud it is `METRICS_DB_CONNECTION_STRING`, a GitHub secret holding the hosted project's
+    direct connection as `metrics_reader`, carrying TLS as `sslmode` and `sslrootcert` the way
+    every hand-composed string does ([`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Supabase).
+    Grafana Cloud cannot read a path, so the builder turns `sslrootcert` into the CA's contents,
+    as `tlsConfigurationMethod: file-content` and `secureJsonData.tlsCACert`.
   - One API call upserts it into the dev, test or Cloud Grafana.
   - Grafana's pool is capped at 4, below the role's `CONNECTION LIMIT` (§ Access), so Grafana
     waits for a free connection instead of being refused one.
@@ -282,69 +322,41 @@ where agents operate. Explore production data in Grafana Cloud instead.
 Everything left can follow launch without losing history, since the views read rows that already
 exist and the tombstones keep the ones a delete removes.
 
-## PR 1 — Grafana locally
-
-- A new workspace package, `apps/grafana` (`@gbd/grafana`). It is an app because `deploy.yml`
-  ships it, even though it has no image. It holds:
-  - `compose.yaml`, parameterized by port and project name for the two stacks, with a named
-    volume so Grafana's own state survives a restart.
-  - `src/data-source.ts`: builds the data source from a connection string and upserts it. The
-    builder is pure and gets a unit test.
-  - `src/local-password.ts`: the guarded helper from Decisions that sets the local role password.
-    It refuses a host that is not local with `requireLocalConnectionString`, which this PR
-    exports from `@gbd/db/testing`. PR 2's setup calls it too.
-  - `scripts/start.ts`, behind `pnpm grafana`. It sets the local role password with that helper. Then it brings the dev container up, waits for
-    `/api/health`, upserts the data source, and runs `gcx dev serve` over `resources/`.
-    `pnpm grafana:stop` takes the container down.
-  - `resources/`: the folder, plus `product`, the first dashboard, with one panel: reports per
-    week. It is what the panel check and the push have to run against, and `dashboards.md`
-    fills the dashboard.
-- `METRICS_DB_CONNECTION_STRING` goes in `.env.example`, `.env.test` and `turbo.json`'s
-  `globalPassThroughEnv`, since Turbo strips any variable it does not list.
-- `pnpm grafana` is not a `dev` task, so `pnpm dev` never starts Grafana; like the Supabase
-  stacks, it is opt-in.
-- Settle the write-back **Open** in Decisions before writing the dashboard, since the answer
-  decides whether the loop is the dev server or `gcx resources pull`.
-- `apps/grafana/README.md` covers:
-  - the gcx prerequisite (Homebrew), needed only for this package;
-  - what a developer runs, `pnpm seed:history` first;
-  - how to add a metric: a migration, a view test, the rows it reads in the synthetic history,
-    then a panel.
-
-  The root README's everyday-commands table gains `pnpm grafana`.
-
-## PR 2 — every panel query runs in `pnpm test`
+## PR 1 — every panel query runs in `pnpm test`
 
 - `apps/grafana`'s vitest `globalSetup`:
   - sweeps stale run databases and run data sources;
   - builds or reuses the template, clones a run database, and writes the synthetic history into
     it with `insertSyntheticHistory`;
-  - starts the test Grafana if it is not already running, and sets the local role password with
-    the guarded helper;
-  - upserts the run's data source with PR 1's function, given the run database's connection
-    string as Grafana sees it;
+  - starts the test Grafana, a `TEST_GRAFANA` beside `DEV_GRAFANA` on 65330, and sets the
+    local role password with `setLocalMetricsReaderPassword`;
+  - upserts the run's data source with `buildDataSource` and `upsertDataSource`, given
+    `localMetricsConnectionString` of the run database's connection string;
   - hands the data source's uid to the tests through vitest's `provide`.
   Its teardown deletes the data source, then drops the run database. No gcx is involved.
 - The panel check from Decisions, with one test case per panel, named by dashboard and panel
   title, over the last `SYNTHETIC_HISTORY_SPAN_MS`. Each case fails on an error or on zero rows. The file also checks that every panel names
   the `metrics` data source, and that every file is at the pinned `apiVersion`.
-- PR 1's data source builder takes the pool limits as an argument, so the test passes one
-  connection and no idle ones while dev and Cloud keep theirs.
+- `buildDataSource` takes the uid and the pool limits as arguments, so the test names its run's
+  data source and passes one connection and no idle ones, while dev and Cloud keep `metrics` and
+  theirs.
 - `@gbd/grafana` depends on `@gbd/db`, so Turbo's affected filter reruns the check when a
   migration changes. The `ts-unit` job needs no change beyond Docker, which its runner already
   has for Supabase.
 - `.claude/rules/typescript.md` gains a note that a change to a `metrics` view or a dashboard
   is covered by `pnpm test`, with the panel check as the reason.
 
-This PR needs PR 1's data source builder.
-
-## PR 3 — Grafana Cloud
+## PR 2 — Grafana Cloud
 
 - Do the manual steps from Decisions first: the stack, the service account, the role password,
   and the secrets.
 - `apps/grafana/scripts/deploy.ts`, which reads `GRAFANA_URL`, `GRAFANA_TOKEN` and
   `METRICS_DB_CONNECTION_STRING`. It upserts the data source, runs `gcx resources push`, and then
-  prunes.
+  prunes. `upsertDataSource` gains the token, and `buildDataSource` the `sslrootcert` handling
+  from Decisions. gcx runs without `gcx.yaml`, which names only the local Grafana, so it takes
+  its target from `GRAFANA_SERVER`, `GRAFANA_TOKEN` and `GRAFANA_STACK_ID` (§ Context). If the
+  step runs through Turbo, the variables it reads go in `turbo.json`'s `globalPassThroughEnv`,
+  since Turbo strips any variable it does not list.
 - `.github/actions/setup-gcx`: installs gcx at a pinned version, through its install script,
   which verifies the release checksum.
 - A step at the end of `deploy-web` runs it, with the conditions from Decisions and a comment
@@ -366,13 +378,9 @@ This PR needs PR 1's data source builder.
 
 Each PR is verified by `pnpm lint && pnpm check && pnpm test`. Then by hand:
 
-- After PR 1, `pnpm grafana` serves the product dashboard, and its panel draws a shape from
-  `pnpm seed:history`. Running `pnpm seed:history` a second time leaves the panel's totals
-  unchanged. Editing the panel's SQL in the file reloads the open tab. Saving a change in the UI
-  gives a diff containing only that change.
-- After PR 2, renaming a column in a view without touching the dashboard fails `pnpm test`, and
+- After PR 1, renaming a column in a view without touching the dashboard fails `pnpm test`, and
   names the panel. So does a panel whose filter matches nothing. Two worktrees running
   `pnpm test` at once both pass, and leave no run database or run data source behind.
-- After PR 3, the first deploy creates the folder, the data source and the dashboard in Grafana
+- After PR 2, the first deploy creates the folder, the data source and the dashboard in Grafana
   Cloud. A query in Explore shows a real attempt's `queue_seconds`. Deleting a dashboard's file
   removes it at the next deploy.

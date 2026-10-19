@@ -71,7 +71,7 @@ async function metricsReaderRole(database: Kysely<any>): Promise<void> {
   // as with `cache_client`. INHERIT FALSE, so `postgres` gains nothing from it.
   //
   // No password here. It is set by hand on the hosted project, and the local stacks set a fixed
-  // local one before anything logs in.
+  // local one before anything logs in (`apps/grafana/src/local-metrics-reader.ts`).
   await sql`
     DO $$ BEGIN
       CREATE ROLE metrics_reader LOGIN NOINHERIT CONNECTION LIMIT 5;
