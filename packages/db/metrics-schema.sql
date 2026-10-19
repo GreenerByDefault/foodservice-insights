@@ -329,6 +329,27 @@ ALTER TABLE ONLY "metrics"."purged_user"
 
 
 --
+-- Name: purged_attempt forbid_unmarked_write; Type: TRIGGER; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "metrics"."purged_attempt" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: purged_report forbid_unmarked_write; Type: TRIGGER; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "metrics"."purged_report" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: purged_user forbid_unmarked_write; Type: TRIGGER; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "metrics"."purged_user" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
 -- Name: SCHEMA "metrics"; Type: ACL; Schema: -; Owner: postgres
 --
 

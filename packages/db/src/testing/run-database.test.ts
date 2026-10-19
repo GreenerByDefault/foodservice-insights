@@ -163,7 +163,12 @@ describe('sweepStaleRunDatabases', () => {
 
 describe('sweepStaleGoTrueUsers', () => {
   test("deletes an old user at the domain, and spares a young one and another domain's", async () => {
-    const maintenance = new Client({ connectionString: CONNECTION_STRING });
+    // Sends `gbd.writer`, as `initializeDatabase` does; without it, the write guard refuses this
+    // client's writes to `auth.users`.
+    const maintenance = new Client({
+      connectionString: CONNECTION_STRING,
+      options: '-c gbd.writer=test',
+    });
     await maintenance.connect();
 
     // A domain of this test's own, so a concurrent run's users are never in play.

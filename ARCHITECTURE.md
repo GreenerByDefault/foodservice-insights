@@ -69,6 +69,25 @@ IPv4 add-on, without which the direct host is unreachable from IPv4-only clients
 runners. Every client's share of `max_connections`, Supabase's own included, is budgeted in
 [`budget.ts`](packages/db/src/budget.ts), which owns the reasoning and the numbers.
 
+**Production is read-only outside the apps.** The apps, the Supabase dashboard and anyone holding the production connection string
+all log in as the same role, `postgres`. So the apps mark themselves: `initializeDatabase` tags
+every connection it opens with `gbd.writer`, and the database refuses any write or schema change
+from a `postgres` session without that tag. As a result:
+
+- Every process that writes must connect through `initializeDatabase`.
+- A person who needs to write by hand follows the runbook "Write to the database by hand".
+  Reviewing the caches in the Table Editor is the one exception, and needs no runbook.
+
+The reasoning and the rejected alternatives are in
+[`012_write_guard.ts`](packages/db/migrations/012_write_guard.ts). Separately, a local checkout
+refuses to connect to a hosted database as anyone but `cache_client`
+([`connection-string.ts`](packages/db/src/connection-string.ts)).
+
+Neither safeguard covers what the dashboard does through Supabase's API rather than through SQL:
+changing project or Auth settings, deleting users or stored files, pausing the project. Only the
+paid Team plan's roles restrict those. If anyone adds a Supabase MCP server, configure it with
+`read_only=true&project_ref=…`.
+
 ## Web app
 
 SvelteKit covers both the frontend and the backend, using its default rendering strategy:
