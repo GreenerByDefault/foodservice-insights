@@ -7,11 +7,11 @@ over time. User country waits on [`user-country.md`](user-country.md).
 [`metrics-pipeline.md`](metrics-pipeline.md) builds the pipe:
 - the `metrics` schema and its three base views, read only by `metrics_reader`, with tombstones
   so hard-deleted rows stay counted (landed);
-- a synthetic history to draw (landed), and a local Grafana to draw it in;
+- a synthetic history to draw, and a local Grafana to draw it in (both landed);
 - a check in `pnpm test` that runs every panel's query;
 - the push to Grafana Cloud.
 
-It ships one dashboard, `product`, with one panel. This plan decides what goes through the pipe:
+It shipped one dashboard, `product`, with one panel, reports per week. This plan decides what goes through the pipe:
 which dashboards exist and who reads each, the views beyond the base ones, and the panels. The
 data alerts and the views they need are [`alerts.md`](alerts.md).
 
@@ -113,14 +113,14 @@ quality rows. Without that, a second run would double every telemetry panel.
 
 ## PR 1 — the product dashboard
 
-Needs `metrics-pipeline.md` PR 2, so the panel check covers these panels from the start.
+Needs `metrics-pipeline.md` PR 1, so the panel check covers these panels from the start.
 
 - `product` gains its starting panels beside the pipeline's reports per week. No migration: the
   base views and the synthetic history already cover them.
 
 ## PR 2 — the telemetry views, and the cost dashboard
 
-Needs `metrics-pipeline.md` PR 2. Independent of PR 1.
+Needs `metrics-pipeline.md` PR 1. Independent of PR 1 here.
 
 - The views from Decisions, in the next migration. Each gets its tests. The conventions test
   allowlists `requested_model` and `served_model` in `IDENTIFIER_TEXT_COLUMNS`, with their reasons.

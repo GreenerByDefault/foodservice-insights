@@ -1,0 +1,18 @@
+# A local Grafana, run by `src/local-grafana.ts`, which names the Compose project and the port for
+# each stack.
+
+services:
+  grafana:
+    # A 13.x tag: `grafana/grafana-oss` stopped updating at 12.4. Grafana Cloud always runs ahead of
+    # any pin, so bump this when a dashboard needs something newer.
+    image: grafana/grafana:13.2.4
+    ports:
+      - 127.0.0.1:${GRAFANA_PORT:?}:3000
+    # Anyone on this machine is an admin, with no login. The port is bound to 127.0.0.1 only.
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    # How the container reaches the Supabase stacks' Postgres, on Linux as well as macOS.
+    extra_hosts:
+      - host.docker.internal:host-gateway

@@ -39,6 +39,7 @@ export { setup } from './global-setup.ts';
 export type { InsertedSyntheticHistory } from './history/insert.ts';
 export { insertSyntheticHistory } from './history/insert.ts';
 export { SYNTHETIC_HISTORY_SPAN_MS } from './history/plan.ts';
+export { requireLocalConnectionString } from './local-database.ts';
 export type { RunDatabase } from './run-database.ts';
 export {
   createRunDatabase,

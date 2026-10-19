@@ -26,6 +26,8 @@
     "seed:identity": "turbo run seed:identity",
     "seed:history": "turbo run seed:history",
     "truncate": "turbo run truncate",
+    "grafana": "turbo run grafana --filter=@gbd/grafana",
+    "grafana:stop": "turbo run grafana:stop --filter=@gbd/grafana",
     "db:gen-types": "turbo run gen-types",
     "test:db:clean": "turbo run db:clean",
     "test:browser:stop": "turbo run test:browser:stop"

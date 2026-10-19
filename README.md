@@ -133,6 +133,7 @@ Everything above the TypeScript heading applies to both.
 | [`apps/web/sample-reports/README.md`](apps/web/sample-reports/README.md) | CSVs to upload by hand |
 | [`apps/web/src/lib/reports/csv/README.md`](apps/web/src/lib/reports/csv/README.md) | How an uploaded CSV is validated |
 | [`apps/worker/README.md`](apps/worker/README.md) | Running the worker parent, and where its pieces live |
+| [`apps/grafana/README.md`](apps/grafana/README.md) | The product dashboards, and adding a metric |
 | [`packages/browser-testing/README.md`](packages/browser-testing/README.md) | Playwright helpers both e2e suites share |
 | [`packages/core/README.md`](packages/core/README.md) | Values and helpers the web app and worker share |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
@@ -219,6 +220,7 @@ Turborepo.
 | `pnpm test:screenshots` | Pixel snapshots only, needs Docker (Playwright) |
 | `pnpm test:playwright` | `test:e2e` and `test:screenshots` together, one app boot |
 | `pnpm test:system` | Whole-system e2e, against both services' real Docker images — see [`tests/e2e/`](tests/e2e/) |
+| `pnpm grafana` | A local Grafana with the product dashboards, against the dev database — see [`apps/grafana/`](apps/grafana/README.md) |
 | `pnpm test` | Everything: `test:unit`, then `test:playwright` |
 | `pnpm build` | Production build of every package |
 

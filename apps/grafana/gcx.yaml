@@ -1,0 +1,18 @@
+# gcx's configuration for the local Grafana. `pnpm grafana` passes it with `--config`, which skips
+# your own `~/.config/gcx`, so a Grafana Cloud context there can never be the target. Pass it
+# yourself to run gcx by hand against the local Grafana:
+#
+#   gcx --config apps/grafana/gcx.yaml resources validate -p apps/grafana/resources
+#
+# No credentials: the local Grafana makes every visitor an admin (`compose.yaml`).
+version: 1
+stacks:
+  dev:
+    grafana:
+      # DEV_GRAFANA's port, in `src/local-grafana.ts`.
+      server: http://127.0.0.1:55330
+      org-id: 1
+contexts:
+  dev:
+    stack: dev
+current-context: dev
