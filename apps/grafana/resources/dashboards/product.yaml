@@ -27,6 +27,538 @@ spec:
   description: How customers use the product.
   editable: true
   elements:
+    at-a-glance:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: table
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        (SELECT count(*) FROM metrics.app_user
+                          WHERE email_confirmed_at IS NOT NULL AND purged_at IS NULL) AS "Users",
+                        (SELECT count(DISTINCT organization_id) FROM metrics.report
+                          WHERE $__timeFilter(created_at)) AS "Active organizations",
+                        (SELECT count(*) FROM metrics.report
+                          WHERE $__timeFilter(created_at)) AS "Reports",
+                        (SELECT avg((status = 'succeeded')::int)
+                          FROM (
+                            SELECT DISTINCT ON (a.report_id) a.status
+                            FROM metrics.attempt a
+                            JOIN metrics.report r ON r.id = a.report_id
+                            WHERE $__timeFilter(r.created_at)
+                            ORDER BY a.report_id, a.attempt_number DESC
+                          ) latest) AS "Reports delivered",
+                        (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY total_seconds) FROM metrics.attempt
+                          WHERE status = 'succeeded' AND $__timeFilter(created_at)) AS "p95 time to report"
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: 'Users is everyone signed in and not deleted, today. The rest
+          cover the time range: organizations that created a report, reports created,
+          the share of those whose latest attempt succeeded, and the 95th percentile
+          of created-to-finished time over succeeded attempts.'
+        id: 2
+        links: []
+        title: At a glance
+        vizConfig:
+          group: stat
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: text
+                  mode: fixed
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Reports delivered
+                properties:
+                - id: unit
+                  value: percentunit
+                - id: decimals
+                  value: 0
+              - matcher:
+                  id: byName
+                  options: p95 time to report
+                properties:
+                - id: unit
+                  value: s
+                - id: decimals
+                  value: 0
+            options:
+              colorMode: value
+              graphMode: none
+              justifyMode: center
+              orientation: vertical
+              percentChangeColorMode: standard
+              reduceOptions:
+                calcs:
+                - lastNotNull
+                fields: ""
+                values: false
+              showPercentChange: false
+              textMode: value_and_name
+              wideLayout: true
+          version: 13.2.4
+    attempt-time-per-week:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        date_trunc('week', created_at) AS time,
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY queue_seconds) AS "Queue p50",
+                        percentile_cont(0.95) WITHIN GROUP (ORDER BY queue_seconds) AS "Queue p95",
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY run_seconds) AS "Run p50",
+                        percentile_cont(0.95) WITHIN GROUP (ORDER BY run_seconds) AS "Run p95",
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY total_seconds) AS "Total p50",
+                        percentile_cont(0.95) WITHIN GROUP (ORDER BY total_seconds) AS "Total p95"
+                      FROM metrics.attempt
+                      WHERE claimed_at IS NOT NULL AND $__timeFilter(created_at)
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Median and 95th percentile, over the attempts created each week,
+          Monday to Sunday in UTC. Queue is created to claimed by a worker, run is
+          claimed to finished, total is created to finished. An attempt canceled before
+          a worker claimed it has none of these.
+        id: 6
+        links: []
+        title: Attempt time per week
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 2
+                  pointSize: 4
+                  scaleDistribution:
+                    type: linear
+                  showPoints: always
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: s
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Queue p50
+                properties:
+                - id: color
+                  value:
+                    fixedColor: yellow
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Queue p95
+                properties:
+                - id: color
+                  value:
+                    fixedColor: yellow
+                    mode: fixed
+                - id: custom.lineStyle
+                  value:
+                    dash:
+                    - 6
+                    - 4
+                    fill: dash
+                - id: custom.lineWidth
+                  value: 1
+              - matcher:
+                  id: byName
+                  options: Run p50
+                properties:
+                - id: color
+                  value:
+                    fixedColor: blue
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Run p95
+                properties:
+                - id: color
+                  value:
+                    fixedColor: blue
+                    mode: fixed
+                - id: custom.lineStyle
+                  value:
+                    dash:
+                    - 6
+                    - 4
+                    fill: dash
+                - id: custom.lineWidth
+                  value: 1
+              - matcher:
+                  id: byName
+                  options: Total p50
+                properties:
+                - id: color
+                  value:
+                    fixedColor: orange
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Total p95
+                properties:
+                - id: color
+                  value:
+                    fixedColor: orange
+                    mode: fixed
+                - id: custom.lineStyle
+                  value:
+                    dash:
+                    - 6
+                    - 4
+                    fill: dash
+                - id: custom.lineWidth
+                  value: 1
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    failed-attempts-per-week:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT date_trunc('week', finished_at) AS time, failure_reason::text AS metric, count(*) AS failed
+                      FROM metrics.attempt
+                      WHERE status = 'failed' AND $__timeFilter(finished_at)
+                      GROUP BY 1, 2
+                      ORDER BY 1, 2
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Attempts that ended failed each week, Monday to Sunday in UTC,
+          stacked by failure reason. A retry that fails again counts again. Includes
+          attempts since deleted.
+        id: 5
+        links: []
+        title: Failed attempts per week, by reason
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: bars
+                  fillOpacity: 80
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: normal
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides:
+              - matcher:
+                  id: byName
+                  options: child_crashed
+                properties:
+                - id: color
+                  value:
+                    fixedColor: red
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: contract_violation
+                properties:
+                - id: color
+                  value:
+                    fixedColor: dark-red
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: hung
+                properties:
+                - id: color
+                  value:
+                    fixedColor: orange
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: hard_timeout
+                properties:
+                - id: color
+                  value:
+                    fixedColor: yellow
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: upstream_api
+                properties:
+                - id: color
+                  value:
+                    fixedColor: purple
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: infrastructure
+                properties:
+                - id: color
+                  value:
+                    fixedColor: dark-purple
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: shut_down
+                properties:
+                - id: color
+                  value:
+                    fixedColor: blue
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: abandoned
+                properties:
+                - id: color
+                  value:
+                    fixedColor: light-blue
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: unusable_data
+                properties:
+                - id: color
+                  value:
+                    fixedColor: green
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: unknown
+                properties:
+                - id: color
+                  value:
+                    fixedColor: '#8e8e8e'
+                    mode: fixed
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    organizations-active-per-week:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT date_trunc('week', created_at) AS time, count(DISTINCT organization_id) AS organizations
+                      FROM metrics.report
+                      WHERE $__timeFilter(created_at)
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Organizations that created at least one report that week, Monday
+          to Sunday in UTC, including ones since deleted.
+        id: 4
+        links: []
+        title: Organizations active per week
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: purple
+                  mode: fixed
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: bars
+                  fillOpacity: 80
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides: []
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: false
+              tooltip:
+                hideZeros: false
+                mode: single
+                sort: none
+          version: 13.2.4
     reports-per-week:
       kind: Panel
       spec:
@@ -68,7 +600,8 @@ spec:
             fieldConfig:
               defaults:
                 color:
-                  mode: palette-classic
+                  fixedColor: green
+                  mode: fixed
                 custom:
                   axisBorderShow: false
                   axisCenteredZero: false
@@ -98,6 +631,7 @@ spec:
                     mode: none
                   thresholdsStyle:
                     mode: "off"
+                decimals: 0
                 thresholds:
                   mode: absolute
                   steps:
@@ -111,10 +645,124 @@ spec:
                 calcs: []
                 displayMode: list
                 placement: bottom
-                showLegend: true
+                showLegend: false
               tooltip:
                 hideZeros: false
                 mode: single
+                sort: none
+          version: 13.2.4
+    users-over-time:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        week AS time,
+                        count(u.id) AS "Users",
+                        count(u.id) FILTER (WHERE u.email_confirmed_at >= week) AS "Signed up"
+                      FROM generate_series(
+                        date_trunc('week', $__timeFrom()::timestamptz), $__timeTo()::timestamptz, interval '1 week'
+                      ) AS week
+                      LEFT JOIN metrics.app_user u
+                        ON u.email_confirmed_at < week + interval '1 week'
+                        AND (u.purged_at IS NULL OR u.purged_at >= week + interval '1 week')
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Users signed in at the end of each week, Monday to Sunday in
+          UTC, less deleted accounts; and how many confirmed their email that week.
+          Someone who requested a sign-in code and never entered it does not count.
+        id: 3
+        links: []
+        title: Users
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: blue
+                  mode: fixed
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 10
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: stepAfter
+                  lineWidth: 2
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: never
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Signed up
+                properties:
+                - id: color
+                  value:
+                    fixedColor: super-light-blue
+                    mode: fixed
+                - id: custom.drawStyle
+                  value: bars
+                - id: custom.fillOpacity
+                  value: 80
+                - id: custom.lineWidth
+                  value: 1
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
                 sort: none
           version: 13.2.4
   layout:
@@ -125,11 +773,56 @@ spec:
         spec:
           element:
             kind: ElementReference
-            name: reports-per-week
+            name: at-a-glance
+          height: 4
+          width: 24
+          x: 0
+          "y": 0
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: users-over-time
           height: 8
           width: 12
           x: 0
-          "y": 0
+          "y": 4
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: reports-per-week
+          height: 8
+          width: 12
+          x: 12
+          "y": 4
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: organizations-active-per-week
+          height: 8
+          width: 12
+          x: 0
+          "y": 12
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: failed-attempts-per-week
+          height: 8
+          width: 12
+          x: 12
+          "y": 12
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: attempt-time-per-week
+          height: 9
+          width: 24
+          x: 0
+          "y": 20
   links: []
   liveNow: false
   preload: false

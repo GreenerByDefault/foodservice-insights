@@ -11,9 +11,11 @@ The pipe has landed:
 - a synthetic history to draw, a local Grafana to draw it in, a check in `pnpm test` that runs
   every panel's query, and the push to Grafana Cloud ([`apps/grafana`](../../apps/grafana/README.md)).
 
-It shipped one dashboard, `product`, with one panel, reports per week. This plan decides what goes through the pipe:
-which dashboards exist and who reads each, the views beyond the base ones, and the panels. The
-data alerts and the views they need are [`alerts.md`](alerts.md).
+`product` is done. It holds a row of headline numbers, users, reports per week, organizations
+active per week, failed attempts per week by reason, and the median and p95 of queue, run and total
+time per week, all over the base views. What is left is the telemetry: the views over it, and the
+`cost`, `operations` and `impact` dashboards that read them. The data alerts and the views they
+need are [`alerts.md`](alerts.md).
 
 The plan ends when every § Metrics item and the attempt telemetry have panels. A metric after that
 follows `apps/grafana/README.md`'s recipe, with no plan.
@@ -68,7 +70,7 @@ Facts from the tree (2026-10-15, `main` at `d0335043`) that shape the design:
 
 | Dashboard | Reader | Starting panels |
 | --- | --- | --- |
-| `product` | GBD | users over time; reports per week; organizations active per week; p50 and p95 queue, run and total time per day; failed attempts per week, by reason |
+| `product` | GBD | at a glance; users over time; reports per week; organizations active per week; p50 and p95 queue, run and total time per week; failed attempts per week, by reason |
 | `cost` | GBD and us | AI cost per week; cost per succeeded report; cache hit rate; categorized share by kilograms |
 | `operations` | us | stage time p50 and p95; 429s per week; which checks warn most; peak memory; database connections (`alerts.md`) |
 | `impact` | GBD | CO2e analyzed and plant share per month |
@@ -80,6 +82,23 @@ migration and its columns are pinned.
 *Rejected: one product dashboard for everything.* It would hold about fifteen panels, with GBD's
 numbers among ours.
 
+### Weeks, not days
+
+A panel buckets by week, Monday to Sunday in UTC, and says so in its description. The synthetic
+history, like production for now, has about one and a half attempts a day, so a daily p95 is the
+slowest of one or two attempts and draws noise. A stage-time or cost percentile on `operations`
+or `cost` follows the same rule.
+
+### Looking like one product
+
+`product` set what the other dashboards follow:
+- a fixed color per series, never the classic palette's next one, so a failure reason or a stage
+  keeps its color across panels and two series never share a hue;
+- a p95 as the dashed twin of its p50, in the same color;
+- whole-number axes (`decimals: 0`) on a count, and no legend on a single-series panel, whose
+  title already names it;
+- a dashboard near Grafana's pool of six queries at once: `product` holds exactly six panels, its
+  headline numbers in one stat panel with one query.
 ### Views over the telemetry
 
 - **Each reads its telemetry table first, `LEFT JOIN`s `metrics.attempt`** for status, failure
@@ -111,14 +130,7 @@ fails a panel that returns nothing. For the telemetry, the generator:
 their tombstones, in the same transaction. The cascade from the telemetry row takes the usage and
 quality rows. Without that, a second run would double every telemetry panel.
 
-## PR 1 — the product dashboard
-
-- `product` gains its starting panels beside the pipeline's reports per week. No migration: the
-  base views and the synthetic history already cover them.
-
-## PR 2 — the telemetry views, and the cost dashboard
-
-Independent of PR 1 here.
+## PR 1 — the telemetry views, and the cost dashboard
 
 - The views from Decisions, in the next migration. Each gets its tests. The conventions test
   allowlists `requested_model` and `served_model` in `IDENTIFIER_TEXT_COLUMNS`, with their reasons.
@@ -126,16 +138,16 @@ Independent of PR 1 here.
   `counts_basis` values occur, and the replace test gains the telemetry case.
 - `cost`, with its starting panels.
 
-## PR 3 — the operations dashboard
+## PR 2 — the operations dashboard
 
-Needs PR 2's views.
+Needs PR 1's views.
 
 - `operations`, with its starting panels. If `alerts.md` PR 2 landed first, the dashboard
   already exists, holding its database-connections panel.
 
-## PR 4 — the impact dashboard
+## PR 3 — the impact dashboard
 
-Needs PR 2's views. Independent of PR 3.
+Needs PR 1's views. Independent of PR 2.
 
 - `impact`, with its starting panels.
 
@@ -147,6 +159,6 @@ Each PR runs `pnpm lint && pnpm check && pnpm test`, which sends every panel's q
 Grafana. Then by hand:
 
 - In `pnpm grafana`, every new panel draws a shape from `pnpm seed:history`.
-- After PR 2, with a small real file on `live`, the attempt shows its cost on `cost`, and the
+- After PR 1, with a small real file on `live`, the attempt shows its cost on `cost`, and the
   day's total is close to what OpenAI's dashboard shows for the project.
 - Once Grafana Cloud has the dashboards, a production attempt shows on each.
