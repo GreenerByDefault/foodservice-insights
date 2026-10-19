@@ -30,7 +30,8 @@ describe('buildPoolConfig', () => {
         `-c statement_timeout=${DEFAULT_LIMITS.statementTimeoutMs} ` +
         `-c idle_in_transaction_session_timeout=${DEFAULT_LIMITS.idleInTransactionSessionTimeoutMs} ` +
         `-c idle_session_timeout=${DEFAULT_LIMITS.idleSessionTimeoutMs} ` +
-        `-c lock_timeout=${DEFAULT_LIMITS.lockTimeoutMs}`,
+        `-c lock_timeout=${DEFAULT_LIMITS.lockTimeoutMs} ` +
+        '-c gbd.writer=app',
     });
   });
 
@@ -64,7 +65,7 @@ describe('buildPoolConfig', () => {
       allowExitOnIdle: false,
       options:
         '-c statement_timeout=6 -c idle_in_transaction_session_timeout=7 ' +
-        '-c idle_session_timeout=8 -c lock_timeout=9',
+        '-c idle_session_timeout=8 -c lock_timeout=9 -c gbd.writer=a\\ process',
       application_name: 'a process',
     });
   });
@@ -136,21 +137,25 @@ describe('initializeDatabase', () => {
     }
   });
 
-  test('the lock timeout and application name reach the real session', async () => {
+  // The space checks that `buildPoolConfig` escapes it, which only a real server's parsing shows.
+  test('the lock timeout, application name and writer mark reach the real session', async () => {
     const database = initializeDatabase({
       connectionString: requireEnv('DB_CONNECTION_STRING'),
       limits: { lockTimeoutMs: 1_234 },
-      applicationName: 'client.test',
+      applicationName: 'client test',
       log: 'console',
       siteUrl: process.env.SITE_URL,
     });
 
     try {
-      const { rows } = await sql<{ lockTimeout: string; applicationName: string }>`
+      const { rows } = await sql<{ lockTimeout: string; applicationName: string; writer: string }>`
       select current_setting('lock_timeout') as lock_timeout,
-        current_setting('application_name') as application_name
+        current_setting('application_name') as application_name,
+        current_setting('gbd.writer') as writer
     `.execute(database);
-      expect(rows).toEqual([{ lockTimeout: '1234ms', applicationName: 'client.test' }]);
+      expect(rows).toEqual([
+        { lockTimeout: '1234ms', applicationName: 'client test', writer: 'client test' },
+      ]);
     } finally {
       await shutdownDatabase(database);
     }
