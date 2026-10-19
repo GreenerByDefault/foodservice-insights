@@ -25,8 +25,9 @@ export type DataSource = {
   jsonData: {
     database: string;
     sslmode: SslMode;
+    tlsConfigurationMethod?: 'file-content';
   } & PoolLimits;
-  secureJsonData: { password: string };
+  secureJsonData: { password: string; tlsCACert?: string };
 };
 
 /** `connectionString` is the database as Grafana reaches it, so a local one names
@@ -66,12 +67,42 @@ function isSslMode(value: string | null): value is SslMode {
   return SSL_MODES.some((mode) => mode === value);
 }
 
+/** The `metrics` data source on Grafana Cloud. TLS is fixed here rather than read from the string:
+ * Grafana Cloud cannot read a path, so it gets the CA's contents, and a string that forgot `sslmode`
+ * cannot weaken it. */
+export function buildCloudDataSource(connectionString: string, caCert: string): DataSource {
+  const url = new URL(connectionString);
+  if (url.search !== '') {
+    throw new Error('the connection string must carry no parameters: TLS is set by the deploy');
+  }
+  url.searchParams.set('sslmode', 'verify-full');
+  const dataSource = buildDataSource(url.href);
+  return {
+    ...dataSource,
+    jsonData: { ...dataSource.jsonData, tlsConfigurationMethod: 'file-content' },
+    secureJsonData: { ...dataSource.secureJsonData, tlsCACert: caCert },
+  };
+}
+
+/** Headers for Grafana's API. The local Grafanas make every visitor an admin, so only Grafana Cloud
+ * needs `token`. */
+export function grafanaHeaders(token?: string): Record<string, string> {
+  return {
+    'content-type': 'application/json',
+    ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+  };
+}
+
 /** Create the data source in the Grafana at `grafanaUrl`, or replace the one with its uid. */
-export async function upsertDataSource(grafanaUrl: string, dataSource: DataSource): Promise<void> {
+export async function upsertDataSource(
+  grafanaUrl: string,
+  dataSource: DataSource,
+  token?: string,
+): Promise<void> {
   const send = (method: string, path: string) =>
     fetch(new URL(path, grafanaUrl), {
       method,
-      headers: { 'content-type': 'application/json' },
+      headers: grafanaHeaders(token),
       body: JSON.stringify(dataSource),
     });
 
@@ -80,6 +111,22 @@ export async function upsertDataSource(grafanaUrl: string, dataSource: DataSourc
   if (!response.ok) {
     throw new Error(
       `could not upsert the ${dataSource.uid} data source: ${response.status} ${await response.text()}`,
+    );
+  }
+}
+
+/** What the data source page's Test button does: connect, and throw Grafana's reason if it cannot. */
+export async function checkDataSourceHealth(
+  grafanaUrl: string,
+  uid: string,
+  token?: string,
+): Promise<void> {
+  const response = await fetch(new URL(`/api/datasources/uid/${uid}/health`, grafanaUrl), {
+    headers: grafanaHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `the ${uid} data source cannot connect: ${response.status} ${await response.text()}`,
     );
   }
 }

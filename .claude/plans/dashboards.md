@@ -4,12 +4,12 @@
 
 `REQUIREMENTS.md` § Metrics asks for users, reports, attempt timing, AI cost and failed attempts
 over time. User country waits on [`user-country.md`](user-country.md).
-[`metrics-pipeline.md`](metrics-pipeline.md) builds the pipe:
+The pipe has landed:
 - the `metrics` schema and its three base views, read only by `metrics_reader`, with tombstones
-  so hard-deleted rows stay counted (landed);
-- a synthetic history to draw, and a local Grafana to draw it in (both landed);
-- a check in `pnpm test` that runs every panel's query;
-- the push to Grafana Cloud.
+  so hard-deleted rows stay counted (`packages/db/migrations/009_metrics.ts` and
+  `011_metrics_tombstones.ts`);
+- a synthetic history to draw, a local Grafana to draw it in, a check in `pnpm test` that runs
+  every panel's query, and the push to Grafana Cloud ([`apps/grafana`](../../apps/grafana/README.md)).
 
 It shipped one dashboard, `product`, with one panel, reports per week. This plan decides what goes through the pipe:
 which dashboards exist and who reads each, the views beyond the base ones, and the panels. The
@@ -24,7 +24,7 @@ Facts from the tree (2026-10-15, `main` at `d0335043`) that shape the design:
   timing and failures are `GROUP BY`s over `metrics.app_user`, `metrics.report` and
   `metrics.attempt`, which keep hard-deleted rows through their tombstones. "Users over
   time" counts by `email_confirmed_at`, because a code request alone makes an `auth.users` row
-  (`metrics-pipeline.md` § Context).
+  (`metrics.app_user`'s comment in `009_metrics.ts`).
 - **AI cost comes from the attempt telemetry, which every ending records.** `003_attempt_telemetry`
   created `analysis_attempt_telemetry`, `analysis_attempt_llm_usage` and
   `analysis_attempt_quality_check`. The parent writes all three after the verdict, in one
@@ -59,8 +59,8 @@ Facts from the tree (2026-10-15, `main` at `d0335043`) that shape the design:
   cost panel a shape.
 - **With no FK, deleting an organization leaves its telemetry behind.** `withCommittedFixture`'s
   teardown already deletes its organizations' telemetry by `organization_id` for that reason.
-- **Grafana's pool serves about six panel queries at once** (`metrics-pipeline.md` § Access). A
-  bigger dashboard still loads, in waves.
+- **Grafana's pool serves about six panel queries at once** (`METRICS_POOL` in
+  `apps/grafana/src/data-source.ts`). A bigger dashboard still loads, in waves.
 
 ## Decisions
 

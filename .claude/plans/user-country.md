@@ -2,9 +2,9 @@
 
 > **Status:** a spec for a nice-to-have. `REQUIREMENTS.md` § Metrics wants to know which countries
 > users are in, in a privacy-preserving form, and there is no edge dashboard to read it from
-> (`ARCHITECTURE.md` § Hosting). Nothing schedules this: build it once the metrics pipe
-> ([`metrics-pipeline.md`](metrics-pipeline.md)) is up and someone wants the panel. The PR
-> deletes this file.
+> (`ARCHITECTURE.md` § Hosting). Nothing schedules this: build it once someone wants the panel.
+> The metrics pipe it rides ([`apps/grafana`](../../apps/grafana/README.md)) is up. The PR deletes
+> this file.
 
 ## Context
 

@@ -6,6 +6,7 @@
   "scripts": {
     "grafana": "node scripts/start.ts",
     "grafana:stop": "node scripts/stop.ts",
+    "grafana:deploy": "node scripts/deploy.ts",
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
     "test": "pnpm run test:unit"
@@ -13,13 +14,13 @@
   "dependencies": {
     "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
-    "pg": "catalog:"
+    "pg": "catalog:",
+    "yaml": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "yaml": "catalog:"
+    "vitest": "catalog:"
   }
 }

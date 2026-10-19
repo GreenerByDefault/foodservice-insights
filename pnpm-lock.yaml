@@ -186,6 +186,9 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -199,9 +202,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@24.13.3)(@vitest/browser-playwright@4.1.11)(vite@8.3.2(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.1))
-      yaml:
-        specifier: 'catalog:'
-        version: 2.9.1
 
   apps/web:
     dependencies:

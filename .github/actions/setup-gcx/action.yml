@@ -1,0 +1,23 @@
+name: Setup gcx
+description: Install Grafana's CLI at a pinned version, verified against its checksum
+
+# The deploy path pins every third-party action by commit SHA, and this is the same rule for a
+# binary: the release tarball is checked against a checksum recorded here, not one downloaded beside
+# it. Dependabot cannot bump it. To upgrade, change both values together, along with
+# `brew upgrade gcx` locally; the sha256 is in the release's `gcx_<version>_checksums.txt`.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GCX_VERSION: 1.6.0
+        GCX_SHA256: 335e051cda6edfb4ad5757540208961dbdfab6d89d4af11a4087de6ffa0ec111
+      run: |
+        archive="gcx_${GCX_VERSION}_linux_amd64.tar.gz"
+        dir="$RUNNER_TEMP/gcx"
+        mkdir -p "$dir"
+        curl --fail --silent --show-error --location --output "$dir/$archive" \
+          "https://github.com/grafana/gcx/releases/download/v${GCX_VERSION}/${archive}"
+        echo "${GCX_SHA256}  $dir/$archive" | sha256sum --check --strict
+        tar --extract --gzip --file "$dir/$archive" --directory "$dir" gcx
+        echo "$dir" >> "$GITHUB_PATH"

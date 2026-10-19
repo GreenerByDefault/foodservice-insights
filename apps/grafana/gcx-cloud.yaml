@@ -1,0 +1,12 @@
+# gcx's configuration for Grafana Cloud, which `scripts/deploy.ts` passes with `--config`. gcx will
+# not run without a context, but everything about the stack comes from the environment: the deploy
+# sets `GRAFANA_SERVER` and `GRAFANA_TOKEN`, and gcx discovers the stack's namespace from its
+# `/bootdata`. The stack's hostname stays out of the repo, which is public.
+version: 1
+stacks:
+  cloud:
+    grafana: {}
+contexts:
+  cloud:
+    stack: cloud
+current-context: cloud

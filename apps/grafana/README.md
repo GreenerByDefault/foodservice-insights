@@ -45,6 +45,13 @@ To add a dashboard, copy an existing file, then change its `metadata.name` and i
 requests `v2beta1`, and the proxy cannot convert a file stored at any other version, so the
 dashboard renders nothing. Grafana itself accepts `v2beta1` and converts it.
 
+## Deploying
+
+Each deploy of the web app pushes `resources/` to Grafana Cloud, after the database migrations.
+Deleting a dashboard's file deletes that dashboard there, and an edit made in Grafana Cloud's UI is
+overwritten by the next deploy. For exploratory work, use another folder, or pull its file into a
+PR.
+
 ## Adding a metric
 
 1. Add a view in a new migration, following the conventions for `metrics` views in
