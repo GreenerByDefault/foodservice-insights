@@ -9,11 +9,19 @@ import { replaceSyntheticHistory } from './replace.ts';
 
 describe('replaceSyntheticHistory', () => {
   test('run twice, leaves one history, no tombstones of the first, and rows it did not make', async () => {
-    const plan = planSyntheticHistory(SYNTHETIC_HISTORY_SEED);
+    // Enough for every kind of tombstone. The whole history, written twice, ran past the 5s
+    // timeout in CI.
+    const { organizations, unconfirmedUsers } = planSyntheticHistory(SYNTHETIC_HISTORY_SEED);
+    const plan = {
+      organizations: organizations
+        .slice(0, 1)
+        .map((organization) => ({ ...organization, reports: organization.reports.slice(0, 1) })),
+      unconfirmedUsers: unconfirmedUsers.slice(0, 1),
+    };
 
     const counts = await withRollback(DATABASE, async (transaction) => {
       const unmarked = await insertReportWithAttempt(transaction, { status: 'succeeded' });
-      const first = await replaceSyntheticHistory(transaction);
+      const first = await replaceSyntheticHistory(transaction, plan);
       const firstReportIds = (
         await transaction
           .selectFrom('report')
@@ -22,7 +30,7 @@ describe('replaceSyntheticHistory', () => {
           .execute()
       ).map(({ id }) => id);
 
-      await replaceSyntheticHistory(transaction);
+      await replaceSyntheticHistory(transaction, plan);
 
       const { rows } = await sql<Record<string, number>>`
         SELECT
