@@ -34,7 +34,7 @@ keep settled decisions settled — read them before proposing a change.
 | Hosting | DigitalOcean App Platform — [§ Hosting](#hosting) |
 | Email | Postmark, using HTTP and generated emails — [§ Email](#email) |
 | Logs and uptime monitoring | Better Stack ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#22-where-they-go)) |
-| Dashboards and data alerts | Grafana Cloud ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#31-why-grafana-cloud)) |
+| Dashboards and data alerts | Grafana Cloud, with Grafana OSS locally ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#31-why-grafana-cloud)) |
 
 ## Components
 
@@ -476,8 +476,8 @@ belongs to a fixed set of values.
 Secrets load as environment variables. Locally they all live in one gitignored file, `.env`,
 templated by `.env.example`. `.env.test` is committed because every value in it is safe in version control and needed for tests.
 
-GitHub Actions holds every production secret, for the migrate step in
-[`deploy.yml`](.github/workflows/deploy.yml) and for the running apps, which receive theirs at
+GitHub Actions holds every production secret, for the migrate step and the push to Grafana Cloud
+in [`deploy.yml`](.github/workflows/deploy.yml), and for the running apps, which receive theirs at
 deploy ([`.do/README.md`](.do/README.md)) — only in the `production` Environment, which only
 `main` can deploy from, never as repo secrets.
 
@@ -523,6 +523,10 @@ Product metrics are views in the database's `metrics` schema, one row per event,
 `metrics_reader` role, which can read nothing else. Dashboards and alerts query those views rather
 than the base tables, so each metric has one tested definition. The reasoning is in
 [`packages/db/migrations/009_metrics.ts`](packages/db/migrations/009_metrics.ts).
+
+Dashboards are files in [`apps/grafana`](apps/grafana/README.md). `deploy-web` pushes them to
+Grafana Cloud after it migrates, so a panel never arrives before its view, and overwrites any edit
+made in Grafana Cloud's UI.
 
 ## Failure modes
 

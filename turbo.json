@@ -116,6 +116,11 @@
     "grafana:stop": {
       "cache": false
     },
+    "grafana:deploy": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["GRAFANA_URL", "GRAFANA_TOKEN", "METRICS_DB_CONNECTION_STRING"]
+    },
     "truncate": {
       "dependsOn": ["^build"],
       "cache": false

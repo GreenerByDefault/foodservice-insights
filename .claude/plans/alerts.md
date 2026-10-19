@@ -28,13 +28,12 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   - **Open** in that table: alerting on Supabase Auth's OTP email. It is not this plan's.
     [`email-provider.md`](email-provider.md) § Not yet: bounce and complaint webhooks decides
     there is no alert at launch, and names what would trigger building one.
-- **[`metrics-pipeline.md`](metrics-pipeline.md) builds the pipe that data alerts ride.** It
-  adds views in a `metrics` schema, read only by `metrics_reader`; `apps/grafana`, which holds
-  dashboards as files; a local Grafana behind `gcx dev serve`; a check in `pnpm test` that runs
-  every panel's query; and a `deploy-web` step that pushes to Grafana Cloud after the migration.
-  The schema, the role and the base views have landed, in
-  `packages/db/migrations/009_metrics.ts`, with their tombstones in `011_metrics_tombstones.ts`,
-  and so have `apps/grafana` and the local Grafana. Its `metrics.attempt` carries `status`, `failure_reason`, the
+- **The pipe that data alerts ride has landed.** Views in a `metrics` schema, read only by
+  `metrics_reader`, are in `packages/db/migrations/009_metrics.ts`, with their tombstones in
+  `011_metrics_tombstones.ts`. [`apps/grafana`](../../apps/grafana/README.md) holds dashboards as
+  files, serves them from a local Grafana behind `gcx dev serve`, runs every panel's query in
+  `pnpm test`, and pushes to Grafana Cloud from `deploy-web` after the migration
+  (`scripts/deploy.ts`). `metrics.attempt` carries `status`, `failure_reason`, the
   three timestamps, and the notification columns these rules read. gcx manages alert rules as
   well as dashboards
   ([overview](https://grafana.com/docs/grafana/latest/as-code/observability-as-code/grafana-cli/gcx/overview/)).
@@ -85,7 +84,7 @@ point per vendor, if the team ends up working in a Slack channel.
 ### Data rules
 
 - **Each rule is a `count(*)` over a `metrics` view, with a threshold.** The view holds the
-  definition (`metrics-pipeline.md` § Definitions), and the rule holds the threshold, so tuning
+  definition (`009_metrics.ts`'s header), and the rule holds the threshold, so tuning
   an alert is an edit to a rule file, never a migration. The rules, with where each starts:
   - **Queue wait:** a `pending` attempt created more than 30 minutes ago. At three concurrent
     slots (one worker, `maxConcurrentAttempts`) and 2–15-minute attempts, a wait that long means demand beyond capacity, or no worker
@@ -157,7 +156,7 @@ have landed.
 
 ## PR 2 — the data rules
 
-Needs `metrics-pipeline.md` PR 1, so that a push to Grafana Cloud exists, and PR 1 here.
+Needs PR 1 here.
 
 - `apps/grafana/resources/`: one rule file per rule from Decisions, in a folder of its own.
   Thresholds sit in the files, each with a comment saying what firing would mean.

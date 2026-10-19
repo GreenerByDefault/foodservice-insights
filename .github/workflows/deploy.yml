@@ -164,6 +164,20 @@ jobs:
           git tag -f -a deploy/web "${{ github.sha }}" -m "digest: ${{ steps.deploy.outputs.digest }}"
           git push -f origin deploy/web
 
+      # The dashboards go last. After the migrate step, so no panel reaches Grafana Cloud before the
+      # view it reads; and after the deploy and its tag, so a Grafana outage can fail this run but
+      # never hold back the app. Edits made in the Grafana Cloud UI are overwritten here.
+      - uses: ./.github/actions/setup-gcx
+        if: env.superseded != 'true'
+
+      - name: Push dashboards to Grafana Cloud
+        if: env.superseded != 'true'
+        run: pnpm exec turbo run grafana:deploy
+        env:
+          GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          METRICS_DB_CONNECTION_STRING: ${{ secrets.METRICS_DB_CONNECTION_STRING }}
+
   deploy-worker:
     name: Deploy worker
     if: github.event_name == 'workflow_dispatch'
