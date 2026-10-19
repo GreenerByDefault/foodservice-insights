@@ -8,7 +8,8 @@
 Stack runs logs and uptime monitoring. The comparison behind those choices is in
 [the decision plan, as of the commit that recorded them](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md).
 This plan connects each promised alert to the system that already holds its data, and decides
-where alerts are delivered. Logs are [`logs.md`](logs.md).
+where alerts are delivered. Better Stack's monitor and log alert are
+[`better-stack.md`](better-stack.md).
 
 Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 
@@ -42,14 +43,6 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   project's data, bypassing Row Level Security", and none can be scoped
   ([API keys](https://supabase.com/docs/guides/api/api-keys)). Nothing in production holds one
   today.
-- **Better Stack's free plan** gives 10 monitors and heartbeats, **checked every 3 minutes**
-  (30 seconds is paid), and alerts by email or Slack but not by phone or SMS
-  ([check frequency](https://betterstack.com/docs/uptime/check-frequency/),
-  [pricing](https://betterstack.com/pricing)).
-- **`error` lines are already rare and deduplicated.** The worker logs only the first failure of a
-  streak at `error` ([`failureStreak`](../../apps/worker/src/failures.ts)). `handleError` logs at
-  `error` only what no route anticipated, and SvelteKit's own 404s and 405s are not logged.
-  Levels are written as labels: `"level":"error"`.
 - **Locally, mail goes to Mailpit**, inside the local Supabase stack.
 
 ## Decisions
@@ -62,7 +55,7 @@ two layers left to build:
 | Layer | Evaluated by | Rules | Defined in |
 | --- | --- | --- | --- |
 | Data | Grafana Cloud | `count(*)` over `metrics` views: queue wait, failures, attempts left `processing`, notifications gave up or stuck, database connections | Rule files in `apps/grafana/`, pushed by `deploy-web` |
-| Outside | Better Stack | The public `/health/ready`; any `error` log line | Its UI |
+| Outside | Better Stack | The public `/health/ready`; any `error` log line | Its UI, per [`better-stack.md`](better-stack.md) |
 
 The data alerts fire when the host is healthy but the queue is not. The monitor is the one alert
 that sees what a user sees, so it fires when the host's edge, DNS or TLS is what broke.
@@ -152,34 +145,6 @@ party, to draw charts the Supabase dashboard already draws. Revisit if someone n
 database CPU or disk, or history longer than Supabase's dashboard keeps. Then give it a dedicated
 secret key, so it can be revoked on its own.
 
-### Outside: Better Stack
-
-- **One monitor on the public `/health/ready`**, through the same DNS and edge a user goes
-  through, every 3 minutes on the free plan. It watches the starter domain until
-  [`custom-domain.md`](custom-domain.md) moves users to our domain, and then moves with them. Three minutes is slow for a page, but the host's readiness probe and the data
-  rules see most outages sooner. *Considered, not done: paying for 30-second checks.* Buy them if
-  an outage is ever reported to us before the monitor fires.
-- **An alert on any `error` line** from either app. `error` is already kept for things a person
-  should read (§ Context), and this alert catches what no other layer does: a 500 on a page, a
-  sweep that keeps failing, or a verdict write waiting out a database blip. Needs
-  [`logs.md`](logs.md) PR 1. **Open, verify in PR 3:** whether the free plan alerts on a log
-  query. If it does not, the query is saved and read whenever another alert fires, until logs
-  are paid for.
-- **Both are made in Better Stack's UI**, and `ARCHITECTURE.md` names them, so they are not
-  invisible. *Rejected: Better Stack's Terraform provider.* That is state to keep for two settings
-  made once.
-- *Considered, not done: a heartbeat from the worker.* It would be free and would say "no worker
-  is alive" during a quiet hour. Every failure mode is caught without it: a dead fleet shows up as
-  queue wait once there is demand, and a crash loop as `RESTART_COUNT`. Add one if that
-  quiet-hour notice is ever missed.
-- *Considered, not done: a scheduled check that submits a form.* A wrong `PROTOCOL_HEADER` fails
-  every mutating request while every GET passes. But [`custom-domain.md`](custom-domain.md)
-  checks that by hand, and it changes only with configuration. A mutating request every few
-  minutes in production would also write rows into the very metrics these rules count.
-- *Rejected: an error tracker (Sentry, or Better Stack's own).* It means an SDK in both processes,
-  and what it buys is grouping. That matters only once errors are too frequent to read one by one,
-  and until then the `error`-line alert is the same signal.
-
 ## PR 1 — the connections view
 
 `packages/db`, the next migration. Needs only the `metrics` schema and `metrics_reader`, which
@@ -208,14 +173,6 @@ Needs `metrics-pipeline.md` PR 3, so that a push to Grafana Cloud exists, and PR
   - § Failure modes: the queue-wait, failures, email and connections rows say the data layer
     raises them, and the connections row gains its alert.
   - The two notification queries under the table point at the rule files, which now hold them.
-
-## PR 3 — Better Stack
-
-After [`logs.md`](logs.md) PR 1, once production serves traffic.
-
-- By hand: the `/health/ready` monitor and the `error`-line alert, both emailing every team member.
-- `ARCHITECTURE.md` § Alerts: the Outside row names the monitor and the log alert, made in Better
-  Stack's UI, in place of its **Open**.
 - Delete this plan.
 
 ## Verification
@@ -234,4 +191,3 @@ Each PR runs its stack's gate: `pnpm lint && pnpm check && pnpm test`. Then by h
   - Renaming a column a rule reads fails `pnpm test`, naming the rule.
 - After PR 2's first deploy, every rule shows as *Normal* in Grafana Cloud, and testing the
   contact point emails everyone.
-- After PR 3, a temporary monitor on a path that answers 404 emails everyone. Delete it after.
