@@ -18,6 +18,10 @@ export type LocalGrafana = {
 /** Beside the dev Supabase stack's 553xx ports. */
 export const DEV_GRAFANA: LocalGrafana = { project: 'fsi-grafana-dev', port: 55330 };
 
+/** Beside the test Supabase stack's 653xx ports. The panel check in `dashboards.test.ts` runs
+ * against it. */
+export const TEST_GRAFANA: LocalGrafana = { project: 'fsi-grafana-test', port: 65330 };
+
 const COMPOSE_FILE = join(import.meta.dirname, '..', 'compose.yaml');
 
 /** Generous, because the first start on a machine migrates Grafana's own database. */

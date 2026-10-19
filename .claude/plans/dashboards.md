@@ -113,14 +113,12 @@ quality rows. Without that, a second run would double every telemetry panel.
 
 ## PR 1 — the product dashboard
 
-Needs `metrics-pipeline.md` PR 1, so the panel check covers these panels from the start.
-
 - `product` gains its starting panels beside the pipeline's reports per week. No migration: the
   base views and the synthetic history already cover them.
 
 ## PR 2 — the telemetry views, and the cost dashboard
 
-Needs `metrics-pipeline.md` PR 1. Independent of PR 1 here.
+Independent of PR 1 here.
 
 - The views from Decisions, in the next migration. Each gets its tests. The conventions test
   allowlists `requested_model` and `served_model` in `IDENTIFIER_TEXT_COLUMNS`, with their reasons.

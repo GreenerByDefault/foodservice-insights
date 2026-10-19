@@ -279,16 +279,24 @@ async function cloneWithRetry(
 
 /** Drop a run database. Safe to call on one that's already gone. Fails if a connection is still
  * attached — the caller closing its own pool first is what makes that fail loudly instead of
- * silently killing a query mid-flight. */
-export async function dropRunDatabase(connectionString: string, name: string): Promise<void> {
+ * silently killing a query mid-flight.
+ *
+ * `force` terminates those connections instead, for a caller whose pool belongs to a process it
+ * does not control: Grafana keeps a data source's idle connection open long after the data source
+ * is deleted. */
+export async function dropRunDatabase(
+  connectionString: string,
+  name: string,
+  { force = false }: { force?: boolean } = {},
+): Promise<void> {
   await withMaintenanceClient(connectionString, (maintenance) =>
-    dropOwnedDatabase(maintenance, name),
+    dropOwnedDatabase(maintenance, name, force),
   );
 }
 
-async function dropOwnedDatabase(maintenance: Client, name: string): Promise<void> {
+async function dropOwnedDatabase(maintenance: Client, name: string, force = false): Promise<void> {
   assertOwnedName(name);
-  await maintenance.query(`DROP DATABASE IF EXISTS "${name}"`);
+  await maintenance.query(`DROP DATABASE IF EXISTS "${name}"${force ? ' WITH (FORCE)' : ''}`);
 }
 
 /** Drop every run database old enough that no still-running test could own it, and report which

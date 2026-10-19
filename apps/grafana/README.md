@@ -53,3 +53,7 @@ dashboard renders nothing. Grafana itself accepts `v2beta1` and converts it.
 2. Add the rows the view reads to the synthetic history in
    [`plan.ts`](../../packages/db/src/testing/history/plan.ts), then run `pnpm seed:history`.
 3. Add a panel that uses `metrics` as its data source.
+
+`pnpm test` then runs every panel's query through a test Grafana, on port 65330, against a
+database of its own holding the synthetic history. A panel fails if its query errors or returns
+no rows.
