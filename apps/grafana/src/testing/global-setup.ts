@@ -54,6 +54,7 @@ export async function setup(project: TestProject): Promise<() => Promise<void>> 
     const database = initializeDatabase({
       connectionString: runDatabase.connectionString,
       log: 'console',
+      siteUrl: process.env.SITE_URL,
     });
     try {
       await insertSyntheticHistory(database);

@@ -1,6 +1,7 @@
 import type { Logger } from '@gbd/core/log';
 import { CamelCasePlugin, Kysely, PostgresDialect } from 'kysely';
 import { Pool, type PoolConfig } from 'pg';
+import { requirePermittedConnectionString } from './connection-string.ts';
 import { isTransientDatabaseError } from './errors.ts';
 import type { Database } from './schema.ts';
 
@@ -69,12 +70,20 @@ export type DatabaseConfig = {
    * readers want a line rather than a record. Required, so that no caller falls back to it by
    * forgetting. */
   log: Logger | 'console';
+  /** `SITE_URL`, which only a deployed service and CI's deploy job set to a hosted address. Without
+   * one, `initializeDatabase` refuses a hosted database as anyone but `cache_client`. Required for
+   * the same reason as `log`. */
+  siteUrl: string | undefined;
+  /** Skips that refusal, for the one script that needs it. Delete this with the script. */
+  hostedFromACheckout?: 'temporary-go-live-cache-import';
 };
 
 /** How long `shutdownDatabase` gives the pool to drain before giving up on a clean shutdown. */
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 5_000;
 
-export function buildPoolConfig(config: Omit<DatabaseConfig, 'log'>): PoolConfig {
+export function buildPoolConfig(
+  config: Omit<DatabaseConfig, 'log' | 'siteUrl' | 'hostedFromACheckout'>,
+): PoolConfig {
   const limits = { ...DEFAULT_LIMITS, ...config.limits };
 
   return {
@@ -104,6 +113,9 @@ export function buildPoolConfig(config: Omit<DatabaseConfig, 'log'>): PoolConfig
  * `shutdownDatabase` on the way out.
  */
 export function initializeDatabase(config: DatabaseConfig): Kysely<Database> {
+  if (config.hostedFromACheckout === undefined) {
+    requirePermittedConnectionString(config.connectionString, config.siteUrl);
+  }
   const pool = new Pool(buildPoolConfig(config));
 
   // Without an `error` listener on the pool and on each client, a dropped connection takes down the

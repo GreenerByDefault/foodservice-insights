@@ -24,6 +24,7 @@ export const WORKER_DATABASE: Kysely<Database> = initializeDatabase({
   applicationName: 'worker',
   limits: WORKER_DB_LIMITS,
   log: WORKER_LOG,
+  siteUrl: process.env.SITE_URL,
 });
 
 /** The handle for `CACHE_DB_CONNECTION_STRING`, which only a laptop's
@@ -39,6 +40,7 @@ export function initializeCacheDatabase(connectionString: string): Kysely<Databa
     applicationName: 'worker-cache',
     limits: { ...DEFAULT_LIMITS, minConnections: 0, maxConnections: 2 },
     log: WORKER_LOG,
+    siteUrl: process.env.SITE_URL,
   });
 }
 

@@ -20,6 +20,7 @@ export const DATABASE: Kysely<Database> = initializeDatabase({
   connectionString: requireEnv('DB_CONNECTION_STRING'),
   sslCa: process.env.DB_SSL_CA,
   log: 'console',
+  siteUrl: process.env.SITE_URL,
 });
 
 /** Close `DATABASE`. Call this at the end of every script, or it will hang. */

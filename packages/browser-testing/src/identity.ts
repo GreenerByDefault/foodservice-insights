@@ -75,7 +75,11 @@ export async function prepareRunIdentity(
   connectionString: string,
   email: string = PLACEHOLDER_USER_EMAIL,
 ): Promise<void> {
-  const database = initializeDatabase({ connectionString, log: 'console' });
+  const database = initializeDatabase({
+    connectionString,
+    log: 'console',
+    siteUrl: process.env.SITE_URL,
+  });
   try {
     await insertAppUser(database, {
       id: PLACEHOLDER_USER_ID,
@@ -162,7 +166,11 @@ export async function preparePinnedIdentity(
   connectionString: string,
   runName: string,
 ): Promise<UserId> {
-  const database = initializeDatabase({ connectionString, log: 'console' });
+  const database = initializeDatabase({
+    connectionString,
+    log: 'console',
+    siteUrl: process.env.SITE_URL,
+  });
   try {
     const user = await mintUser(database, {
       signInEmail: pinnedSignInEmail(runName),

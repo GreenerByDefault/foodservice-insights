@@ -25,6 +25,7 @@ import pandas as pd
 import psycopg
 from dotenv import find_dotenv, load_dotenv
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
 
 from gbd_foodservice_insights_lab import clean_product_weights
 from gbd_foodservice_insights_lab.categorization import entree_cache, product_cache
@@ -33,6 +34,9 @@ logger = logging.getLogger(__name__)
 
 CONNECTION_STRING_VARIABLE: Final = "CACHE_DB_CONNECTION_STRING"
 _SETUP_DOC: Final = "python/lab/README.md § Working on a client"
+# The hosts a local Supabase stack answers on, as `@gbd/db`'s `connection-string.ts` lists them.
+_LOCAL_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "host.docker.internal"})
+_HOSTED_ROLE: Final = "cache_client"
 
 
 class CachePullError(RuntimeError):
@@ -90,11 +94,28 @@ def connect() -> psycopg.Connection:
     conninfo = os.environ.get(CONNECTION_STRING_VARIABLE)
     if not conninfo:
         raise CachePullError(f"{CONNECTION_STRING_VARIABLE} is not set; see {_SETUP_DOC}.")
+    _refuse_hosted_unless_cache_client(conninfo)
     # Autocommit, so a connection never sits idle in a transaction, where it would block every
     # other insert of a key it inserted. `connect_timeout`, since libpq otherwise waits forever on
     # an unreachable host. The string's own `sslmode` and `sslrootcert` carry the TLS.
     return psycopg.connect(
         conninfo, autocommit=True, connect_timeout=10, application_name="lab-cache"
+    )
+
+
+def _refuse_hosted_unless_cache_client(conninfo: str) -> None:
+    """The lab never needs more than `cache_client` on the hosted project, so a string holding
+    `postgres` there is a mistake, not a choice. The pooler spells the role `cache_client.<ref>`."""
+    params = conninfo_to_dict(conninfo)
+    # libpq connects to `hostaddr` when both are given.
+    host = str(params.get("hostaddr") or params.get("host") or "")
+    user = str(params.get("user", ""))
+    if host in _LOCAL_HOSTS or user == _HOSTED_ROLE or user.startswith(f"{_HOSTED_ROLE}."):
+        return
+    raise CachePullError(
+        f"Refusing to connect to {host or 'an unnamed host'} as {user or 'an unnamed user'}: "
+        f"{CONNECTION_STRING_VARIABLE} must hold {_HOSTED_ROLE} on a hosted database; see "
+        f"{_SETUP_DOC}. AI agents: stop and ask a human."
     )
 
 

@@ -80,6 +80,9 @@ async function main(): Promise<number> {
     // which the transaction is open.
     limits: { minConnections: 0, maxConnections: 1, idleInTransactionSessionTimeoutMs: 1_800_000 },
     log: 'console',
+    siteUrl: process.env.SITE_URL,
+    // `--production` connects as `postgres`, behind target.ts's checks and a typed COMMIT.
+    hostedFromACheckout: 'temporary-go-live-cache-import',
   });
   try {
     const { committed } = await importInOneTransaction(

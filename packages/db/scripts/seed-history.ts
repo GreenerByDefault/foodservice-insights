@@ -7,9 +7,9 @@
  */
 
 import { requireEnv } from '@gbd/core/env';
+import { requireLocalConnectionString } from '../src/connection-string.ts';
 import { DATABASE, shutdown } from '../src/env.ts';
 import { replaceSyntheticHistory } from '../src/testing/history/replace.ts';
-import { requireLocalConnectionString } from '../src/testing/local-database.ts';
 
 try {
   requireLocalConnectionString(requireEnv('DB_CONNECTION_STRING'));
