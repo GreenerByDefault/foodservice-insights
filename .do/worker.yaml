@@ -51,6 +51,13 @@ workers:
         value: 0.5
         window: FIVE_MINUTES
 
+    # Into the one production source both apps share. App Platform keeps no runtime logs itself.
+    # `MAX_RECORD_BYTES` in `@gbd/core/log` keeps each line under the forwarder's cap.
+    log_destinations:
+      - name: better-stack
+        logtail:
+          token: ${BETTER_STACK_TOKEN}
+
     envs:
       - key: WORKER_MODE
         value: live

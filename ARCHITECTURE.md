@@ -506,6 +506,17 @@ when another's inputs fail.
 *Rejected: one system evaluating everything.* Each consolidation copies data out of its home, and
 each copy is one more thing that can break silently.
 
+### Logs
+
+Both processes write JSON lines to stdout ([`@gbd/core/log`](packages/core/src/log.ts)), and they
+leave the host only through App Platform's log forwarding, set in each app's spec. Both apps
+forward to one Better Stack source, so an incident that crosses them reads in time order. The
+free plan keeps three days. A request is found by `requestId`, which the response returns as
+`X-Request-Id`, and an attempt by `attemptId`.
+
+*Rejected: shipping from inside the process* (`@logtail/pino`). A dying process takes its unshipped
+lines with it, and those are the lines that matter.
+
 ### Metrics
 
 Product metrics are views in the database's `metrics` schema, one row per event, read only by the

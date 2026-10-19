@@ -49,6 +49,13 @@ services:
         value: 5000
         window: TEN_MINUTES
 
+    # Into the one production source both apps share. App Platform keeps no runtime logs itself.
+    # `MAX_RECORD_BYTES` in `@gbd/core/log` keeps each line under the forwarder's cap.
+    log_destinations:
+      - name: better-stack
+        logtail:
+          token: ${BETTER_STACK_TOKEN}
+
     envs:
       - key: DB_CONNECTION_STRING
         type: SECRET

@@ -90,8 +90,7 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
-  // Ours rather than one the request arrived with: the edge's id exists only on some hosts, and
-  // any client can send one. Once the host is chosen, its id can join the access line as a field.
+  // Ours rather than one the request arrived with, which any client can send.
   // The response header also lands in Playwright traces, joining a failed e2e request to its lines.
   const requestId = randomUUID();
   bindRequestLogger(event, requestId);
