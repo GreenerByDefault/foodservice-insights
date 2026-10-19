@@ -73,7 +73,10 @@ UNITS_COL = "pack_size"
 
 
 # %%
-# expand_historical_weight_classifications(weights)
+# Suggest the reviewed weights to the cache. A unit the cache already holds keeps its first
+# answer, so correct one of those in Supabase Studio instead.
+# from gbd_foodservice_insights_lab.cache_sync import suggest_unit_weights
+# suggest_unit_weights(weights)
 
 
 # %%

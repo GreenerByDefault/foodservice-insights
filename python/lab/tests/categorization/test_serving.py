@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.errors import UnusableDataError
 from gbd_foodservice_insights.testing import KeywordLlmClient
+from gbd_foodservice_insights_lab import cache_sync
 from gbd_foodservice_insights_lab.categorization import entree_cache, entrees, product_cache
 from gbd_foodservice_insights_lab.categorization.spreadsheet import categorize_spreadsheet_to_csvs
 
@@ -15,11 +16,12 @@ def _run_serving(
     entree_history: dict[str, str],
     flash_labels: dict[str, str],
     pro_labels: dict[str, str],
-    update_historical_entree_classifications: bool = True,
+    pushed: list[tuple[pd.DataFrame, pd.DataFrame | None]] | None = None,
+    push_suggestions: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
     """Run `categorize_spreadsheet_to_csvs(data_type="serving")` with every cache redirected
-    into `tmp_path` and Gemini answering from `flash_labels` / `pro_labels`, keyed by the product
-    name."""
+    into `tmp_path`, Gemini answering from `flash_labels` / `pro_labels`, keyed by the product
+    name, and each push appended to `pushed`."""
     pd.DataFrame(
         {
             "product": list(entree_history),
@@ -34,6 +36,7 @@ def _run_serving(
 
     input_path = tmp_path / "input.csv"
     pd.DataFrame(rows, columns=["product", "date", "weight"]).to_csv(input_path, index=False)
+    pushes = [] if pushed is None else pushed
 
     with (
         patch.object(entrees, "call_gemini_api", side_effect=fake_call_gemini_api),
@@ -47,6 +50,11 @@ def _run_serving(
             "get_previously_classified_entrees_location",
             return_value=tmp_path / "entrees.csv",
         ),
+        patch.object(
+            cache_sync,
+            "push_suggestions_if_configured",
+            side_effect=lambda *push: pushes.append(push),
+        ),
     ):
         return categorize_spreadsheet_to_csvs(
             input_filepath=input_path,
@@ -54,11 +62,12 @@ def _run_serving(
             llm=KeywordLlmClient(),
             gemini_client=object(),
             data_type="serving",
-            update_historical_entree_classifications=update_historical_entree_classifications,
+            push_suggestions=push_suggestions,
         )
 
 
 def test_serving_end_to_end(tmp_path):
+    pushed = []
     df_final, summary = _run_serving(
         tmp_path,
         rows=[
@@ -78,6 +87,7 @@ def test_serving_end_to_end(tmp_path):
             "Salmon Fillet": "unsure",
         },
         pro_labels={"Salmon Fillet": "entree"},
+        pushed=pushed,
     )
 
     pd.testing.assert_frame_equal(
@@ -123,23 +133,50 @@ def test_serving_end_to_end(tmp_path):
         },
         "match_type_counts": {"llm": 5},
         "output_file": str(tmp_path / "output.csv"),
-        "entree_human_review_file": str(tmp_path / "output_entree_for_human_review.csv"),
-        "entree_human_review_n_unique_products": 3,
     }
-    # Chicken came from the entree history, so only the other three are up for review.
-    assert (tmp_path / "output_entree_for_human_review.csv").read_text() == (
-        "entree_classification,product,category,occurrence_count\n"
-        "entree,Ground Beef 80/20,Beef and Buffalo Meat,1\n"
-        "entree,Salmon Fillet,Fish & Mollusks,1\n"
-        "side/add-on,Brown Rice,Whole Grains,3\n"
+    [(products, new_entrees)] = pushed
+    pd.testing.assert_frame_equal(
+        products,
+        pd.DataFrame(
+            {
+                "product": [
+                    "Chicken Breast Boneless",
+                    "Ground Beef 80/20",
+                    "Brown Rice",
+                    "Salmon Fillet",
+                    "Paper Towels",
+                ],
+                "category": [
+                    "Poultry (Chicken & Turkey)",
+                    "Beef and Buffalo Meat",
+                    "Whole Grains",
+                    "Fish & Mollusks",
+                    "No Matches Found",
+                ],
+                "cleaned_item_names": [
+                    "chicken breast boneless",
+                    "ground beef",
+                    "brown rice",
+                    "salmon fillet",
+                    "paper towels",
+                ],
+            }
+        ),
+    )
+    # Chicken came from the entree history, so only the other three are new.
+    pd.testing.assert_frame_equal(
+        new_entrees,
+        pd.DataFrame(
+            {
+                "product": ["Ground Beef 80/20", "Brown Rice", "Salmon Fillet"],
+                "entree_classification": ["entree", "side/add-on", "entree"],
+                "cleaned_item_names": ["ground beef", "brown rice", "salmon fillet"],
+            }
+        ),
     )
     assert not (tmp_path / "categories.csv").exists()
     assert (tmp_path / "entrees.csv").read_text() == (
-        "product,entree_classification,cleaned_item_names\n"
-        "Chicken Breast Boneless,entree,chicken breast boneless\n"
-        "Ground Beef 80/20,entree,ground beef\n"
-        "Brown Rice,side/add-on,brown rice\n"
-        "Salmon Fillet,entree,salmon fillet\n"
+        "product,entree_classification\nChicken Breast Boneless,entree\n"
     )
 
 
@@ -166,23 +203,25 @@ def test_serving_side_add_ons_do_not_count_toward_unusable_data(tmp_path):
     assert summary["row_elimination_details"]["rows_eliminated_non_entree"] == 5
 
 
-def test_serving_skips_updating_entree_history_when_disabled(tmp_path):
+def test_serving_pushes_nothing_with_push_suggestions_off(tmp_path):
+    pushed = []
     _run_serving(
         tmp_path,
         rows=[("Ground Beef 80/20", "2025-01-01", 5.0)],
         entree_history={},
         flash_labels={"Ground Beef 80/20": "entree"},
         pro_labels={},
-        update_historical_entree_classifications=False,
+        pushed=pushed,
+        push_suggestions=False,
     )
 
-    # A newly-classified product would normally be appended to the historical cache; disabling
-    # the update should leave the (empty, pre-existing) cache file exactly as it started.
-    assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
+    assert pushed == []
 
 
 def test_serving_unusable_data_fails_before_entree_detection(tmp_path):
     unknown = ["Paper Towels", "Dish Soap", "Napkins", "Trash Bags", "Foil Wrap"]
+
+    pushed = []
 
     # `flash_labels` is empty, so any Gemini call would raise KeyError instead.
     with pytest.raises(UnusableDataError):
@@ -192,13 +231,16 @@ def test_serving_unusable_data_fails_before_entree_detection(tmp_path):
             entree_history={},
             flash_labels={},
             pro_labels={},
+            pushed=pushed,
         )
 
-    assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
+    assert pushed == []
     assert not (tmp_path / "output_classified_with_entree.csv").exists()
 
 
-def test_serving_keeps_entree_cache_when_entree_detection_fails(tmp_path):
+def test_serving_pushes_nothing_when_entree_detection_fails(tmp_path):
+    pushed = []
+
     with pytest.raises(ValueError, match="Unexpected entree classification"):
         _run_serving(
             tmp_path,
@@ -206,6 +248,7 @@ def test_serving_keeps_entree_cache_when_entree_detection_fails(tmp_path):
             entree_history={},
             flash_labels={"Pork Loin": "not a label"},
             pro_labels={},
+            pushed=pushed,
         )
 
-    assert (tmp_path / "entrees.csv").read_text() == "product,entree_classification\n"
+    assert pushed == []

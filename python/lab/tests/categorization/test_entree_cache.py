@@ -5,7 +5,6 @@ from gbd_foodservice_insights_lab.categorization import entree_cache, product_ca
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     backfill_entree_cleaned_names,
     get_previously_classified_entrees,
-    save_historical_entree_classifications,
 )
 
 
@@ -25,33 +24,6 @@ def test_get_previously_classified_entrees_returns_empty_when_missing(tmp_path, 
     assert result.empty
     assert list(result.columns) == ["product", "entree_classification", "cleaned_item_names"]
     assert "not found" in caplog.text
-
-
-def test_save_historical_entree_classifications_uses_main_labels(tmp_path):
-    historical_csv_path = tmp_path / "historical_entree.csv"
-    pd.DataFrame({"product": ["apple"], "entree_classification": ["entree"]}).to_csv(
-        historical_csv_path, index=False
-    )
-
-    new_df = pd.DataFrame(
-        {
-            "product": ["apple", "banana", "carrot"],
-            "entree_classification": ["not entree", pd.NA, "entree"],
-        }
-    )
-
-    with patch.object(
-        entree_cache,
-        "get_previously_classified_entrees_location",
-        return_value=historical_csv_path,
-    ):
-        save_historical_entree_classifications(new_df)
-
-    saved = pd.read_csv(historical_csv_path).sort_values("product").reset_index(drop=True)
-    assert saved["product"].tolist() == ["apple", "carrot"]
-    assert saved["entree_classification"].tolist() == ["side/add-on", "entree"]
-    # Schema migration: the entree cache now carries a cleaned-name column.
-    assert "cleaned_item_names" in saved.columns
 
 
 def test_get_previously_classified_entrees_backfills_missing_cleaned_column(tmp_path):
@@ -83,29 +55,6 @@ def test_get_previously_classified_entrees_keeps_null_like_products(tmp_path):
         {"product": "NA", "entree_classification": "entree", "cleaned_item_names": None},
         {"product": "None", "entree_classification": "side/add-on", "cleaned_item_names": "none"},
     ]
-
-
-def test_save_historical_entree_classifications_persists_cleaned_names(tmp_path):
-    entree_path = tmp_path / "entree.csv"
-    pd.DataFrame(
-        {"product": ["apple"], "entree_classification": ["entree"], "cleaned_item_names": ["apple"]}
-    ).to_csv(entree_path, index=False)
-    new_df = pd.DataFrame(
-        {
-            "product": ["banana"],
-            "entree_classification": ["entree"],
-            "cleaned_item_names": ["banana sandwich"],
-        }
-    )
-
-    with patch.object(
-        entree_cache, "get_previously_classified_entrees_location", return_value=entree_path
-    ):
-        save_historical_entree_classifications(new_df)
-
-    saved = pd.read_csv(entree_path).set_index("product")
-    assert saved.loc["banana", "cleaned_item_names"] == "banana sandwich"
-    assert saved.loc["apple", "cleaned_item_names"] == "apple"
 
 
 def test_backfill_entree_cleaned_names_borrows_from_category_cache(tmp_path):
