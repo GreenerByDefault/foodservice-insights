@@ -100,7 +100,10 @@ export function buildPoolConfig(
       `-c statement_timeout=${limits.statementTimeoutMs} ` +
       `-c idle_in_transaction_session_timeout=${limits.idleInTransactionSessionTimeoutMs} ` +
       `-c idle_session_timeout=${limits.idleSessionTimeoutMs} ` +
-      `-c lock_timeout=${limits.lockTimeoutMs}`,
+      `-c lock_timeout=${limits.lockTimeoutMs} ` +
+      // Marks the session as one of ours, which the database will require of `postgres` before a
+      // write. Postgres splits `options` on whitespace unless a backslash escapes it.
+      `-c gbd.writer=${(config.applicationName || 'app').replace(/[\\\s]/g, '\\$&')}`,
     application_name: config.applicationName,
     // Node checks both the chain and the hostname: libpq's `verify-full`.
     ...(config.sslCa ? { ssl: { ca: config.sslCa } } : {}),

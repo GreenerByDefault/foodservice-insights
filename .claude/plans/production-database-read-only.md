@@ -14,9 +14,10 @@ instead.
 
 **Recorded facts** (from the repo and Supabase docs):
 
-- Every TS connection goes through `buildPoolConfig` in `packages/db/src/client.ts`. It
-  already sends `-c` startup options and `application_name`. Connections are direct, not pooled,
-  so startup options reach the server.
+- Every TS connection goes through `buildPoolConfig` in `packages/db/src/client.ts`, and every
+  process connects directly, not through Supavisor (`ARCHITECTURE.md`), so its `-c` startup
+  options reach the server. The only bare `pg.Client`s are local test plumbing: `run-database.ts`
+  logs in as the superuser, and Grafana's `ALTER ROLE` touches a shared object.
 - The apps depend on `postgres` specifically. It has `BYPASSRLS` and DML grants on `auth.users`,
   which is owned by `supabase_auth_admin` and has RLS on with no policies. That is why dedicated
   app login roles are rejected below.
@@ -26,7 +27,7 @@ instead.
 - The hosted SQL editor logs in as `postgres`, as `session_user` and not through `SET ROLE`,
   with `application_name = 'supabase/dashboard-query-editor'` (probed 2026-10-19). So a check on
   `session_user` sees the dashboard. `postgres` is not a superuser on Supabase (`budget.ts`), and
-  can create event triggers through supautils; PR 2's production check confirms the DDL guard
+  can create event triggers through supautils; PR 1's production check confirms the DDL guard
   fires for the dashboard.
 - Event triggers don't fire on shared objects, so `ALTER ROLE … PASSWORD` stays available for
   rotating `cache_client` and `metrics_reader`.
@@ -37,10 +38,14 @@ instead.
 
 Two layers that compose:
 
-1. **The database refuses writes from unmarked `postgres` sessions.** `buildPoolConfig` marks
-   every app connection with the startup option `-c gbd.writer=<applicationName ?? 'app'>`.
+1. **The database refuses writes from unmarked `postgres` sessions.** The marking has landed:
+   `buildPoolConfig` sends every connection the startup option
+   `-c gbd.writer=<applicationName || 'app'>`, escaping whitespace, and `client.test.ts` checks
+   it reaches a real session. The refusal is PR 1.
    - A statement-level `BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE` trigger on every table
-     raises `42501` when `session_user = 'postgres'` and `gbd.writer` is unset or empty.
+     raises `42501` when `session_user = 'postgres'` and `current_setting('gbd.writer', true)`
+     is null or empty. Empty is the common unmarked case: after a `set local`, the placeholder
+     reverts to `''`, not to unset.
    - A `ddl_command_start` event trigger does the same for schema changes.
    - The three cache tables get the trigger for `TRUNCATE` only, so review in the Table Editor
      (edit, tick `is_verified`, delete) keeps working.
@@ -60,15 +65,11 @@ Two layers that compose:
 The guard's error message names the runbook and says: "AI agents: stop and ask a human." It does not
 spell out the opt-in.
 
-## PR 1 — mark app connections (prefactor, no behaviour change)
+## PR 1 — the guard
 
-- `buildPoolConfig` appends `-c gbd.writer=${applicationName ?? 'app'}` to `options`. Update the
-  test of `buildPoolConfig` (`toEqual`).
-- **Deploy order matters.** After merging, the web deploys itself. **Dispatch the worker deploy by
-  hand.** PR 2 must not merge until both services run with this, or the old worker's writes start
-  failing.
-
-## PR 2 — the guard
+**Do not merge until the web and the worker both run with the marking.** The web deploys itself
+on merge, but the worker deploy is dispatched by hand. An old worker's writes would start failing
+the moment this migration runs.
 
 - **New migration `packages/db/migrations/012_write_guard.ts`:**
   - `forbid_unmarked_write()`: plpgsql, `SET search_path = ''`, statement-level, returns NULL.
@@ -82,6 +83,10 @@ spell out the opt-in.
     `updatedAtTrigger`. The cache tables get a TRUNCATE-only variant.
   - Comment the "why" once in the migration header: the dashboard, `session_user` versus
     SECURITY DEFINER, and the cache exemption.
+  - Guarding `kysely_migration` makes CI's Migrate step a canary. If the marking did not reach
+    production, the insert recording this migration fails, its transaction rolls back, and the
+    deploy stops before any service changes. CI uses the same `DB_CONNECTION_STRING` and
+    `buildPoolConfig` as the services.
 - **Tests** in a new `packages/db/tests/write-guard.test.ts`, using `withRollback` and
   `SET LOCAL gbd.writer = ''` to simulate an unmarked session:
   - Every table in `public` and `metrics`, plus `auth.users`, carries the guard (cache tables:
@@ -119,14 +124,14 @@ spell out the opt-in.
 
 ## Verification
 
-- **Each PR:** `pnpm lint && pnpm check && pnpm test`. Add `just lint && just check && just test`
-  and `TEST_DB=1 just test-lab` for PR 2, which touches Python.
-- **Locally after PR 2:** with `psql` as `postgres` against the dev stack:
+- `pnpm lint && pnpm check && pnpm test`, `just lint && just check && just test`, and
+  `TEST_DB=1 just test-lab`, since the PR touches Python.
+- **Locally:** with `psql` as `postgres` against the dev stack:
   - `update app_user …` and `create table t()` fail with `42501`;
   - an update to a cache row succeeds;
   - `truncate product_categorization` fails;
   - the `begin; set local …; rollback;` form allows the write.
-- **Production after PR 2 deploys:**
+- **Production after it deploys:**
   - in the Table Editor, editing an `app_user` cell shows the guard's error, while ticking
     `is_verified` on a cache row works;
   - in the SQL editor, `create table guard_probe()` fails, and succeeds inside the opt-in form
