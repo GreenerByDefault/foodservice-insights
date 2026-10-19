@@ -95,7 +95,7 @@ def extract_weight_units_pipeline(
         >>> weights, stats = extract_weight_units_pipeline(df, "pack_size", client)
         >>> # Optionally save to CSV, hand-fix errors, and reload.
         >>> df = df.merge(weights, left_on="pack_size", right_on="original_unit")
-        >>> expand_historical_weight_classifications(weights)  # Reuse on future runs.
+        >>> cache_sync.suggest_unit_weights(weights)  # Reuse on future runs, once verified.
     """
     # Validate input parameters to catch common errors early
     if units_column not in df.columns:
@@ -632,39 +632,6 @@ def classify_units_using_historical_weights(
     )
 
     return unit_mapping_df, overlap_stats
-
-
-def expand_historical_weight_classifications(df: pd.DataFrame) -> None:
-    """Expands the historical weight classifications file with new data from a DataFrame.
-
-    `df` needs 'original_unit', 'llm_cleaned_unit', and 'llm_extracted_weight'; only its columns
-    that the historical file already has are kept. Rows are de-duplicated on 'original_unit',
-    so entries from `df` overwrite historical ones, and the CSV is overwritten in place.
-    """
-    # Validate input columns
-    required_cols = ["original_unit", "llm_cleaned_unit", "llm_extracted_weight"]
-    for col in required_cols:
-        if col not in df.columns:
-            raise ValueError(f"Column '{col}' not found in DataFrame")
-
-    previously_classified_weights = get_previously_classified_weights()
-    # Ensure df_filtered only contains columns that are also in previously_classified_weights
-    # to prevent adding new, unexpected columns to the historical file.
-    df_filtered = df[previously_classified_weights.columns.intersection(df.columns)]
-
-    previously_classified_weights_expanded = pd.concat(
-        [previously_classified_weights, df_filtered], ignore_index=True
-    )
-    previously_classified_weights_expanded = previously_classified_weights_expanded.drop_duplicates(
-        subset=["original_unit"], keep="last"
-    )
-    print(
-        "Unique weight units after expansion:",
-        previously_classified_weights_expanded["original_unit"].nunique(),
-    )
-    previously_classified_weights_expanded.to_csv(
-        get_previously_classified_weights_location(), index=False
-    )
 
 
 def get_previously_classified_weights_location() -> Path:

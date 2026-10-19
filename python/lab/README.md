@@ -45,7 +45,14 @@ form [`.env.example`](../../.env.example) shows. Step 1 then pulls the verified 
 and stops if it cannot. `just pull-caches` pulls on demand. **A pull overwrites the three files,
 hand edits included.**
 
-Without the string, step 1 warns, and sends the LLM whatever the files on disk do not answer.
+Step 1 suggests its new categorizations and entree labels back to the database, and step 1.5's
+`suggest_unit_weights` its reviewed weights. A suggestion is used by no run until someone
+verifies it in Supabase Studio; the next pull then brings it down. The first suggestion of a
+product or unit wins, so correct an answer in Studio, not in a file, and pass
+`push_suggestions=False` to keep a prompt experiment's answers out.
+
+Without the string, step 1 warns, sends the LLM whatever the files on disk do not answer, and
+suggests nothing.
 
 ## Conventions
 

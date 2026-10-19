@@ -7,9 +7,9 @@ import pytest
 from gbd_foodservice_insights_lab.categorization import entrees
 from gbd_foodservice_insights_lab.categorization.entrees import (
     assign_serving_sizes_from_entree_classification,
-    build_entree_human_review_table,
     classify_entrees_using_historical_classifications,
     filter_to_entrees,
+    new_entree_classifications,
     run_entree_detector,
 )
 
@@ -380,17 +380,24 @@ def test_filter_to_entrees_drops_side_add_ons_and_counts_them():
     assert n_rows_non_entree == 1
 
 
-def test_build_entree_human_review_table_excludes_historical():
-    original_df = pd.DataFrame({"product": ["apple", "apple", "banana", "carrot"]})
-    unique_products_df = pd.DataFrame(
+def test_new_entree_classifications_are_the_gemini_labelled_products():
+    classified_products = pd.DataFrame(
         {
-            "product": ["apple", "banana", "carrot"],
-            "category": ["Fruit", "Fruit", "Fruit"],
-            "entree_classification": ["entree", "side/add-on", "side/add-on"],
-            "previously_entree_classified": [False, True, False],
+            "product": ["apple", "banana", "carrot", "napkins"],
+            "category": ["Fruit", "Fruit", "Vegetables", "No Matches Found"],
+            "cleaned_item_names": ["apple", "banana", None, None],
+            "entree_classification": ["entree", "side/add-on", "side/add-on", None],
+            "previously_entree_classified": [False, True, False, False],
         }
     )
 
-    review = build_entree_human_review_table(original_df, unique_products_df)
-    assert review["product"].tolist() == ["apple", "carrot"]
-    assert review["entree_classification"].tolist() == ["entree", "side/add-on"]
+    pd.testing.assert_frame_equal(
+        new_entree_classifications(classified_products),
+        pd.DataFrame(
+            {
+                "product": ["apple", "carrot"],
+                "entree_classification": ["entree", "side/add-on"],
+                "cleaned_item_names": ["apple", None],
+            }
+        ),
+    )

@@ -7,22 +7,26 @@ Composes the product's `categorize_unique_products` and `merge_categorizations` 
 
 import dataclasses
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
 from gbd_foodservice_insights.categorization.llm import LlmClient
-from gbd_foodservice_insights.categorization.pipeline import categorize_unique_products
+from gbd_foodservice_insights.categorization.pipeline import (
+    NewCategorization,
+    categorize_unique_products,
+)
 from gbd_foodservice_insights.categorization.steps import merge_categorizations
 
+from gbd_foodservice_insights_lab import cache_sync
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     get_previously_classified_entrees,
-    save_historical_entree_classifications,
 )
 from gbd_foodservice_insights_lab.categorization.entrees import (
-    build_entree_human_review_table,
     filter_to_entrees,
+    new_entree_classifications,
     run_entree_detector,
 )
 from gbd_foodservice_insights_lab.categorization.product_cache import load_categorization_cache
@@ -93,7 +97,7 @@ def categorize_spreadsheet_to_csvs(
     data_type: Literal["procurement", "serving"] = "procurement",
     gemini_client: Any = None,
     date_format: str | None = None,
-    update_historical_entree_classifications: bool = True,
+    push_suggestions: bool = True,
 ) -> tuple[pd.DataFrame, dict]:
     """Read a file, categorize products, and write results.
 
@@ -101,8 +105,10 @@ def categorize_spreadsheet_to_csvs(
     with a ``_categorized`` suffix, and ``date_format`` is auto-detected when ``None``. Serving
     data also runs entree detection, keeps only the entree rows, and requires ``gemini_client``.
 
-    ``update_historical_entree_classifications`` appends new entree classifications to the
-    historical file. New product categorizations are never cached here.
+    ``push_suggestions`` suggests the run's new categorizations and entree classifications to
+    the database's caches, where a human verifies them before any run uses them. Turn it off for a
+    prompt experiment: the first suggestion of a product wins, so an experiment's answer would
+    block the real one.
 
     Returns the categorized frame and a summary dict: `merge_summary`, plus
     ``match_type_counts`` and the output file keys.
@@ -147,7 +153,7 @@ def categorize_spreadsheet_to_csvs(
     df_result = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
     counts = MergeCounts.between(categorized.cleaned_df, df_result)
 
-    entree_review_df = None
+    new_entrees = None
     n_rows_non_entree = None
     if data_type == "serving":
         classified_products = run_entree_detector(
@@ -158,12 +164,7 @@ def categorize_spreadsheet_to_csvs(
                 output_filepath.stem + "_classified_with_entree"
             ),
         )
-        entree_review_df = build_entree_human_review_table(
-            original_df=categorized.cleaned_df,
-            unique_products_df=classified_products,
-        )
-        if update_historical_entree_classifications:
-            save_historical_entree_classifications(classified_products)
+        new_entrees = new_entree_classifications(classified_products)
         # After the merge, not before, so that side/add-ons do not count toward the merge's "over
         # 80% of products eliminated" check: a file that is mostly sides is still usable serving
         # data. `n_products_after` keeps its pre-filter value for the same reason.
@@ -180,13 +181,22 @@ def categorize_spreadsheet_to_csvs(
     summary["output_file"] = str(output_filepath)
     logger.info("Wrote categorized output to %s", output_filepath)
 
-    if entree_review_df is not None:
-        entree_human_review_filepath = output_filepath.with_stem(
-            output_filepath.stem + "_entree_for_human_review"
+    if push_suggestions:
+        cache_sync.push_suggestions_if_configured(
+            _categorizations_frame(categorized.new_categorizations), new_entrees
         )
-        entree_review_df.to_csv(entree_human_review_filepath, index=False)
-        summary["entree_human_review_file"] = str(entree_human_review_filepath)
-        summary["entree_human_review_n_unique_products"] = len(entree_review_df)
-        logger.info("Wrote entree human review output to %s", entree_human_review_filepath)
+    else:
+        logger.info("push_suggestions is off, so this run's new answers are not suggested.")
 
     return df_result, summary
+
+
+def _categorizations_frame(rows: Sequence[NewCategorization]) -> pd.DataFrame:
+    """`rows` in the categorization cache file's columns."""
+    return pd.DataFrame(
+        {
+            "product": [row.product for row in rows],
+            "category": [row.category for row in rows],
+            "cleaned_item_names": [row.cleaned_name for row in rows],
+        }
+    )

@@ -1,13 +1,15 @@
 import contextlib
 import logging
 import os
+import re
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, NoReturn
 
+import numpy as np
 import pandas as pd
 import psycopg
 import pytest
@@ -234,7 +236,7 @@ def test_set_but_unreachable_stops_naming_the_variable(
 ) -> None:
     monkeypatch.setenv(VARIABLE, "postgresql://nobody@127.0.0.1:1/x")
 
-    with pytest.raises(cache_sync.CachePullError) as raised:
+    with pytest.raises(cache_sync.CacheSyncError) as raised:
         cache_sync.pull_caches_if_configured()
 
     assert str(raised.value) == (
@@ -259,5 +261,364 @@ def test_set_pulls_over_a_new_connection(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_connect_names_the_variable_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(VARIABLE, raising=False)
 
-    with pytest.raises(cache_sync.CachePullError, match="CACHE_DB_CONNECTION_STRING is not set"):
+    with pytest.raises(cache_sync.CacheSyncError, match="CACHE_DB_CONNECTION_STRING is not set"):
         cache_sync.connect()
+
+
+# ----------------------------------------------------------------------
+# Push
+# ----------------------------------------------------------------------
+
+SUGGESTED_BY = "lab:tester"
+KEY_AT_MAX_BYTES = "🥕" * (cache_sync.MAX_CACHE_KEY_BYTES // 4)
+
+
+class _RecordingConnection:
+    """Records what a push sends, as rows of the table's columns plus `suggested_by`."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[Any, ...]] = []
+        self.rowcount = 0
+
+    def transaction(self) -> contextlib.AbstractContextManager[None]:
+        return contextlib.nullcontext()
+
+    def cursor(self) -> contextlib.AbstractContextManager[Any]:
+        return contextlib.nullcontext(self)
+
+    def executemany(self, _query: object, rows: Any) -> None:
+        self.sent = list(rows)
+        self.rowcount = len(self.sent)
+
+
+def _frame(defaults: dict[str, Any], columns: dict[str, list[Any]]) -> pd.DataFrame:
+    """`defaults` repeated to the length of `columns`, which override them."""
+    rows = max(map(len, columns.values()), default=1)
+    return pd.DataFrame({name: [value] * rows for name, value in defaults.items()} | columns)
+
+
+def _products(**columns: list[Any]) -> pd.DataFrame:
+    return _frame(
+        {"product": "Bacon", "category": "Pork (pig meat)", "cleaned_item_names": "bacon"},
+        columns,
+    )
+
+
+def _entrees(**columns: list[Any]) -> pd.DataFrame:
+    return _frame(
+        {"product": "Taco", "entree_classification": "entree", "cleaned_item_names": "taco"},
+        columns,
+    )
+
+
+def _weights(**columns: list[Any]) -> pd.DataFrame:
+    return _frame(
+        {
+            "original_unit": "4/5 LBS",
+            "llm_cleaned_unit": "lb",
+            "llm_extracted_weight": 20.0,
+            "example_products": "Chicken",
+            "previously_classified": False,
+        },
+        columns,
+    )
+
+
+def test_push_product_categorizations_sends_rows_the_checks_accept() -> None:
+    connection: Any = _RecordingConnection()
+    frame = _products(
+        product=[" Bacon\n", "Yogurt", "Kale", KEY_AT_MAX_BYTES],
+        category=[" Pork (pig meat) ", "Yogurt", "Vegetables", "Vegetables"],
+        cleaned_item_names=["bacon", " ", None, np.nan],
+    )
+
+    inserted = cache_sync.push_product_categorizations(connection, frame, SUGGESTED_BY)
+
+    assert inserted == 4
+    assert connection.sent == [
+        ("Bacon", "Pork (pig meat)", "bacon", SUGGESTED_BY),
+        ("Yogurt", "Yogurt", None, SUGGESTED_BY),
+        ("Kale", "Vegetables", None, SUGGESTED_BY),
+        (KEY_AT_MAX_BYTES, "Vegetables", None, SUGGESTED_BY),
+    ]
+
+
+def test_push_entree_classifications_sends_rows_the_checks_accept() -> None:
+    connection: Any = _RecordingConnection()
+    frame = _entrees(
+        product=[" Taco ", "Rice"],
+        entree_classification=["entree", "side/add-on"],
+        cleaned_item_names=["taco", ""],
+    )
+
+    cache_sync.push_entree_classifications(connection, frame, SUGGESTED_BY)
+
+    assert connection.sent == [
+        ("Taco", "entree", "taco", SUGGESTED_BY),
+        ("Rice", "side/add-on", None, SUGGESTED_BY),
+    ]
+
+
+def test_push_unit_weights_sends_rows_the_checks_accept_and_skips_rows_without_a_unit(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    connection: Any = _RecordingConnection()
+    frame = _weights(
+        original_unit=[" 4/5 LBS ", "16 oz", "dz", "EA", np.nan, "  "],
+        llm_cleaned_unit=["lb", "oz", "Unknown or unusable unit", "each", np.nan, np.nan],
+        llm_extracted_weight=[20.0, " 16\n", "NaN", np.nan, np.nan, np.nan],
+        example_products=["Chicken; Rice", "", None, "Apple", None, None],
+    )
+    caplog.set_level(logging.INFO, logger=cache_sync.__name__)
+
+    inserted = cache_sync.push_unit_weights(connection, frame, SUGGESTED_BY)
+
+    assert inserted == 4
+    # The unit verbatim, since the lab joins on it exactly.
+    assert connection.sent == [
+        (" 4/5 LBS ", "lb", 20.0, "Chicken; Rice", SUGGESTED_BY),
+        ("16 oz", "oz", 16.0, None, SUGGESTED_BY),
+        ("dz", "Unknown or unusable unit", None, None, SUGGESTED_BY),
+        ("EA", "each", None, "Apple", SUGGESTED_BY),
+    ]
+    assert caplog.messages == [
+        "Skipping 2 unit_weight rows with no unit.",
+        "Suggested 4 new unit_weight rows as lab:tester; 0 were already in the table.",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("push", "frame", "message"),
+    [
+        (
+            cache_sync.push_product_categorizations,
+            _products(product=[" ", "Kale"]),
+            "Not pushing to product_categorization: 1 rows have a blank value, such as [' '].",
+        ),
+        (
+            cache_sync.push_product_categorizations,
+            _products(product=[np.nan]),
+            "1 rows have a value that is not text, such as [nan].",
+        ),
+        (
+            cache_sync.push_product_categorizations,
+            _products(product=[f"{KEY_AT_MAX_BYTES}x"]),
+            "1 rows have over 2000 bytes",
+        ),
+        (
+            cache_sync.push_product_categorizations,
+            _products(category=["\t"]),
+            "1 rows have a blank value, such as ['\\t'].",
+        ),
+        (
+            cache_sync.push_product_categorizations,
+            _products(product=["Kale", " Kale"]),
+            "2 rows have a key that repeats, such as ['Kale', 'Kale'].",
+        ),
+        (
+            cache_sync.push_entree_classifications,
+            _entrees(entree_classification=["unsure"]),
+            "Not pushing to entree_classification: 1 rows have an unknown label",
+        ),
+        (
+            cache_sync.push_unit_weights,
+            _weights(original_unit=[12]),
+            "Not pushing to unit_weight: 1 rows have a unit that is not text, such as [12].",
+        ),
+        (
+            cache_sync.push_unit_weights,
+            _weights(original_unit=[f"{KEY_AT_MAX_BYTES}x"]),
+            "1 rows have over 2000 bytes",
+        ),
+        (
+            cache_sync.push_unit_weights,
+            _weights(llm_cleaned_unit=[np.nan]),
+            "1 rows have no cleaned unit; set one, such as 'Unknown or unusable unit', or drop "
+            "the row, such as ['4/5 LBS'].",
+        ),
+        (
+            cache_sync.push_unit_weights,
+            _weights(llm_extracted_weight=["about 5"]),
+            "1 rows have a weight that is not a number, such as ['4/5 LBS'].",
+        ),
+        *(
+            (
+                cache_sync.push_unit_weights,
+                _weights(llm_extracted_weight=[weight]),
+                "1 rows have a weight that is not positive and finite",
+            )
+            for weight in (0, -1.5, np.inf)
+        ),
+    ],
+)
+def test_push_sends_nothing_when_a_row_would_fail_a_check(
+    push: Callable[[Any, pd.DataFrame, str], int], frame: pd.DataFrame, message: str
+) -> None:
+    connection: Any = _RecordingConnection()
+
+    with pytest.raises(ValueError, match=re.escape(message)):
+        push(connection, frame, SUGGESTED_BY)
+
+    assert connection.sent == []
+
+
+@pytest.mark.parametrize(
+    ("push", "frame"),
+    [
+        (cache_sync.push_product_categorizations, _products().iloc[:0]),
+        (cache_sync.push_entree_classifications, _entrees().iloc[:0]),
+        (cache_sync.push_unit_weights, _weights(original_unit=[np.nan], llm_cleaned_unit=[None])),
+    ],
+)
+def test_push_of_no_rows_sends_nothing(
+    push: Callable[[Any, pd.DataFrame, str], int], frame: pd.DataFrame
+) -> None:
+    assert push(object(), frame, SUGGESTED_BY) == 0
+
+
+def test_push_inserts_unverified_and_keeps_the_first_suggestion(
+    test_database: psycopg.Connection,
+) -> None:
+    prefix = f"push-{uuid.uuid4()}"
+    _insert(
+        test_database,
+        "product_categorization",
+        ("product", "category", "is_verified"),
+        [(f"{prefix} verified", "Yogurt", True)],
+    )
+    test_database.execute("SET LOCAL ROLE cache_client")
+    products = _products(
+        product=[f"{prefix} verified", f"{prefix} new"],
+        category=["Cheese", "Pork (pig meat)"],
+        cleaned_item_names=["cheese", None],
+    )
+    entrees = _entrees(product=[f"{prefix} taco"])
+    weights = _weights(original_unit=[f" {prefix} 4/5 LBS "], llm_extracted_weight=["NaN"])
+
+    first = [
+        cache_sync.push_product_categorizations(test_database, products, SUGGESTED_BY),
+        cache_sync.push_entree_classifications(test_database, entrees, SUGGESTED_BY),
+        cache_sync.push_unit_weights(test_database, weights, SUGGESTED_BY),
+    ]
+    second = [
+        cache_sync.push_product_categorizations(test_database, products, "lab:other"),
+        cache_sync.push_entree_classifications(
+            test_database,
+            _entrees(product=[f"{prefix} taco"], entree_classification=["side/add-on"]),
+            "lab:other",
+        ),
+        cache_sync.push_unit_weights(test_database, weights, "lab:other"),
+    ]
+
+    assert (first, second) == ([1, 1, 1], [0, 0, 0])
+    assert _select(test_database, "product_categorization", "product", prefix) == [
+        (f"{prefix} new", "Pork (pig meat)", None, False, SUGGESTED_BY),
+        (f"{prefix} verified", "Yogurt", None, True, "manual"),
+    ]
+    assert _select(test_database, "entree_classification", "product", prefix) == [
+        (f"{prefix} taco", "entree", "taco", False, SUGGESTED_BY),
+    ]
+    assert _select(test_database, "unit_weight", "original_unit", prefix) == [
+        (f" {prefix} 4/5 LBS ", "lb", None, "Chicken", False, SUGGESTED_BY),
+    ]
+
+
+def _select(
+    connection: psycopg.Connection, table: str, key: str, prefix: str
+) -> list[tuple[Any, ...]]:
+    cache = next(cache for cache in cache_sync.CACHE_TABLES if cache.table == table)
+    query = sql.SQL(
+        "SELECT {columns}, is_verified, suggested_by FROM {table} WHERE {key} LIKE {pattern} "
+        "ORDER BY {key}"
+    ).format(
+        columns=sql.SQL(", ").join(map(sql.Identifier, cache.columns)),
+        table=sql.Identifier(table),
+        key=sql.Identifier(key),
+        pattern=sql.Literal(f"%{prefix}%"),
+    )
+    with connection.cursor() as cursor:
+        return cursor.execute(query).fetchall()
+
+
+@pytest.mark.parametrize(
+    ("entrees", "unsuggested"),
+    [
+        (None, "1 new categorizations"),
+        (_entrees().iloc[:0], "1 new categorizations and 0 new entree classifications"),
+    ],
+    ids=["procurement", "serving"],
+)
+def test_unset_push_warns_with_what_it_leaves_unsuggested(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    entrees: pd.DataFrame | None,
+    unsuggested: str,
+) -> None:
+    monkeypatch.setattr(cache_sync, "connect", _unexpected_connect)
+    caplog.set_level(logging.WARNING, logger=cache_sync.__name__)
+
+    cache_sync.push_suggestions_if_configured(_products(), entrees)
+
+    assert caplog.messages == [
+        f"CACHE_DB_CONNECTION_STRING is not set, so this run's {unsuggested} are not suggested "
+        "to the cache, and the next run will ask the LLM again. See python/lab/README.md § "
+        "Working on a client."
+    ]
+
+
+@pytest.mark.parametrize("with_entrees", [True, False])
+def test_set_pushes_both_tables_over_one_connection(
+    monkeypatch: pytest.MonkeyPatch, with_entrees: bool
+) -> None:
+    monkeypatch.setenv(VARIABLE, "postgresql://cache_client@db.example/postgres")
+    monkeypatch.setattr(cache_sync, "lab_suggested_by", lambda: SUGGESTED_BY)
+    connection = object()
+    monkeypatch.setattr(cache_sync, "connect", lambda: contextlib.nullcontext(connection))
+    pushes: list[tuple[str, object, pd.DataFrame, str]] = []
+    for name in ("push_product_categorizations", "push_entree_classifications"):
+        monkeypatch.setattr(
+            cache_sync, name, lambda *args, name=name: pushes.append((name, *args)) or 0
+        )
+    products, entrees = _products(), _entrees()
+
+    cache_sync.push_suggestions_if_configured(products, entrees if with_entrees else None)
+
+    assert pushes == [
+        ("push_product_categorizations", connection, products, SUGGESTED_BY),
+        *([("push_entree_classifications", connection, entrees, SUGGESTED_BY)] * with_entrees),
+    ]
+
+
+def test_set_but_failing_push_says_the_output_is_written(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(VARIABLE, "postgresql://nobody@127.0.0.1:1/x")
+
+    with pytest.raises(cache_sync.CacheSyncError) as raised:
+        cache_sync.push_suggestions_if_configured(_products())
+
+    assert str(raised.value) == (
+        "Could not suggest this run's new answers to CACHE_DB_CONNECTION_STRING; the error above "
+        "says why. The categorized output is already written."
+    )
+    assert isinstance(raised.value.__cause__, psycopg.OperationalError)
+
+
+def test_suggest_unit_weights_pushes_as_the_lab_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cache_sync, "lab_suggested_by", lambda: SUGGESTED_BY)
+    connection = object()
+    monkeypatch.setattr(cache_sync, "connect", lambda: contextlib.nullcontext(connection))
+    pushes: list[tuple[object, pd.DataFrame, str]] = []
+    monkeypatch.setattr(cache_sync, "push_unit_weights", lambda *push: pushes.append(push) or 3)
+    weights = _weights()
+
+    assert cache_sync.suggest_unit_weights(weights) == 3
+    assert pushes == [(connection, weights, SUGGESTED_BY)]
+
+
+def test_lab_suggested_by_names_the_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cache_sync.getpass, "getuser", lambda: "ada")
+
+    assert cache_sync.lab_suggested_by() == "lab:ada"
+
+
+def _unexpected_connect() -> NoReturn:
+    raise AssertionError("connected without CACHE_DB_CONNECTION_STRING")

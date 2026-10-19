@@ -2,7 +2,7 @@
 Entree Cache
 ============
 
-Historical entree-classification persistence for serving data, plus the entree-label
+The historical entree-classification cache for serving data, plus the entree-label
 constants and the label normalizer used during cache I/O.
 """
 
@@ -126,46 +126,6 @@ def build_entree_cleaned_name_reuse_index(
     index = unanimous_index(work, key_col="cleaned_item_names", value_col="entree_classification")
     logger.info("Built entree cleaned-name reuse index with %d entries.", len(index))
     return index
-
-
-def save_historical_entree_classifications(new_df: pd.DataFrame) -> None:
-    """
-    Append new entree classifications to historical data and de-duplicate.
-    """
-    required_cols = {"product", "entree_classification"}
-    missing_cols = required_cols - set(new_df.columns)
-    if missing_cols:
-        raise ValueError(f"new_df missing required columns for entree save: {sorted(missing_cols)}")
-
-    existing = get_previously_classified_entrees()
-    cols_to_save = ["product", "entree_classification"]
-    if "cleaned_item_names" in new_df.columns:
-        cols_to_save.append("cleaned_item_names")
-    valid_rows = new_df.loc[:, cols_to_save].copy()
-    valid_rows = valid_rows.dropna(subset=["entree_classification"])
-    valid_rows = valid_rows.loc[valid_rows["entree_classification"].astype(str).str.strip() != ""]
-    if not valid_rows.empty:
-        valid_rows["entree_classification"] = valid_rows["entree_classification"].apply(
-            _normalize_entree_classification
-        )
-    if valid_rows.empty:
-        logger.info("No valid entree classifications to append.")
-        return
-
-    combined = pd.concat([existing, valid_rows], ignore_index=True)
-    combined = combined.drop_duplicates(subset=["product"], keep="last")
-    # Stable column order: product, entree_classification, cleaned_item_names.
-    ordered_cols = ["product", "entree_classification"]
-    if "cleaned_item_names" in combined.columns:
-        ordered_cols.append("cleaned_item_names")
-    ordered_cols += [c for c in combined.columns if c not in ordered_cols]
-    combined = combined[ordered_cols]
-    combined.to_csv(get_previously_classified_entrees_location(), index=False)
-
-    logger.info(
-        "Historical entree classifications updated: %d unique products.",
-        combined["product"].nunique(),
-    )
 
 
 def backfill_entree_cleaned_names() -> dict[str, int]:
