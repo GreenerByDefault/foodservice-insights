@@ -57,6 +57,36 @@ describe('createRunDatabase', () => {
   });
 });
 
+describe('dropRunDatabase', () => {
+  test('forced, drops a database with a connection still open', async () => {
+    const run = await createRunDatabase(
+      CONNECTION_STRING,
+      await ensureTemplateDatabase(CONNECTION_STRING),
+    );
+    const client = new Client({ connectionString: run.connectionString });
+    client.on('error', () => {});
+    await client.connect();
+    try {
+      await dropRunDatabase(CONNECTION_STRING, run.name, { force: true });
+
+      const maintenance = new Client({ connectionString: CONNECTION_STRING });
+      await maintenance.connect();
+      try {
+        const { rows } = await maintenance.query(
+          'SELECT datname FROM pg_database WHERE datname = $1',
+          [run.name],
+        );
+        expect(rows).toEqual([]);
+      } finally {
+        await maintenance.end();
+      }
+    } finally {
+      await client.end().catch(() => {});
+      await dropRunDatabase(CONNECTION_STRING, run.name, { force: true });
+    }
+  });
+});
+
 describe('sweepStaleTemplateBuilds', () => {
   // Fabricates staging-shaped databases directly, rather than by killing a real build, so the
   // "old" one can be backdated without waiting out the real staleness window.

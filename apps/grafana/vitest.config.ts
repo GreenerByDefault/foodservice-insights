@@ -6,7 +6,7 @@ export default defineConfig({
     expect: { requireAssertions: true },
     // Only print logs for tests that fail.
     silent: 'passed-only',
-    // Migrates the test database, so `metrics_reader` exists for `local-metrics-reader.test.ts`.
+    // Migrates the test database, and prepares a run database and Grafana for the panel check.
     globalSetup: ['./src/testing/global-setup.ts'],
   },
 });

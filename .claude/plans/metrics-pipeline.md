@@ -8,13 +8,13 @@ metric definitions in the database, a read-only role to read them, a Grafana tha
 against the dev stack, a check that runs every panel's query, and the push that ships dashboards
 to Grafana Cloud, which the team chose (`ARCHITECTURE.md` § Stack). The definitions and the role
 have landed, with the three base views every later view joins and the tombstones that keep them
-counting through hard deletes. So have the synthetic history a local dashboard draws, and the
-local Grafana that draws it, with the first panel. What remains is the check that runs every
-panel's query, and the push to Grafana Cloud. What the dashboards show is [`dashboards.md`](dashboards.md). Nothing before the last PR needs a vendor
-account, and that PR needs only a Grafana Cloud stack.
+counting through hard deletes. So have the synthetic history a local dashboard draws, the
+local Grafana that draws it, with the first panel, and the check in `pnpm test` that runs every
+panel's query. What remains is the push to Grafana Cloud, which needs only a Grafana Cloud stack.
+What the dashboards show is [`dashboards.md`](dashboards.md).
 
-Facts from the tree (2026-09-27, with the attempt columns rechecked 2026-10-15, and gcx and the
-local Grafana tried 2026-10-19) that shape the design:
+Facts from the tree (2026-09-27, with the attempt columns rechecked 2026-10-15, and gcx, the
+local Grafana and the panel check tried 2026-10-19) that shape the design:
 
 - **The database is already an event log.** `analysis_attempt` carries `created_at`,
   `claimed_at` and `finished_at` under ordering constraints, plus `status`, `failure_reason` and
@@ -62,7 +62,7 @@ local Grafana tried 2026-10-19) that shape the design:
   Grafana, upserts the `metrics` data source, and runs `gcx dev serve` over `resources/`, which
   holds the folder and `product`, whose one panel is reports per week. The pieces later PRs reuse:
   - [`src/local-grafana.ts`](../../apps/grafana/src/local-grafana.ts): `LocalGrafana`, a Compose
-    project and a port; `DEV_GRAFANA`, on 55330; `startGrafana`; `stopGrafana`; `grafanaUrl`.
+    project and a port; `DEV_GRAFANA`, on 55330, and `TEST_GRAFANA`, on 65330; `startGrafana`; `stopGrafana`; `grafanaUrl`.
     `startGrafana` is safe to call from several worktrees at once, as the test Grafana's callers
     will. Tried with two worktrees on 2026-10-19: with a plain `compose up`, simultaneous cold
     starts failed every time on the container's name, and a worktree whose `compose.yaml` differed
@@ -70,10 +70,12 @@ local Grafana tried 2026-10-19) that shape the design:
     data source with it. So it runs `up --no-recreate`, retried a few times, and 45 cold starts
     from three callers then all succeeded. A running container keeps its config until
     `stopGrafana`; CI starts from nothing, so it always runs the pinned one.
-  - [`src/data-source.ts`](../../apps/grafana/src/data-source.ts): `buildDataSource(connectionString)`
-    and `upsertDataSource(grafanaUrl, dataSource)`, which sends no credentials yet.
-    `buildDataSource` always names its result `DATA_SOURCE_UID` (`metrics`), with a pool of 4. It
-    takes `sslmode` from the string and refuses any other parameter, rather than drop one.
+  - [`src/data-source.ts`](../../apps/grafana/src/data-source.ts):
+    `buildDataSource(connectionString, uid, pool)`, whose uid defaults to `DATA_SOURCE_UID`
+    (`metrics`) and pool to 4 connections; `upsertDataSource(grafanaUrl, dataSource)`,
+    `listDataSourceUids(grafanaUrl)` and `deleteDataSource(grafanaUrl, uid)`, none of which sends
+    credentials yet. `buildDataSource` takes `sslmode` from the string and refuses any other
+    parameter, rather than drop one.
   - [`src/local-metrics-reader.ts`](../../apps/grafana/src/local-metrics-reader.ts):
     `setLocalMetricsReaderPassword(connectionString)` and
     `localMetricsConnectionString(connectionString)`, which turns a local stack's
@@ -81,6 +83,16 @@ local Grafana tried 2026-10-19) that shape the design:
     as `metrics_reader`. Both refuse a host that is not local.
   - [`gcx.yaml`](../../apps/grafana/gcx.yaml): gcx's config for the dev Grafana, passed with
     `--config` so a developer's own Cloud context is never the target.
+- **The panel check has landed**, in
+  [`src/dashboards.test.ts`](../../apps/grafana/src/dashboards.test.ts), with its setup in
+  [`src/testing/global-setup.ts`](../../apps/grafana/src/testing/global-setup.ts) and its run data
+  sources in [`src/testing/run-data-source.ts`](../../apps/grafana/src/testing/run-data-source.ts).
+  It reads `resources/dashboards/*.yaml`, so a dashboard file added there is checked with no
+  change.
+- **Grafana keeps a data source's idle connection open after the data source is deleted**, even
+  with `maxIdleConns: 0` (Grafana 13.2.4, 2026-10-19: still open 20 seconds later). So the check's
+  teardown drops its run database with `dropRunDatabase(..., { force: true })`, and a run database
+  a kill left behind stays unsweepable until Grafana lets go of the connection.
 - **gcx 1.6.0's dev server serves only `dashboard.grafana.app/v2beta1`.** Its proxy answers 404 to
   Grafana's API discovery, so the frontend falls back to asking for `v2beta1`, and the proxy
   converts nothing: a `v2` file renders as "not found". Grafana itself takes a pushed `v2beta1`
@@ -270,10 +282,13 @@ where agents operate. Explore production data in Grafana Cloud instead.
 
   A Grafana data source names one database, so each run upserts its own, with a uid like
   `metrics-run-<timestamp>-<suffix>`. The check sends each query to that uid instead of the
-  `metrics` the files name, and teardown deletes it. A sweep of the same shape as
+  `metrics` the files name, and teardown deletes it, then force-drops the run database, since
+  Grafana keeps the connection open (§ Context). A sweep of the same shape as
   `sweepStaleRunDatabases` removes run data sources a kill left behind. The run's data source
-  holds at most one connection and keeps none idle, and the check sends its queries in sequence,
-  so concurrent runs stay inside the role's cluster-wide `CONNECTION LIMIT`.
+  holds at most one connection, and the check sends its queries in sequence, so concurrent runs
+  stay inside the role's cluster-wide `CONNECTION LIMIT`. Each query covers the history's span
+  plus a day at each end, since the history was written seconds before and Docker's clock can
+  drift.
   The data source still logs in as `metrics_reader`, so a panel that reads past the role's
   grants fails here, not in Grafana Cloud.
   *Rejected: the test stack's shared `postgres` database.* Another branch may have migrated it,
@@ -322,31 +337,7 @@ where agents operate. Explore production data in Grafana Cloud instead.
 Everything left can follow launch without losing history, since the views read rows that already
 exist and the tombstones keep the ones a delete removes.
 
-## PR 1 — every panel query runs in `pnpm test`
-
-- `apps/grafana`'s vitest `globalSetup`:
-  - sweeps stale run databases and run data sources;
-  - builds or reuses the template, clones a run database, and writes the synthetic history into
-    it with `insertSyntheticHistory`;
-  - starts the test Grafana, a `TEST_GRAFANA` beside `DEV_GRAFANA` on 65330, and sets the
-    local role password with `setLocalMetricsReaderPassword`;
-  - upserts the run's data source with `buildDataSource` and `upsertDataSource`, given
-    `localMetricsConnectionString` of the run database's connection string;
-  - hands the data source's uid to the tests through vitest's `provide`.
-  Its teardown deletes the data source, then drops the run database. No gcx is involved.
-- The panel check from Decisions, with one test case per panel, named by dashboard and panel
-  title, over the last `SYNTHETIC_HISTORY_SPAN_MS`. Each case fails on an error or on zero rows. The file also checks that every panel names
-  the `metrics` data source, and that every file is at the pinned `apiVersion`.
-- `buildDataSource` takes the uid and the pool limits as arguments, so the test names its run's
-  data source and passes one connection and no idle ones, while dev and Cloud keep `metrics` and
-  theirs.
-- `@gbd/grafana` depends on `@gbd/db`, so Turbo's affected filter reruns the check when a
-  migration changes. The `ts-unit` job needs no change beyond Docker, which its runner already
-  has for Supabase.
-- `.claude/rules/typescript.md` gains a note that a change to a `metrics` view or a dashboard
-  is covered by `pnpm test`, with the panel check as the reason.
-
-## PR 2 — Grafana Cloud
+## PR 1 — Grafana Cloud
 
 - Do the manual steps from Decisions first: the stack, the service account, the role password,
   and the secrets.
@@ -376,11 +367,6 @@ exist and the tombstones keep the ones a delete removes.
 
 ## Verification
 
-Each PR is verified by `pnpm lint && pnpm check && pnpm test`. Then by hand:
-
-- After PR 1, renaming a column in a view without touching the dashboard fails `pnpm test`, and
-  names the panel. So does a panel whose filter matches nothing. Two worktrees running
-  `pnpm test` at once both pass, and leave no run database or run data source behind.
-- After PR 2, the first deploy creates the folder, the data source and the dashboard in Grafana
-  Cloud. A query in Explore shows a real attempt's `queue_seconds`. Deleting a dashboard's file
-  removes it at the next deploy.
+The PR is verified by `pnpm lint && pnpm check && pnpm test`. Then by hand: the first deploy
+creates the folder, the data source and the dashboard in Grafana Cloud. A query in Explore shows a
+real attempt's `queue_seconds`. Deleting a dashboard's file removes it at the next deploy.
