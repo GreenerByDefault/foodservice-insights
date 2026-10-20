@@ -13,8 +13,8 @@ The pipe has landed:
   `pnpm test` that runs every panel's query, and the push to Grafana Cloud
   ([`apps/grafana`](../../apps/grafana/README.md)).
 
-`product` and `cost` are done. What is left is the `operations` and `impact` dashboards, which read
-the telemetry views. The data alerts and the views they need are [`alerts.md`](alerts.md).
+`product`, `cost` and `operations` are done. What is left is the `impact` dashboard, which reads
+`metrics.attempt_telemetry`. The data alerts and the views they need are [`alerts.md`](alerts.md).
 
 The plan ends when every § Metrics item and the attempt telemetry have panels. A metric after that
 follows `apps/grafana/README.md`'s recipe, with no plan.
@@ -52,20 +52,17 @@ What still holds from the telemetry tables themselves:
 - **`co2e_kg_per_diner_or_meal` means nothing without `counts_basis`**, which is null when the
   uploader gave no counts. A panel that aggregates it across reports groups by `counts_basis`,
   since a per-diner and a per-meal figure do not average.
-- **Grafana's pool serves about six panel queries at once** (`METRICS_POOL` in
+- **Grafana's pool serves four panel queries at once** (`METRICS_POOL` in
   `apps/grafana/src/data-source.ts`). A bigger dashboard still loads, in waves.
 
 ### The synthetic history
 
 `insertSyntheticHistory` writes telemetry for every claimed attempt, from
 [`history/telemetry.ts`](../../packages/db/src/testing/history/telemetry.ts), on a random stream
-of its own so it can change without moving any time in the history. Every operations and impact
-column already has a shape to draw: stage times that fit inside each run, failures that stop at a
-stage their reason implies (`unusable_data` with under 20% categorized), bursts of 429s, peak
-memory that grows with an upload's rows, quality findings with occasional errors, `counts_basis`
-of `people`, `meals` and null, and a plant share that drifts up per organization. A panel that
-needs something it lacks adds it there; `plan.test.ts` and `insert.test.ts` cover what it plans
-and writes.
+of its own so it can change without moving any time in the history. Every impact column already
+has a shape to draw: CO2e that follows the categorized kilograms, `counts_basis` of `people`,
+`meals` and null, and a plant share that drifts up per organization. A panel that needs something
+it lacks adds it there; `plan.test.ts` and `insert.test.ts` cover what it plans and writes.
 
 ## Decisions
 
@@ -75,13 +72,14 @@ and writes.
 | --- | --- | --- |
 | `product` | GBD | done |
 | `cost` | GBD and us | done |
-| `operations` | us | stage time p50 and p95; 429s per week; which checks warn most; peak memory; database connections (`alerts.md`) |
+| `operations` | us | done |
 | `impact` | GBD | CO2e analyzed and plant share per month |
 
 A dashboard answers one reader's questions, and stays near what Grafana's pool serves at once.
 The panels are a starting set, settled in the local loop against the synthetic history, as
-`cost`'s were: it shipped AI cost per week by attempt outcome rather than a bare total, and the
-share of products by how they were categorized rather than a hit rate alone.
+`cost`'s and `operations`' were: `cost` shipped AI cost per week by attempt outcome rather than a
+bare total, and `operations` the share of LLM requests that failed, split into 429s and the rest,
+rather than a bare count of 429s that would only track volume.
 *Rejected: one product dashboard for everything.* It would hold about fifteen panels, with GBD's
 numbers among ours.
 
@@ -94,7 +92,7 @@ same rule. `impact`'s months are the exception the table names: emissions are re
 
 ### Looking like one product
 
-`product` set what the other dashboards follow, and `cost` follows it:
+`product` set what the other dashboards follow, and `cost` and `operations` follow it:
 - a fixed color per series, never the classic palette's next one, so a failure reason, a stage or
   an outcome keeps its color across panels and two series never share a hue (`cost` colors
   succeeded green and failed red, as `product`'s reasons are);
@@ -102,20 +100,14 @@ same rule. `impact`'s months are the exception the table names: emissions are re
 - whole-number axes (`decimals: 0`) on a count, and no legend on a single-series panel, whose
   title already names it. Never `decimals: 0` on a `percentunit` field: it limits the axis to
   whole steps of the 0–1 value, so it draws only 0% and 100%;
-- headline numbers in one stat panel with one query, and no more than about six panels.
+- headline numbers in one stat panel with one query, and no more than about six panels;
+- a number read live, like `metrics.database_connection`'s, ignores the time range, so its title or
+  name says *now*.
 
-## PR 1 — the operations dashboard
-
-- `operations`, with its starting panels. If `alerts.md` PR 2 landed first, the dashboard
-  already exists, holding its database-connections panel.
-
-## PR 2 — the impact dashboard
-
-Independent of PR 1.
+## PR 1 — the impact dashboard
 
 - `impact`, with its starting panels.
-
-The last of these PRs to land deletes this plan.
+- Delete this plan.
 
 ## Verification
 
