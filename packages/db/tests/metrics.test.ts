@@ -37,6 +37,8 @@ const IDENTIFIER_TEXT_COLUMNS = new Set([
   // analysis_attempt_llm_usage_requested_model_format and _served_model_format: a model id.
   'attempt_llm_usage.requested_model',
   'attempt_llm_usage.served_model',
+  // A Postgres role name, set by us or by Supabase.
+  'database_connection.role',
 ]);
 
 async function readAsMetricsReader<Row>(
@@ -479,6 +481,34 @@ describe('metrics.attempt_quality_check', () => {
         findings: 2,
       },
     ]);
+  });
+});
+
+describe('metrics.database_connection', () => {
+  test('counts the test’s own connection under its role, beside the server’s limit', async () => {
+    const { server, rows } = await withRollback(DATABASE, async (transaction) => {
+      const server = await transaction
+        .selectNoFrom([
+          sql<string>`session_user`.as('session'),
+          sql<number>`current_setting('max_connections')::integer`.as('maxConnections'),
+        ])
+        .executeTakeFirstOrThrow();
+      const rows = await readAsMetricsReader(
+        transaction,
+        sql<{
+          role: string;
+          connections: number;
+          connectionLimit: number | null;
+          maxConnections: number;
+        }>`SELECT * FROM metrics.database_connection`,
+      );
+      return { server, rows };
+    });
+
+    const own = rows.find((row) => row.role === server.session);
+    expect(own?.connections).toBeGreaterThanOrEqual(1);
+    expect(own?.connectionLimit).toBeNull();
+    expect(rows.map((row) => row.maxConnections)).toEqual(rows.map(() => server.maxConnections));
   });
 });
 

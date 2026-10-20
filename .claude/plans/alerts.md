@@ -34,7 +34,9 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
   files, serves them from a local Grafana behind `gcx dev serve`, runs every panel's query in
   `pnpm test`, and pushes to Grafana Cloud from `deploy-web` after the migration
   (`scripts/deploy.ts`). `metrics.attempt` carries `status`, `failure_reason`, the
-  three timestamps, and the notification columns these rules read. gcx manages alert rules as
+  three timestamps, and the notification columns these rules read.
+  `metrics.database_connection`, from `014_metrics_database_connection.ts`, holds the connection
+  counts. gcx manages alert rules as
   well as dashboards
   ([overview](https://grafana.com/docs/grafana/latest/as-code/observability-as-code/grafana-cli/gcx/overview/)).
 - **Grafana Cloud can scrape Supabase's metrics endpoint**, about 200 series of database CPU,
@@ -103,14 +105,20 @@ point per vendor, if the team ends up working in a Slack channel.
     whose requester was deleted would fire forever. `metrics.attempt` carries
     `notification_attempts`, `notification_email_sent_at`, and `has_requester` from its first
     version.
-  - **Connections:** total connections above 80% of `max_connections`.
+  - **Connections:** the sum of `metrics.database_connection`'s `connections` above 80% of its
+    `max_connections`. The sum can read a connection or two high (see the view's bullet below), which
+    the 20% of headroom absorbs.
   - *Considered, not done: a child's peak memory.* `analysis_attempt_telemetry.peak_memory_kib`
     is the exact reading the worker's host memory rule averages away, but a child killed for
     memory already fails its attempt, which the failures rule counts. Add it if those failures
     show up, or when the worker drops to 1 GB.
-- **`metrics.database_connection` is one row per role**, counted from `pg_stat_activity`, beside
-  the role's `CONNECTION LIMIT` and the server's `max_connections`. Like every view, it runs with
-  its owner's rights, so `metrics_reader` needs no new grant. It has a panel on the operations
+- **`metrics.database_connection` is one row per role**: `role`, `connections` counted from
+  `pg_stat_activity`, `connection_limit` (null for a role with none) and the server's
+  `max_connections`. It needs no new grant, but `pg_stat_activity` redacts by the calling role, not
+  the view's owner, so `metrics_reader` sees `backend_type` as null and the view cannot filter to
+  client backends. The few background workers that carry a role (`pg_cron`, `pg_net`) are counted,
+  which can only overstate. The grant that would lift the redaction, `pg_read_all_stats`, also shows
+  every role's SQL text, so it is not an option. The view will get a panel on the operations
   dashboard ([`dashboards.md`](dashboards.md)), so a person can see who holds the connections.
   [`budget.ts`](../../packages/db/src/budget.ts) remains where the limits are decided. The view
   only reports them.
@@ -120,7 +128,7 @@ point per vendor, if the team ends up working in a Slack channel.
   connections, `metrics_reader` cannot get one either. No-data is *OK*, because a count always
   returns a row.
 - **Rule files sit beside the dashboards, in the resource format gcx pushes for alert rules.**
-  **Open, verify in PR 2:** that gcx round-trips an alert rule through `gcx dev serve` the way it
+  **Open, verify in PR 1:** that gcx round-trips an alert rule through `gcx dev serve` the way it
   does a dashboard. If it does not, rules are files that `deploy.ts` pushes through Grafana's
   alerting provisioning API. Either way, edits made in the Cloud UI are overwritten at the next
   deploy.
@@ -145,18 +153,7 @@ party, to draw charts the Supabase dashboard already draws. Revisit if someone n
 database CPU or disk, or history longer than Supabase's dashboard keeps. Then give it a dedicated
 secret key, so it can be revoked on its own.
 
-## PR 1 — the connections view
-
-`packages/db`, the next migration. Needs only the `metrics` schema and `metrics_reader`, which
-have landed.
-
-- `metrics.database_connection`, as in Decisions.
-- A test in `tests/metrics.test.ts` that it counts the test's own connection, under its role.
-  The existing conventions cover the rest: no free text, and `metrics_reader` can read it.
-
-## PR 2 — the data rules
-
-Needs PR 1 here.
+## PR 1 — the data rules
 
 - `apps/grafana/resources/`: one rule file per rule from Decisions, in a folder of its own.
   Thresholds sit in the files, each with a comment saying what firing would mean.
@@ -183,11 +180,11 @@ Each PR runs its stack's gate: `pnpm lint && pnpm check && pnpm test`. Then by h
   lowered below the current reading in the dashboard emails the team. The next deploy restores it.
   A push to `main` redeploys the web without firing its restart rule, since the new container's
   count starts at zero. If it does fire, the rule needs a threshold above one.
-- After PR 2, on the local Grafana against the dev database:
+- After PR 1, on the local Grafana against the dev database:
   - A `pending` attempt backdated past the queue-wait threshold puts one email in Mailpit, and
     claiming it brings the resolve email.
   - The same holds for a failed attempt, and for a notification row stuck past an hour.
   - Stopping the database makes every rule fire as an error.
   - Renaming a column a rule reads fails `pnpm test`, naming the rule.
-- After PR 2's first deploy, every rule shows as *Normal* in Grafana Cloud, and testing the
+- After PR 1's first deploy, every rule shows as *Normal* in Grafana Cloud, and testing the
   contact point emails everyone.

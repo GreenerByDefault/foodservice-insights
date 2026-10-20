@@ -444,6 +444,29 @@ COMMENT ON VIEW "metrics"."attempt_telemetry" IS 'One row per attempt that left 
 
 
 --
+-- Name: database_connection; Type: VIEW; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "metrics"."database_connection" AS
+ SELECT "s"."usename" AS "role",
+    ("count"(*))::integer AS "connections",
+    NULLIF("r"."rolconnlimit", '-1'::integer) AS "connection_limit",
+    ("current_setting"('max_connections'::"text"))::integer AS "max_connections"
+   FROM ("pg_stat_activity" "s"
+     JOIN "pg_roles" "r" ON (("r"."rolname" = "s"."usename")))
+  GROUP BY "s"."usename", "r"."rolconnlimit";
+
+
+ALTER VIEW "metrics"."database_connection" OWNER TO "postgres";
+
+--
+-- Name: VIEW "database_connection"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON VIEW "metrics"."database_connection" IS 'One row per role holding client connections right now. connection_limit is the role''s CONNECTION LIMIT, null when it has none; max_connections is the server''s, the same on every row.';
+
+
+--
 -- Name: purged_attempt purged_attempt_pkey; Type: CONSTRAINT; Schema: metrics; Owner: postgres
 --
 
@@ -584,6 +607,13 @@ GRANT SELECT ON TABLE "metrics"."attempt_quality_check" TO "metrics_reader";
 --
 
 GRANT SELECT ON TABLE "metrics"."attempt_telemetry" TO "metrics_reader";
+
+
+--
+-- Name: TABLE "database_connection"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."database_connection" TO "metrics_reader";
 
 
 --
