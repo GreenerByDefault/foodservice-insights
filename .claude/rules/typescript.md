@@ -3,7 +3,6 @@ paths:
   - "apps/**"
   - "packages/**"
   - "tests/**"
-  - "contract/**"
   - "package.json"
   - "pnpm-workspace.yaml"
   - "turbo.json"
@@ -13,171 +12,69 @@ paths:
 
 # TypeScript
 
-The universal rules in [`AGENTS.md`](../../AGENTS.md) apply here too — development
-principles, the documentation rules, PR sizing. This file is only what is specific to
-TypeScript. [`README.md`](../../README.md) covers what to run.
+What is specific to the TypeScript stack, on top of [`AGENTS.md`](../../AGENTS.md).
+[`README.md`](../../README.md) covers what to run, and its testing table gives the file suffix
+each runner picks up: a misnamed test is skipped or run by the wrong runner.
 
 ## Verifying a change
 
-Verify a change with `pnpm lint && pnpm check && pnpm test` — that stays the gate before
-claiming a change works, verbatim, no matter how narrow the change was.
+`pnpm lint && pnpm check && pnpm test` is the gate before claiming a change works, however narrow
+the change.
 
-**While iterating, run only the test file(s) you're actively working on**, not the full
-suite — a loop-versus-gate distinction, not a judgement call about blast radius:
+**While iterating, run only the test files you are working on:**
 
 - vitest: `pnpm --filter @gbd/<pkg> test:unit path/to/thing.test.ts`
-- Playwright (`test:e2e` or `test:screenshots`):
-  `pnpm turbo run test:e2e --filter=@gbd/web -- path/to/thing.e2e.ts`. Always through Turbo:
-  Playwright serves the production build in `apps/web/build/`, and only Turbo rebuilds it first,
-  so `pnpm --filter @gbd/web test:e2e` silently tests the previous build. That includes
-  `screenshots:update`, which regenerates images of the old UI.
+- Playwright: `pnpm turbo run test:e2e --filter=@gbd/web -- path/to/thing.e2e.ts`, and the same
+  for `test:screenshots` and `screenshots:update`. Always through Turbo: Playwright serves the
+  build in `apps/web/build/`, and only Turbo rebuilds it first, so
+  `pnpm --filter @gbd/web test:e2e` silently tests the previous build.
 
-Scoping to a package (`pnpm --filter @gbd/<pkg> test:unit`, no path) is the fallback when a
-change touches several files in one package and there's no single file to target. For Playwright,
-that fallback is `pnpm test:playwright` — `test:e2e` and `test:screenshots` together, one app
-boot, and what `pnpm test` itself runs.
+**`pnpm test:system` is deliberately not in the gate.** It builds and runs both Docker images,
+and CI runs it on every PR that touches what it covers. Run it locally only when it is the one
+tier that covers the change: either Dockerfile, either service's startup or shutdown,
+`python/worker_child`, or the seam between the app, the worker and the child.
 
-**`pnpm test:system` is deliberately not in that gate**, and should not be added to it. It builds
-both Docker images and runs them, so it costs minutes rather than seconds, and CI runs it on every
-PR that touches the paths it covers. Run it locally when the change is one it is the only tier to
-cover — either Dockerfile, either service's startup or shutdown, `python/worker_child`, or the
-seam between the app, the worker and the child. For anything else, let CI have it.
+**Run the gate in the background** (`run_in_background: true`) and review the diff while it
+runs. Start no other Turbo task in this checkout until it finishes: two concurrent builds of
+`apps/web` write the same `.svelte-kit/output` and corrupt it.
 
-**Run the gate in the background** (`run_in_background: true` on the Bash tool) once the
-change is ready, rather than blocking on it — Claude Code notifies on completion, so the wait
-overlaps with re-reading the diff, `/prune-comments`, and drafting the PR body instead of
-costing wall clock on top of it. Don't start another Turbo task in this checkout until it
-finishes: two concurrent builds of `apps/web` write the same `.svelte-kit/output` and corrupt it.
+## Tests
 
-## Test organization
+- **The top-level `describe` names the subject**: the exported symbol, the table or the
+  component, one per subject. **A nested `describe` names the situation**, so the path reads as a
+  sentence: `finishing > losing the race > a success returns false`.
+- **Never spell the group into the test title**; a prefix repeated across siblings is a
+  `describe` written the long way. Two levels is the working depth.
 
-- **The top-level `describe` names the subject** — the exported symbol for a unit test
-  (`classifyVerdict`), the table for a database invariant test (`analysis_attempt`), the
-  component for a component test (`UploadForm`). One per subject; a file covering three
-  exports has three.
-- **A nested `describe` names the situation**, so the full path reads as a sentence:
-  `finishing > losing the race > a success returns false`. Reach for one when tests share a
-  precondition, a helper, or a preamble — the helper then lives inside the block rather than
-  at module scope.
-- **Never spell the group into the test title.** A `rule:` prefix repeated across siblings, or
-  a function name typed in front of every test, is a `describe` written the long way.
-- **Two levels is the working depth.** Wanting a third usually means the file covers more than
-  one subject.
+## Code
 
-## General TypeScript
-
-- **Use `async`/`await`**, not raw promise chains.
-- **Module-scope functions are `function` declarations**, even one-liners, not
-  `const name = () => …`. Arrow functions are for callbacks and other nested uses.
-- **Cross-package imports use the package name** (`@gbd/core`), never a relative path out
-  of a package and never a tsconfig path alias.
-- **`@gbd/*` packages are consumed as compiled JS, from `dist/`.** So a package you edit has
-  to be rebuilt before another package sees the change; `pnpm dev` runs `tsc --watch` per
-  package to keep that automatic, and every other Turbo task depends on `^build`. Each
-  package owns its own runtime dependencies — declare them where they are imported, and
-  nowhere else.
-- **Test file suffixes are load-bearing**: each runner selects files by suffix, so a
-  misnamed test is either skipped or picked up by the wrong runner. See the table in
-  [`README.md`](../../README.md).
+- **Use `async`/`await`**, not promise chains.
+- **Import across packages by name** (`@gbd/core`), never by a relative path out of a package or
+  a tsconfig alias.
+- **`@gbd/*` packages are consumed as compiled JS from `dist/`**, so an edited package must be
+  rebuilt before another sees the change. `pnpm dev` does that for you, and a Turbo task that
+  needs it declares `^build`. Declare each runtime dependency in the package that imports it.
 - **Server code logs through `@gbd/core/log`, never `console`**: the worker through its `log`
-  parameters, the web app through `logger()` from `#lib/server/log.js`. Errors go under `err`, and
-  ids, never emails. A test asserts `toEqual` on the records of a `collectingLogger()` from
-  `@gbd/core/testing` — the web app's server tests read `SERVER_LOGS`, which the setup file wires
-  in.
+  parameters, the web app through `logger()` from `#lib/server/log.js`. Errors go under `err`,
+  and log ids, never emails. Tests assert `toEqual` on the records of a `collectingLogger()` from
+  `@gbd/core/testing`; the web app's server tests read `SERVER_LOGS`.
+- **Dependency versions go in the `catalog:` block of
+  [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml)**, referenced as `"catalog:"`.
+- **Quote parentheses in shell commands**, as in route-group paths like `'src/routes/(app)'`.
 
-## Database
+## The database and the blob store
 
-Applies to `packages/db` and every app or package that imports it (`apps/web`, `apps/worker`,
-`apps/grafana`).
-
-- **`TEST_DB=1` selects the test stack**, everywhere: the Supabase CLI, `migrate` and `truncate`,
-  Kanel, and vitest. Without it, you are pointed at the dev database and blob store. The
-  `test:unit` and `test:e2e` scripts set it for you — don't prefix `pnpm test*` commands with
-  it yourself, that's a no-op. It only matters when you run `migrate`, `truncate`, `gen-types`,
-  or `scripts/supabase` directly.
-- **Always use `scripts/supabase`, never a bare `supabase`.** The wrapper passes `--workdir`; the
-  bare CLI finds neither stack and offers to create a third.
-- **Write migration columns in snake_case.** `CamelCasePlugin` translates identifiers, so a
-  `site_name` column is what makes `siteName` work in queries.
-- **To read the schema, don't read the migrations.** `packages/db/public-schema.sql` is the current
-  state with every constraint, index, and trigger; `packages/db/src/generated/` is what you can query in TypeScript.
-  [`packages/db/README.md`](../../packages/db/README.md) covers the model and which file answers what.
-- **Query helpers take `db: DatabaseExecutor` as their first parameter**, so tests can pass a
-  rolled-back transaction where the app passes its long-lived handle.
-- **Classify a database failure with `isTransientDatabaseError` or `isPermanentDatabaseError`, never
-  `instanceof DatabaseError`** — an outage never arrives as one. See
-  [`packages/db/README.md`](../../packages/db/README.md#using-it).
-- **Database tests must use `withRollback`** to enable safe concurrency. The one exception is a
-  test *about* concurrency — a lock, a block, a second snapshot — which `withRollback` cannot
-  express and would silently make vacuous. Those use `packages/db/src/testing/concurrency.ts`.
+- **Read the schema from `packages/db/public-schema.sql` and `packages/db/src/generated/`**, not
+  from the migrations.
+- **Query helpers take `db: DatabaseExecutor` first**, so a test can pass a rolled-back
+  transaction where the app passes its long-lived handle.
+- **Database tests use `withRollback`**, except tests about concurrency, which use
+  [`concurrency.ts`](../../packages/db/src/testing/concurrency.ts); its header says why.
+- **Outside `packages/db`, classify a database failure with `isTransientDatabaseError` or
+  `isPermanentDatabaseError`**, never `instanceof DatabaseError`: an outage never arrives as one.
 - **Name a test helper for what it does**: `insert*` writes rows, by the rules at the top of
   [`fixtures/index.ts`](../../packages/db/src/testing/fixtures/index.ts); `a*`/`an*` builds a
-  value in memory; `with*` scopes a committed fixture and cleans it up. A row fixture goes in
-  `@gbd/db/testing`, in its table's file. A composite only one app uses stays in that app.
-
-## Blob store
-
-Applies to `packages/storage` and every app or package that imports it.
-
-- **Classify a blob store failure with `isBlobStoreError`, never by an SDK error shape.** Everything
-  `@gbd/storage` fails with is a `BlobStoreError`, because a reply from the service and a timed-out
-  socket look nothing alike and only the package knows both.
-
-## Repo mechanics
-
-- **Dependency versions go in the `catalog:` block of
-  [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml)**, and packages reference them as
-  `"catalog:"`. That is what keeps one version across the workspace. The vitest and
-  Playwright entries are pinned exactly, not with `^`, because those families declare
-  exact peer ranges on each other and `strictPeerDependencies` is on — a range there
-  breaks `pnpm install`.
-- **Quote parentheses in shell commands.** Route groups mean paths like
-  `'src/routes/(app)'` need quoting or the shell mangles them.
-- **`lint` and `fmt` exist only at the root** — Biome runs repo-wide, so there is no per-package
-  lint. Every package has `check`, and every one but `tests/e2e` and `apps/grafana` has
-  `build`; every one has `test` except `@gbd/browser-testing`, which has no tests, and
-  `tests/e2e`, whose suite is `test:system`. Scope one with `pnpm --filter @gbd/<pkg> test`, using the full `@gbd/` name.
-
-## Svelte and SvelteKit (`apps/web` only)
-
-- **Svelte 5 runes only.** Never `export let` or `<slot>`. Most Svelte code in training
-  data is Svelte 4, so check the Svelte MCP server rather than recalling an API.
-- **Runtime config comes from `$app/env/private`**, declared in `src/env.ts` — dynamic, never
-  `static: true`, and read through `requirePrivateVar` when it must be set.
-- **`vitest-browser-svelte`'s `render` is async.** `const screen = await render(Cmp)`.
-- **`svelte-kit sync` is inlined into the `check` and `test:unit` scripts** because it has
-  to run before typechecking or testing. It looks redundant; it isn't. Don't delete it and
-  rely on `prepare`, which pnpm runs only for some invocations.
-- **Add a `@gbd/*` package to `apps/web` as a `dependency`, not a `devDependency`,** if
-  server code imports it. `apps/web/vite.config.ts` derives the list of packages to leave
-  unbundled from `dependencies`, because those are the ones installed next to the built
-  server. Getting this wrong silently bundles the package instead of failing.
-- **For route handlers, put the logic in an exported `_`-prefixed function** that takes a
-  `db: DatabaseExecutor` — SvelteKit permits those alongside `GET`/`POST` — and have the
-  handler call it with `database()`. Call `database()` inside the handler, never at module
-  scope. Name that function's test file without a `+` prefix (e.g. `check-readiness.test.ts`,
-  not `+server.test.ts`) — SvelteKit reserves `+` names, and the build fails on one it
-  doesn't recognize.
-- **The exported `_`-prefixed function wraps its own DB calls in `withDbErrorHandling`**
-  (`apps/web/src/lib/server/db.ts`), so a failure is logged with context instead of leaking to
-  the client — or the route handler does, when there is no `_` function to own it. A `load`'s
-  `_load*` function is covered by the same rule, so the `load` and any `poll/+server.ts` that
-  reuse it call it bare. It splits
-  three ways — a statement we could not complete is a 503, one Postgres refused is a 500,
-  anything else is rethrown — and the status is not the caller's to pass in.
-- **A violation a caller *expects* is handled inside the callback, not by the wrapper.** If it
-  maps to an existing `App.Error` code, answer it with `error()` there — an `HttpError` is no
-  kind of database failure, so `withDbErrorHandling` passes it back out untouched. Checking for
-  the condition beforehand instead duplicates the constraint and still races. When the expected
-  outcome has no `App.Error` code, have the callback return it instead of throwing.
-- **Route handlers wrap blob store calls in `withBlobStoreErrorHandling`**
-  (`apps/web/src/lib/server/storage.ts`), the counterpart to `withDbErrorHandling`. Always a 503,
-  unlike the database wrapper, which has to choose between 503 and 500: a blob store failure only
-  ever means we could not reach the store, so retrying helps.
-
-## Svelte AI tools (`apps/web` only)
-
-- **Hand self-contained `.svelte` and `.svelte.ts` work to the `svelte-file-editor` subagent.**
-  It fetches docs and loops the autofixer in its own context.
-- **Otherwise, load the `svelte-core-bestpractices` skill and run `svelte-autofixer`** on every
-  Svelte file you write, until it reports no issues or suggestions.
+  value in memory; `with*` scopes a committed fixture and cleans it up. Row fixtures live in
+  `@gbd/db/testing`; a composite that only one app uses stays in that app.
+- **Classify a blob store failure with `isBlobStoreError`**, never by an SDK error shape; see
+  [`packages/storage/README.md`](../../packages/storage/README.md).

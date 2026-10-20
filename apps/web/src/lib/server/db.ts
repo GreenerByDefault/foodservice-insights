@@ -60,7 +60,9 @@ interface DbCallOptions {
  * failed.
  *
  * A caller that *expects* a violation handles it inside `fn` and answers for itself: an `HttpError`
- * is no kind of database failure, so it passes straight back out through here.
+ * is no kind of database failure, so it passes straight back out through here. When the expected
+ * outcome has no `App.Error` code, `fn` returns it instead of throwing. Checking for the condition
+ * beforehand instead would duplicate the constraint and still race.
  */
 export async function withDbErrorHandling<T>(
   fn: () => Promise<T>,

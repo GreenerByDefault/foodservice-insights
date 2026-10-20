@@ -8,6 +8,10 @@ from typing import Final
 
 # The package directory, anchored on this file rather than any importing module's `__file__`, so
 # every packaged-asset path (data_files/, prompts/) survives modules moving between subpackages.
+# Hatchling ships every non-Python file under this directory and nothing outside it. A plain path
+# works because the package is always installed as files on disk, never zipped: the worker image
+# installs it `--no-editable` into site-packages.
+# *Rejected: `importlib.resources`, which only pays off for zipped installs.*
 #
 # Defined before the re-export below: library modules import it from here, so once `analysis`
 # imports the library, it must already exist while this module is still initializing.
