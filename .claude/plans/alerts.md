@@ -166,7 +166,7 @@ Needs PR 1 here.
   `ALERT_EMAILS` to a placeholder address, since Mailpit accepts any.
 - The panel check reads the rule files too (§ Data rules).
 - A panel for `metrics.database_connection` on the operations dashboard, which this PR creates
-  if `dashboards.md` PR 2 has not.
+  if `dashboards.md` PR 1 has not.
 - `ALERT_EMAILS` joins the `production` Environment, and `deploy-web`'s Grafana step passes it.
 - `ARCHITECTURE.md`:
   - § Alerts: the Data row names the rule folder in place of its **Open**.

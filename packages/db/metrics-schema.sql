@@ -36,6 +36,19 @@ COMMENT ON SCHEMA "metrics" IS 'Product metrics, one row per event, read by Graf
 
 
 --
+-- Name: quality_status; Type: TYPE; Schema: metrics; Owner: postgres
+--
+
+CREATE TYPE "metrics"."quality_status" AS ENUM (
+    'pass',
+    'warning',
+    'invalid'
+);
+
+
+ALTER TYPE "metrics"."quality_status" OWNER TO "postgres";
+
+--
 -- Name: tombstone_attempt(); Type: FUNCTION; Schema: metrics; Owner: postgres
 --
 
@@ -305,6 +318,132 @@ COMMENT ON VIEW "metrics"."attempt" IS 'One row per analysis attempt, including 
 
 
 --
+-- Name: attempt_llm_usage; Type: VIEW; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "metrics"."attempt_llm_usage" AS
+ SELECT "u"."analysis_attempt_id",
+    "t"."report_id",
+    "t"."organization_id",
+    "t"."recorded_at",
+    "a"."status",
+    "a"."failure_reason",
+    "a"."worker_git_sha",
+    "u"."operation",
+    "u"."requested_model",
+    "u"."served_model",
+    "u"."calls",
+    "u"."requests",
+    "u"."failed_requests",
+    "u"."rate_limited_requests",
+    "u"."truncated_calls",
+    "u"."input_tokens",
+    "u"."cached_input_tokens",
+    "u"."output_tokens",
+    ((("u"."cost_micro_usd")::numeric / '1000000'::numeric))::numeric(10,6) AS "cost_usd"
+   FROM (("public"."analysis_attempt_llm_usage" "u"
+     JOIN "public"."analysis_attempt_telemetry" "t" ON (("t"."analysis_attempt_id" = "u"."analysis_attempt_id")))
+     LEFT JOIN "metrics"."attempt" "a" ON (("a"."id" = "u"."analysis_attempt_id")));
+
+
+ALTER VIEW "metrics"."attempt_llm_usage" OWNER TO "postgres";
+
+--
+-- Name: VIEW "attempt_llm_usage"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON VIEW "metrics"."attempt_llm_usage" IS 'One row per attempt, LLM operation and requested model, including attempts since deleted. cost_usd is at list price. A report''s cost is the sum over all its attempts, since a retry spends again.';
+
+
+--
+-- Name: attempt_quality_check; Type: VIEW; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "metrics"."attempt_quality_check" AS
+ SELECT "q"."analysis_attempt_id",
+    "t"."report_id",
+    "t"."organization_id",
+    "t"."recorded_at",
+    "q"."quality_check",
+    "q"."status",
+    "q"."findings"
+   FROM ("public"."analysis_attempt_quality_check" "q"
+     JOIN "public"."analysis_attempt_telemetry" "t" ON (("t"."analysis_attempt_id" = "q"."analysis_attempt_id")));
+
+
+ALTER VIEW "metrics"."attempt_quality_check" OWNER TO "postgres";
+
+--
+-- Name: VIEW "attempt_quality_check"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON VIEW "metrics"."attempt_quality_check" IS 'How many warning and error findings each quality check reported for an attempt whose report was built. A check with no row passed. For a firing rate, divide by the attempts in metrics.attempt_telemetry whose quality_status is not null.';
+
+
+--
+-- Name: attempt_telemetry; Type: VIEW; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE VIEW "metrics"."attempt_telemetry" AS
+ SELECT "t"."analysis_attempt_id",
+    "t"."report_id",
+    "t"."organization_id",
+    "t"."recorded_at",
+    "a"."status",
+    "a"."failure_reason",
+    "a"."worker_git_sha",
+    "t"."counts_basis",
+    "t"."input_rows",
+    "t"."input_kilograms",
+    "t"."input_unique_products",
+    "t"."categorization_cache_entries",
+    "t"."cache_raw_name_products",
+    "t"."cache_cleaned_name_products",
+    "t"."llm_matched_products",
+    "t"."cache_no_match_products",
+    "t"."llm_no_match_products",
+    "t"."unrecognized_llm_answers",
+    "t"."categorized_rows",
+    "t"."categorized_kilograms",
+    "t"."total_co2e_kg",
+    "t"."co2e_kg_per_diner_or_meal",
+    "t"."plant_pct_by_weight",
+    "t"."plant_protein_pct_by_weight",
+    "t"."read_duration_ms",
+    "t"."categorize_duration_ms",
+    "t"."report_duration_ms",
+    "t"."pdf_duration_ms",
+    "t"."xlsx_duration_ms",
+    "t"."peak_memory_kib",
+    (
+        CASE
+            WHEN ("t"."total_co2e_kg" IS NULL) THEN NULL::"text"
+            ELSE
+            CASE ( SELECT "max"("q"."status") AS "max"
+                   FROM "public"."analysis_attempt_quality_check" "q"
+                  WHERE ("q"."analysis_attempt_id" = "t"."analysis_attempt_id"))
+                WHEN 'error'::"public"."diagnostic_status" THEN 'invalid'::"text"
+                WHEN 'warning'::"public"."diagnostic_status" THEN 'warning'::"text"
+                ELSE 'pass'::"text"
+            END
+        END)::"metrics"."quality_status" AS "quality_status",
+    ((("t"."cache_raw_name_products" + "t"."cache_cleaned_name_products"))::double precision / (NULLIF("t"."input_unique_products", 0))::double precision) AS "cache_hit_rate",
+    (((("t"."input_unique_products" - "t"."cache_no_match_products") - "t"."llm_no_match_products"))::double precision / (NULLIF("t"."input_unique_products", 0))::double precision) AS "categorized_products_share",
+    ("t"."categorized_kilograms" / NULLIF("t"."input_kilograms", (0)::double precision)) AS "categorized_kilograms_share"
+   FROM ("public"."analysis_attempt_telemetry" "t"
+     LEFT JOIN "metrics"."attempt" "a" ON (("a"."id" = "t"."analysis_attempt_id")));
+
+
+ALTER VIEW "metrics"."attempt_telemetry" OWNER TO "postgres";
+
+--
+-- Name: VIEW "attempt_telemetry"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON VIEW "metrics"."attempt_telemetry" IS 'One row per attempt that left telemetry, including attempts since deleted. Each column group fills in as its stage finishes, so null means the run never got there, not zero. status is null only for an attempt deleted before tombstones existed. co2e_kg_per_diner_or_meal is per diner or per meal as counts_basis says, so never average across the two. categorized_kilograms_share can exceed 1 by float rounding.';
+
+
+--
 -- Name: purged_attempt purged_attempt_pkey; Type: CONSTRAINT; Schema: metrics; Owner: postgres
 --
 
@@ -396,6 +535,27 @@ GRANT SELECT ON TABLE "metrics"."report" TO "metrics_reader";
 --
 
 GRANT SELECT ON TABLE "metrics"."attempt" TO "metrics_reader";
+
+
+--
+-- Name: TABLE "attempt_llm_usage"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."attempt_llm_usage" TO "metrics_reader";
+
+
+--
+-- Name: TABLE "attempt_quality_check"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."attempt_quality_check" TO "metrics_reader";
+
+
+--
+-- Name: TABLE "attempt_telemetry"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."attempt_telemetry" TO "metrics_reader";
 
 
 --

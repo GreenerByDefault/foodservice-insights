@@ -55,6 +55,46 @@ describe('planSyntheticHistory', () => {
     }
   });
 
+  test('covers both counts bases, and a report without counts', () => {
+    const bases = plan.organizations.flatMap(({ reports }) =>
+      reports.map(({ countsBasis }) => countsBasis),
+    );
+
+    expect(new Set(bases)).toEqual(new Set(['people', 'meals', null]));
+  });
+
+  test('gives some failed attempt a categorization under 20%, as unusable data', () => {
+    const lowCoverage = attemptsOf(plan)
+      .flat()
+      .flatMap((attempt) => (attempt.status === 'failed' ? [attempt] : []))
+      .filter(({ telemetry: { row } }) => {
+        if (row.inputUniqueProducts === null || row.cacheNoMatchProducts === null) return false;
+        const uncategorized = row.cacheNoMatchProducts + (row.llmNoMatchProducts ?? 0);
+        return 1 - uncategorized / row.inputUniqueProducts < 0.2;
+      });
+
+    expect(lowCoverage.map(({ failureReason }) => failureReason)).toContain('unusable_data');
+  });
+
+  test('fits every attempt’s stage times inside its run', () => {
+    const overruns = attemptsOf(plan)
+      .flat()
+      .flatMap((attempt) => (attempt.status === 'canceled' ? [] : [attempt]))
+      .filter(({ claimedMsAgo, finishedMsAgo, telemetry: { row } }) => {
+        const stages = [
+          row.readDurationMs,
+          row.categorizeDurationMs,
+          row.reportDurationMs,
+          row.pdfDurationMs,
+          row.xlsxDurationMs,
+        ];
+        const total = stages.reduce<number>((sum, ms) => sum + (ms ?? 0), 0);
+        return stages.some((ms) => ms !== null && ms < 0) || total > claimedMsAgo - finishedMsAgo;
+      });
+
+    expect(overruns).toEqual([]);
+  });
+
   test('puts every time inside the span, in whole milliseconds', () => {
     const times = [
       ...plan.unconfirmedUsers.map(({ createdMsAgo }) => createdMsAgo),

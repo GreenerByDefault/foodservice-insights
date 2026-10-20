@@ -13,8 +13,12 @@ import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
   DB_NOW,
   dbMsAgo,
+  FINISHED_RUN_TELEMETRY,
   insertAnalysisAttempt,
   insertAppUser,
+  insertAttemptLlmUsage,
+  insertAttemptQualityCheck,
+  insertAttemptTelemetry,
   insertOrganization,
   insertReport,
 } from '../src/testing/fixtures/index.ts';
@@ -27,6 +31,12 @@ const IDENTIFIER_TEXT_COLUMNS = new Set([
   'attempt.worker_git_sha',
   // purged_attempt_worker_git_sha_format: the same.
   'purged_attempt.worker_git_sha',
+  // From metrics.attempt.
+  'attempt_telemetry.worker_git_sha',
+  'attempt_llm_usage.worker_git_sha',
+  // analysis_attempt_llm_usage_requested_model_format and _served_model_format: a model id.
+  'attempt_llm_usage.requested_model',
+  'attempt_llm_usage.served_model',
 ]);
 
 async function readAsMetricsReader<Row>(
@@ -182,6 +192,293 @@ describe('metrics.app_user', () => {
     });
 
     expect(rows).toEqual([{ ...user, purgedAt: null }]);
+  });
+});
+
+describe('metrics.attempt_telemetry', () => {
+  type TelemetryRow = Record<string, unknown>;
+
+  function selectTelemetry(id: string): RawBuilder<TelemetryRow> {
+    return sql<TelemetryRow>`SELECT * FROM metrics.attempt_telemetry WHERE analysis_attempt_id = ${id}`;
+  }
+
+  /** A finished run's telemetry under a real failed attempt, with shares that come out exact. */
+  async function insertFailedRun(transaction: Transaction<Database>) {
+    const report = await insertReport(transaction);
+    // A terminal attempt is immutable, so the worker's commit is set while it runs.
+    const { id } = await insertAnalysisAttempt(transaction, {
+      reportId: report.id,
+      status: 'processing',
+    });
+    const attempt = await transaction
+      .updateTable('analysisAttempt')
+      .set({ workerGitSha: 'b'.repeat(40) })
+      .where('id', '=', id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await transaction
+      .updateTable('analysisAttempt')
+      .set({ status: 'failed', failureReason: 'hung', finishedAt: DB_NOW })
+      .where('id', '=', id)
+      .execute();
+    const telemetry = await insertAttemptTelemetry(transaction, {
+      analysisAttemptId: attempt.id,
+      reportId: report.id,
+      organizationId: report.organizationId,
+      inputKilograms: 2500,
+      categorizedKilograms: 2000,
+      cacheNoMatchProducts: 3,
+      llmNoMatchProducts: 3,
+    });
+    return { report, attempt, telemetry };
+  }
+
+  test('carries the telemetry, its attempt’s outcome, and what derives from them', async () => {
+    const { report, attempt, telemetry, rows } = await withRollback(
+      DATABASE,
+      async (transaction) => {
+        const inserted = await insertFailedRun(transaction);
+        const rows = await readAsMetricsReader(transaction, selectTelemetry(inserted.attempt.id));
+        return { ...inserted, rows };
+      },
+    );
+
+    expect(rows).toEqual([
+      {
+        ...FINISHED_RUN_TELEMETRY,
+        analysisAttemptId: attempt.id,
+        reportId: report.id,
+        organizationId: report.organizationId,
+        recordedAt: telemetry.recordedAt,
+        status: 'failed',
+        failureReason: 'hung',
+        workerGitSha: 'b'.repeat(40),
+        inputKilograms: 2500,
+        categorizedKilograms: 2000,
+        cacheNoMatchProducts: 3,
+        llmNoMatchProducts: 3,
+        qualityStatus: 'pass',
+        // (100 + 5) / 120
+        cacheHitRate: 0.875,
+        // (120 - 3 - 3) / 120
+        categorizedProductsShare: 0.95,
+        categorizedKilogramsShare: 0.8,
+      },
+    ]);
+  });
+
+  test('keeps the outcome of an attempt deleted with its organization', async () => {
+    const rows = await withRollback(DATABASE, async (transaction) => {
+      const { report, attempt } = await insertFailedRun(transaction);
+      await transaction
+        .deleteFrom('organization')
+        .where('id', '=', report.organizationId)
+        .execute();
+      return await readAsMetricsReader(transaction, selectTelemetry(attempt.id));
+    });
+
+    expect(rows.map(({ status, failureReason }) => ({ status, failureReason }))).toEqual([
+      { status: 'failed', failureReason: 'hung' },
+    ]);
+  });
+
+  test('has no outcome for an attempt it cannot find', async () => {
+    const rows = await withRollback(DATABASE, async (transaction) => {
+      const telemetry = await insertAttemptTelemetry(transaction);
+      return await readAsMetricsReader(transaction, selectTelemetry(telemetry.analysisAttemptId));
+    });
+
+    expect(
+      rows.map(({ status, failureReason, workerGitSha }) => ({
+        status,
+        failureReason,
+        workerGitSha,
+      })),
+    ).toEqual([{ status: null, failureReason: null, workerGitSha: null }]);
+  });
+
+  test.each([
+    ['no findings pass', [], 'pass'],
+    ['a warning makes a warning', ['warning'], 'warning'],
+    ['an error makes it invalid, even beside a warning', ['warning', 'error'], 'invalid'],
+  ] as const)('quality_status: %s', async (_title, statuses, qualityStatus) => {
+    const rows = await withRollback(DATABASE, async (transaction) => {
+      const { analysisAttemptId } = await insertAttemptTelemetry(transaction);
+      for (const status of statuses) {
+        await insertAttemptQualityCheck(transaction, { analysisAttemptId, status });
+      }
+      return await readAsMetricsReader(transaction, selectTelemetry(analysisAttemptId));
+    });
+
+    expect(rows.map((row) => row.qualityStatus)).toEqual([qualityStatus]);
+  });
+
+  test('a run that stopped before its report has no quality status or shares', async () => {
+    const rows = await withRollback(DATABASE, async (transaction) => {
+      const { analysisAttemptId } = await insertAttemptTelemetry(transaction, {
+        inputRows: null,
+        inputKilograms: null,
+        inputUniqueProducts: null,
+        categorizationCacheEntries: null,
+        cacheRawNameProducts: null,
+        cacheCleanedNameProducts: null,
+        llmMatchedProducts: null,
+        cacheNoMatchProducts: null,
+        llmNoMatchProducts: null,
+        unrecognizedLlmAnswers: null,
+        categorizedRows: null,
+        categorizedKilograms: null,
+        totalCo2eKg: null,
+        co2eKgPerDinerOrMeal: null,
+        plantPctByWeight: null,
+        plantProteinPctByWeight: null,
+        readDurationMs: null,
+        categorizeDurationMs: null,
+        reportDurationMs: null,
+        pdfDurationMs: null,
+        xlsxDurationMs: null,
+      });
+      return await readAsMetricsReader(transaction, selectTelemetry(analysisAttemptId));
+    });
+
+    expect(
+      rows.map((row) => [
+        row.qualityStatus,
+        row.cacheHitRate,
+        row.categorizedProductsShare,
+        row.categorizedKilogramsShare,
+      ]),
+    ).toEqual([[null, null, null, null]]);
+  });
+
+  test('an empty upload has no shares rather than dividing by zero', async () => {
+    const rows = await withRollback(DATABASE, async (transaction) => {
+      const { analysisAttemptId } = await insertAttemptTelemetry(transaction, {
+        inputRows: 0,
+        inputKilograms: 0,
+        inputUniqueProducts: 0,
+        cacheRawNameProducts: 0,
+        cacheCleanedNameProducts: 0,
+        llmMatchedProducts: 0,
+        cacheNoMatchProducts: 0,
+        llmNoMatchProducts: 0,
+        unrecognizedLlmAnswers: 0,
+        categorizedRows: 0,
+        categorizedKilograms: 0,
+      });
+      return await readAsMetricsReader(transaction, selectTelemetry(analysisAttemptId));
+    });
+
+    expect(
+      rows.map((row) => [
+        row.cacheHitRate,
+        row.categorizedProductsShare,
+        row.categorizedKilogramsShare,
+      ]),
+    ).toEqual([[null, null, null]]);
+  });
+
+  test('keeps a kilogram share above 1 for a panel to clamp', async () => {
+    const rows = await withRollback(DATABASE, async (transaction) => {
+      const { analysisAttemptId } = await insertAttemptTelemetry(transaction, {
+        inputKilograms: 2000,
+        categorizedKilograms: 2000.5,
+      });
+      return await readAsMetricsReader(transaction, selectTelemetry(analysisAttemptId));
+    });
+
+    expect(rows.map((row) => row.categorizedKilogramsShare)).toEqual([1.00025]);
+  });
+});
+
+describe('metrics.attempt_llm_usage', () => {
+  test('carries each usage row, in dollars, with its telemetry’s ids and attempt’s outcome', async () => {
+    const { report, attempt, telemetry, rows } = await withRollback(
+      DATABASE,
+      async (transaction) => {
+        const report = await insertReport(transaction);
+        const attempt = await insertAnalysisAttempt(transaction, {
+          reportId: report.id,
+          status: 'succeeded',
+        });
+        const telemetry = await insertAttemptTelemetry(transaction, {
+          analysisAttemptId: attempt.id,
+          reportId: report.id,
+          organizationId: report.organizationId,
+        });
+        await insertAttemptLlmUsage(transaction, { analysisAttemptId: attempt.id });
+        await insertAttemptLlmUsage(transaction, {
+          analysisAttemptId: attempt.id,
+          operation: 'match',
+          servedModel: null,
+          costMicroUsd: 1,
+        });
+        const rows = await readAsMetricsReader(
+          transaction,
+          sql`SELECT * FROM metrics.attempt_llm_usage WHERE analysis_attempt_id = ${attempt.id} ORDER BY operation`,
+        );
+        return { report, attempt, telemetry, rows };
+      },
+    );
+
+    const shared = {
+      analysisAttemptId: attempt.id,
+      reportId: report.id,
+      organizationId: report.organizationId,
+      recordedAt: telemetry.recordedAt,
+      status: 'succeeded',
+      failureReason: null,
+      workerGitSha: null,
+      requestedModel: 'gpt-4.1-mini',
+      calls: 100,
+      requests: 103,
+      failedRequests: 3,
+      rateLimitedRequests: 2,
+      truncatedCalls: 1,
+      inputTokens: 100_000,
+      cachedInputTokens: 80_000,
+      outputTokens: 1500,
+    };
+    expect(rows).toEqual([
+      {
+        ...shared,
+        operation: 'clean',
+        servedModel: 'gpt-4.1-mini-2025-04-14',
+        costUsd: '0.018400',
+      },
+      { ...shared, operation: 'match', servedModel: null, costUsd: '0.000001' },
+    ]);
+  });
+});
+
+describe('metrics.attempt_quality_check', () => {
+  test('carries each check’s findings, with its telemetry’s ids', async () => {
+    const { telemetry, rows } = await withRollback(DATABASE, async (transaction) => {
+      const telemetry = await insertAttemptTelemetry(transaction);
+      await insertAttemptQualityCheck(transaction, {
+        analysisAttemptId: telemetry.analysisAttemptId,
+        qualityCheck: 'date_distribution',
+        status: 'error',
+        findings: 2,
+      });
+      const rows = await readAsMetricsReader(
+        transaction,
+        sql`SELECT * FROM metrics.attempt_quality_check WHERE analysis_attempt_id = ${telemetry.analysisAttemptId}`,
+      );
+      return { telemetry, rows };
+    });
+
+    expect(rows).toEqual([
+      {
+        analysisAttemptId: telemetry.analysisAttemptId,
+        reportId: telemetry.reportId,
+        organizationId: telemetry.organizationId,
+        recordedAt: telemetry.recordedAt,
+        qualityCheck: 'date_distribution',
+        status: 'error',
+        findings: 2,
+      },
+    ]);
   });
 });
 

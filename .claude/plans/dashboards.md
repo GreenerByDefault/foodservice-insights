@@ -8,61 +8,64 @@ The pipe has landed:
 - the `metrics` schema and its three base views, read only by `metrics_reader`, with tombstones
   so hard-deleted rows stay counted (`packages/db/migrations/009_metrics.ts` and
   `011_metrics_tombstones.ts`);
-- a synthetic history to draw, a local Grafana to draw it in, a check in `pnpm test` that runs
-  every panel's query, and the push to Grafana Cloud ([`apps/grafana`](../../apps/grafana/README.md)).
+- the views over the attempt telemetry (`013_metrics_telemetry.ts`), described below;
+- a synthetic history to draw, telemetry included, a local Grafana to draw it in, a check in
+  `pnpm test` that runs every panel's query, and the push to Grafana Cloud
+  ([`apps/grafana`](../../apps/grafana/README.md)).
 
-`product` is done. It holds a row of headline numbers, users, reports per week, organizations
-active per week, failed attempts per week by reason, and the median and p95 of queue, run and total
-time per week, all over the base views. What is left is the telemetry: the views over it, and the
-`cost`, `operations` and `impact` dashboards that read them. The data alerts and the views they
-need are [`alerts.md`](alerts.md).
+`product` and `cost` are done. What is left is the `operations` and `impact` dashboards, which read
+the telemetry views. The data alerts and the views they need are [`alerts.md`](alerts.md).
 
 The plan ends when every § Metrics item and the attempt telemetry have panels. A metric after that
 follows `apps/grafana/README.md`'s recipe, with no plan.
 
-Facts from the tree (2026-10-15, `main` at `d0335043`) that shape the design:
+### The telemetry views
 
-- **Four of § Metrics' five database items need only the base views.** Users, reports, attempt
-  timing and failures are `GROUP BY`s over `metrics.app_user`, `metrics.report` and
-  `metrics.attempt`, which keep hard-deleted rows through their tombstones. "Users over
-  time" counts by `email_confirmed_at`, because a code request alone makes an `auth.users` row
-  (`metrics.app_user`'s comment in `009_metrics.ts`).
-- **AI cost comes from the attempt telemetry, which every ending records.** `003_attempt_telemetry`
-  created `analysis_attempt_telemetry`, `analysis_attempt_llm_usage` and
-  `analysis_attempt_quality_check`. The parent writes all three after the verdict, in one
-  transaction, however the child ended ([`telemetry.ts`](../../apps/worker/src/attempt/telemetry.ts)).
-  `public-schema.sql` is the shape, and its column comments say what each count includes. What a
-  view has to respect:
-  - **They outlive what they describe.** They carry `analysis_attempt_id`, `report_id` and
-    `organization_id` raw, with no FK, and nothing deletes from them. So they need no tombstone,
-    and a deleted organization's spend stays counted.
-  - **They hold no status.** A fenced or lost parent does not know an attempt's final one.
-  - **One usage row per attempt × operation × requested model**, with `cost_micro_usd` in integer
-    micro-USD at list price. A report's cost is the sum over its attempts, since a retry spends
-    again.
-  - **The telemetry row fills in by stage.** The input, categorization and report groups are each
-    all null or all set, and each requires the one before; the stage times are a prefix. So null
-    means "never got there", not zero.
-  - **`quality_status` is not stored.** The library derives it from the findings in
-    `quality_status_from_findings`, and the quality rows hold those findings counted per check and
-    status.
-  - **`categorized_kilograms` can exceed `input_kilograms` in the last bit.** Both are float sums,
-    over different rows, so a kilogram share can exceed 1.
-  - **`co2e_kg_per_diner_or_meal` means nothing without `counts_basis`**, which the telemetry row
-    keeps because `report`'s copy goes with the organization.
-  - **A cache hit is not a categorization.** `cache_raw_name_products` and
-    `cache_cleaned_name_products` include products whose cached category is "No Matches Found".
-  - `requested_model` and `served_model` are text, each under a pattern CHECK.
-  - The test stack prints floats with `extra_float_digits = 0`, so a `double precision` read back
-    through Kysely is rounded to 15 digits. A `toEqual` needs values that survive that, such as
-    the fixtures' `2500.5`.
-- **Nothing local produces realistic usage.** `mock-llm` records everything but usage, and
-  `stubbed` reports the same `STUB_TELEMETRY` every time. Only the synthetic history can give a
-  cost panel a shape.
-- **With no FK, deleting an organization leaves its telemetry behind.** `withCommittedFixture`'s
-  teardown already deletes its organizations' telemetry by `organization_id` for that reason.
+Each reads its telemetry table first, so deleted work stays in every week it ran, and buckets by
+`recorded_at`. The comments in `013_metrics_telemetry.ts` and on each view say what each column
+means; what a panel has to respect:
+
+- **`metrics.attempt_telemetry`** is the telemetry row, plus the attempt's `status`,
+  `failure_reason` and `worker_git_sha` from `metrics.attempt` (null only for an attempt deleted
+  before tombstones existed), plus four derived columns:
+  - `quality_status`, a `metrics.quality_status` enum (`pass`, `warning`, `invalid`), derived as
+    `quality_status_from_findings` does. Null when the report group is, so a run that never
+    reached its report is not a `pass`. It is also the denominator of a check's firing rate.
+  - `cache_hit_rate`, `categorized_products_share` and `categorized_kilograms_share`, each null when
+    its group is or the input was empty. A cache hit includes "No Matches Found" products, so the
+    hit rate is not a categorization rate.
+- **`metrics.attempt_llm_usage`** is each usage row, with the telemetry's `report_id`,
+  `organization_id` and `recorded_at` and the attempt's outcome, and `cost_usd` as
+  `numeric(10, 6)` in place of micro-USD. A report's cost is the sum over its attempts.
+  `rate_limited_requests` is the 429 count.
+- **`metrics.attempt_quality_check`** is each check's warning and error findings, with the
+  telemetry's ids and `recorded_at`. Its `status` is the finding's, so it carries no attempt
+  outcome; join `metrics.attempt_telemetry` for that.
+
+What still holds from the telemetry tables themselves:
+- **The telemetry row fills in by stage.** The input, categorization and report groups are each
+  all null or all set, and each requires the one before; the stage times are a prefix. So null
+  means "never got there", not zero, and a stage-time percentile should say which attempts it
+  covers.
+- **`categorized_kilograms` can exceed `input_kilograms` in the last bit**, so a panel clamps the
+  kilogram share with `least(1, …)`, as `cost`'s do.
+- **`co2e_kg_per_diner_or_meal` means nothing without `counts_basis`**, which is null when the
+  uploader gave no counts. A panel that aggregates it across reports groups by `counts_basis`,
+  since a per-diner and a per-meal figure do not average.
 - **Grafana's pool serves about six panel queries at once** (`METRICS_POOL` in
   `apps/grafana/src/data-source.ts`). A bigger dashboard still loads, in waves.
+
+### The synthetic history
+
+`insertSyntheticHistory` writes telemetry for every claimed attempt, from
+[`history/telemetry.ts`](../../packages/db/src/testing/history/telemetry.ts), on a random stream
+of its own so it can change without moving any time in the history. Every operations and impact
+column already has a shape to draw: stage times that fit inside each run, failures that stop at a
+stage their reason implies (`unusable_data` with under 20% categorized), bursts of 429s, peak
+memory that grows with an upload's rows, quality findings with occasional errors, `counts_basis`
+of `people`, `meals` and null, and a plant share that drifts up per organization. A panel that
+needs something it lacks adds it there; `plan.test.ts` and `insert.test.ts` cover what it plans
+and writes.
 
 ## Decisions
 
@@ -70,15 +73,15 @@ Facts from the tree (2026-10-15, `main` at `d0335043`) that shape the design:
 
 | Dashboard | Reader | Starting panels |
 | --- | --- | --- |
-| `product` | GBD | at a glance; users over time; reports per week; organizations active per week; p50 and p95 queue, run and total time per week; failed attempts per week, by reason |
-| `cost` | GBD and us | AI cost per week; cost per succeeded report; cache hit rate; categorized share by kilograms |
+| `product` | GBD | done |
+| `cost` | GBD and us | done |
 | `operations` | us | stage time p50 and p95; 429s per week; which checks warn most; peak memory; database connections (`alerts.md`) |
 | `impact` | GBD | CO2e analyzed and plant share per month |
 
 A dashboard answers one reader's questions, and stays near what Grafana's pool serves at once.
-The panels are a starting set. Each is settled in the local loop, looking at the synthetic
-history, and its PR is where it changes. The views are what this plan fixes, because each is a
-migration and its columns are pinned.
+The panels are a starting set, settled in the local loop against the synthetic history, as
+`cost`'s were: it shipped AI cost per week by attempt outcome rather than a bare total, and the
+share of products by how they were categorized rather than a hit rate alone.
 *Rejected: one product dashboard for everything.* It would hold about fifteen panels, with GBD's
 numbers among ours.
 
@@ -86,68 +89,28 @@ numbers among ours.
 
 A panel buckets by week, Monday to Sunday in UTC, and says so in its description. The synthetic
 history, like production for now, has about one and a half attempts a day, so a daily p95 is the
-slowest of one or two attempts and draws noise. A stage-time or cost percentile on `operations`
-or `cost` follows the same rule.
+slowest of one or two attempts and draws noise. A stage-time percentile on `operations` follows the
+same rule. `impact`'s months are the exception the table names: emissions are reported monthly.
 
 ### Looking like one product
 
-`product` set what the other dashboards follow:
-- a fixed color per series, never the classic palette's next one, so a failure reason or a stage
-  keeps its color across panels and two series never share a hue;
+`product` set what the other dashboards follow, and `cost` follows it:
+- a fixed color per series, never the classic palette's next one, so a failure reason, a stage or
+  an outcome keeps its color across panels and two series never share a hue (`cost` colors
+  succeeded green and failed red, as `product`'s reasons are);
 - a p95 as the dashed twin of its p50, in the same color;
 - whole-number axes (`decimals: 0`) on a count, and no legend on a single-series panel, whose
   title already names it;
-- a dashboard near Grafana's pool of six queries at once: `product` holds exactly six panels, its
-  headline numbers in one stat panel with one query.
-### Views over the telemetry
+- headline numbers in one stat panel with one query, and no more than about six panels.
 
-- **Each reads its telemetry table first, `LEFT JOIN`s `metrics.attempt`** for status, failure
-  reason and `worker_git_sha`, and buckets by `recorded_at`. So deleted work stays in every week it
-  ran, and with the tombstones a deleted attempt's outcome survives too.
-  *Rejected: copying the verdict onto the telemetry row.* After a fenced or lost ending, the
-  parent does not know the final status, and the tombstone already keeps it.
-- `metrics.attempt_llm_usage`: each usage row, with `cost_usd` as a numeric.
-- `metrics.attempt_telemetry`: the telemetry columns, plus:
-  - `quality_status`, derived as `quality_status_from_findings` does. Null when the report group
-    is null, so a run that never reached the report is not a `pass`;
-  - `cache_hit_rate`;
-  - `categorized_kilograms_share`, which a panel clamps rather than the view hiding the row;
-  - `categorized_products_share`.
-- `metrics.attempt_quality_check`.
-- A panel that aggregates `co2e_kg_per_diner_or_meal` across reports groups by `counts_basis`,
-  since a per-diner and a per-meal figure do not average.
-
-### The synthetic history grows with each view
-
-A PR that adds a view adds the rows it reads to `insertSyntheticHistory`, since the panel check
-fails a panel that returns nothing. For the telemetry, the generator:
-- writes telemetry and usage for every settled attempt that was claimed;
-- writes quality rows and the report group for every succeeded one;
-- gives some failed attempts a categorization group under 20%;
-- takes `counts_basis` from the synthetic report, so both values occur.
-
-`seed:history`'s replace deletes the marked organizations' telemetry by `organization_id`, beside
-their tombstones, in the same transaction. The cascade from the telemetry row takes the usage and
-quality rows. Without that, a second run would double every telemetry panel.
-
-## PR 1 — the telemetry views, and the cost dashboard
-
-- The views from Decisions, in the next migration. Each gets its tests. The conventions test
-  allowlists `requested_model` and `served_model` in `IDENTIFIER_TEXT_COLUMNS`, with their reasons.
-- The generator and the replace from Decisions. The plan's pure test gains that both
-  `counts_basis` values occur, and the replace test gains the telemetry case.
-- `cost`, with its starting panels.
-
-## PR 2 — the operations dashboard
-
-Needs PR 1's views.
+## PR 1 — the operations dashboard
 
 - `operations`, with its starting panels. If `alerts.md` PR 2 landed first, the dashboard
   already exists, holding its database-connections panel.
 
-## PR 3 — the impact dashboard
+## PR 2 — the impact dashboard
 
-Needs PR 1's views. Independent of PR 2.
+Independent of PR 1.
 
 - `impact`, with its starting panels.
 
@@ -159,6 +122,6 @@ Each PR runs `pnpm lint && pnpm check && pnpm test`, which sends every panel's q
 Grafana. Then by hand:
 
 - In `pnpm grafana`, every new panel draws a shape from `pnpm seed:history`.
-- After PR 1, with a small real file on `live`, the attempt shows its cost on `cost`, and the
-  day's total is close to what OpenAI's dashboard shows for the project.
+- With a small real file on `live`, the attempt shows its cost on `cost`, and the day's total is
+  close to what OpenAI's dashboard shows for the project.
 - Once Grafana Cloud has the dashboards, a production attempt shows on each.

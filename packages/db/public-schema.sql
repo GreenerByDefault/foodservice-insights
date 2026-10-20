@@ -805,40 +805,6 @@ COMMENT ON COLUMN "public"."analysis_attempt"."worker_git_sha" IS 'The commit th
 
 
 --
--- Name: analysis_attempt_finding; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_finding" (
-    "analysis_attempt_id" "uuid" NOT NULL,
-    "position" integer NOT NULL,
-    "quality_check" "public"."quality_check" NOT NULL,
-    "status" "public"."diagnostic_status" NOT NULL,
-    "message" "text" NOT NULL,
-    "sample_values" "text"[] NOT NULL,
-    CONSTRAINT "analysis_attempt_finding_message_not_empty" CHECK (("message" <> ''::"text")),
-    CONSTRAINT "analysis_attempt_finding_position_non_negative" CHECK (("position" >= 0)),
-    CONSTRAINT "analysis_attempt_finding_sample_values_at_most_5" CHECK (("cardinality"("sample_values") <= 5)),
-    CONSTRAINT "analysis_attempt_finding_status_is_warning_or_error" CHECK (("status" = ANY (ARRAY['warning'::"public"."diagnostic_status", 'error'::"public"."diagnostic_status"])))
-);
-
-
-ALTER TABLE "public"."analysis_attempt_finding" OWNER TO "postgres";
-
---
--- Name: TABLE "analysis_attempt_finding"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE "public"."analysis_attempt_finding" IS 'The warning and error findings the customer''s PDF lists for a succeeded attempt, written in the same transaction as its success. No rows means no warnings. Messages name the customer''s products, so they are deleted with the attempt.';
-
-
---
--- Name: COLUMN "analysis_attempt_finding"."position"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN "public"."analysis_attempt_finding"."position" IS 'Zero-based place in the PDF''s list, which is the order to show them in.';
-
-
---
 -- Name: analysis_attempt_llm_usage; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -909,29 +875,6 @@ COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."input_tokens" IS 'Inclu
 --
 
 COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."cost_micro_usd" IS 'At the list price the run knew, computed from this row''s tokens. Tokens are stored beside it, so a price correction is an UPDATE.';
-
-
---
--- Name: analysis_attempt_quality_check; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_quality_check" (
-    "analysis_attempt_id" "uuid" NOT NULL,
-    "quality_check" "public"."quality_check" NOT NULL,
-    "status" "public"."diagnostic_status" NOT NULL,
-    "findings" integer NOT NULL,
-    CONSTRAINT "analysis_attempt_quality_check_findings_positive" CHECK (("findings" >= 1)),
-    CONSTRAINT "analysis_attempt_quality_check_status_is_warning_or_error" CHECK (("status" = ANY (ARRAY['warning'::"public"."diagnostic_status", 'error'::"public"."diagnostic_status"])))
-);
-
-
-ALTER TABLE "public"."analysis_attempt_quality_check" OWNER TO "postgres";
-
---
--- Name: TABLE "analysis_attempt_quality_check"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE "public"."analysis_attempt_quality_check" IS 'How many warning and error findings each quality check reported, for an attempt whose report was built. No rows means every check passed. Outlives the attempt, report and organization it describes, and holds no personal data.';
 
 
 --
@@ -1028,6 +971,63 @@ COMMENT ON COLUMN "public"."analysis_attempt_telemetry"."cache_no_match_products
 --
 
 COMMENT ON COLUMN "public"."analysis_attempt_telemetry"."unrecognized_llm_answers" IS 'Cleaned names the LLM answered with something other than a known category. Per unique cleaned name, not per product.';
+
+
+--
+-- Name: analysis_attempt_quality_check; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_quality_check" (
+    "analysis_attempt_id" "uuid" NOT NULL,
+    "quality_check" "public"."quality_check" NOT NULL,
+    "status" "public"."diagnostic_status" NOT NULL,
+    "findings" integer NOT NULL,
+    CONSTRAINT "analysis_attempt_quality_check_findings_positive" CHECK (("findings" >= 1)),
+    CONSTRAINT "analysis_attempt_quality_check_status_is_warning_or_error" CHECK (("status" = ANY (ARRAY['warning'::"public"."diagnostic_status", 'error'::"public"."diagnostic_status"])))
+);
+
+
+ALTER TABLE "public"."analysis_attempt_quality_check" OWNER TO "postgres";
+
+--
+-- Name: TABLE "analysis_attempt_quality_check"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."analysis_attempt_quality_check" IS 'How many warning and error findings each quality check reported, for an attempt whose report was built. No rows means every check passed. Outlives the attempt, report and organization it describes, and holds no personal data.';
+
+
+--
+-- Name: analysis_attempt_finding; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."analysis_attempt_finding" (
+    "analysis_attempt_id" "uuid" NOT NULL,
+    "position" integer NOT NULL,
+    "quality_check" "public"."quality_check" NOT NULL,
+    "status" "public"."diagnostic_status" NOT NULL,
+    "message" "text" NOT NULL,
+    "sample_values" "text"[] NOT NULL,
+    CONSTRAINT "analysis_attempt_finding_message_not_empty" CHECK (("message" <> ''::"text")),
+    CONSTRAINT "analysis_attempt_finding_position_non_negative" CHECK (("position" >= 0)),
+    CONSTRAINT "analysis_attempt_finding_sample_values_at_most_5" CHECK (("cardinality"("sample_values") <= 5)),
+    CONSTRAINT "analysis_attempt_finding_status_is_warning_or_error" CHECK (("status" = ANY (ARRAY['warning'::"public"."diagnostic_status", 'error'::"public"."diagnostic_status"])))
+);
+
+
+ALTER TABLE "public"."analysis_attempt_finding" OWNER TO "postgres";
+
+--
+-- Name: TABLE "analysis_attempt_finding"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."analysis_attempt_finding" IS 'The warning and error findings the customer''s PDF lists for a succeeded attempt, written in the same transaction as its success. No rows means no warnings. Messages name the customer''s products, so they are deleted with the attempt.';
+
+
+--
+-- Name: COLUMN "analysis_attempt_finding"."position"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."analysis_attempt_finding"."position" IS 'Zero-based place in the PDF''s list, which is the order to show them in.';
 
 
 --
@@ -2223,21 +2223,21 @@ GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt" 
 
 
 --
--- Name: TABLE "analysis_attempt_finding"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "anon";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "authenticated";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "service_role";
-
-
---
 -- Name: TABLE "analysis_attempt_llm_usage"; Type: ACL; Schema: public; Owner: postgres
 --
 
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_llm_usage" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_llm_usage" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_llm_usage" TO "service_role";
+
+
+--
+-- Name: TABLE "analysis_attempt_telemetry"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "service_role";
 
 
 --
@@ -2250,12 +2250,12 @@ GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_q
 
 
 --
--- Name: TABLE "analysis_attempt_telemetry"; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE "analysis_attempt_finding"; Type: ACL; Schema: public; Owner: postgres
 --
 
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "anon";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "authenticated";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_telemetry" TO "service_role";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "service_role";
 
 
 --

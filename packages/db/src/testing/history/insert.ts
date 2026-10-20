@@ -1,4 +1,7 @@
-import type { DatabaseExecutor } from '../../schema.ts';
+import type { InsertObject } from 'kysely';
+import type { NewAnalysisAttemptLlmUsage } from '../../generated/public/AnalysisAttemptLlmUsage.ts';
+import type { NewAnalysisAttemptQualityCheck } from '../../generated/public/AnalysisAttemptQualityCheck.ts';
+import type { Database, DatabaseExecutor } from '../../schema.ts';
 import { withTransaction } from '../../transactions.ts';
 import type { OrganizationId, UserId } from '../../types.ts';
 import { insertAnalysisAttempt } from '../fixtures/analysis-attempt.ts';
@@ -42,6 +45,10 @@ async function writeHistory(
   const runId = crypto.randomUUID().slice(0, 8);
   let userCount = 0;
   const userIds: UserId[] = [];
+  // Written at the end, a statement per table, rather than three per attempt.
+  const telemetry: InsertObject<Database, 'analysisAttemptTelemetry'>[] = [];
+  const llmUsage: NewAnalysisAttemptLlmUsage[] = [];
+  const qualityChecks: NewAnalysisAttemptQualityCheck[] = [];
 
   async function insertUser(user: PlannedUser): Promise<UserId> {
     const { id } = await insertAppUser(database, {
@@ -78,9 +85,11 @@ async function writeHistory(
         organizationId: organization.id,
         createdByUserId: adminId,
         createdAt: dbMsAgo(plannedReport.createdMsAgo),
+        countsBasis: plannedReport.countsBasis,
+        ...(plannedReport.countsBasis === null && { monthlyCounts: null }),
       });
       for (const [position, attempt] of plannedReport.attempts.entries()) {
-        await insertAnalysisAttempt(database, {
+        const { id } = await insertAnalysisAttempt(database, {
           reportId: report.id,
           attemptNumber: position + 1,
           status: attempt.status,
@@ -95,6 +104,21 @@ async function writeHistory(
               }),
           ...(attempt.status === 'failed' && { failureReason: attempt.failureReason }),
         });
+        if (attempt.status === 'canceled') continue;
+        telemetry.push({
+          analysisAttemptId: id,
+          reportId: report.id,
+          organizationId: organization.id,
+          countsBasis: plannedReport.countsBasis,
+          recordedAt: dbMsAgo(attempt.finishedMsAgo),
+          ...attempt.telemetry.row,
+        });
+        llmUsage.push(
+          ...attempt.telemetry.llmUsage.map((row) => ({ ...row, analysisAttemptId: id })),
+        );
+        qualityChecks.push(
+          ...attempt.telemetry.qualityChecks.map((row) => ({ ...row, analysisAttemptId: id })),
+        );
       }
     }
     return organization.id;
@@ -107,6 +131,17 @@ async function writeHistory(
     organizationIds.push(await insertOrganizationHistory(organization, index));
   }
   for (const user of plan.unconfirmedUsers) await insertUser(user);
+
+  // Usage and quality rows reference their telemetry row, so it goes first.
+  if (telemetry.length > 0) {
+    await database.insertInto('analysisAttemptTelemetry').values(telemetry).execute();
+  }
+  if (llmUsage.length > 0) {
+    await database.insertInto('analysisAttemptLlmUsage').values(llmUsage).execute();
+  }
+  if (qualityChecks.length > 0) {
+    await database.insertInto('analysisAttemptQualityCheck').values(qualityChecks).execute();
+  }
 
   return { organizationIds, userIds };
 }
