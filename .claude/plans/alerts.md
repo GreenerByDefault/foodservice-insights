@@ -118,8 +118,8 @@ point per vendor, if the team ends up working in a Slack channel.
   the view's owner, so `metrics_reader` sees `backend_type` as null and the view cannot filter to
   client backends. The few background workers that carry a role (`pg_cron`, `pg_net`) are counted,
   which can only overstate. The grant that would lift the redaction, `pg_read_all_stats`, also shows
-  every role's SQL text, so it is not an option. The view will get a panel on the operations
-  dashboard ([`dashboards.md`](dashboards.md)), so a person can see who holds the connections.
+  every role's SQL text, so it is not an option. The operations dashboard draws it by role, so a
+  person can see who holds the connections.
   [`budget.ts`](../../packages/db/src/budget.ts) remains where the limits are decided. The view
   only reports them.
 - **A rule that errors fires.** Every rule's error state is *Alerting*. So a query broken by a
@@ -162,8 +162,6 @@ secret key, so it can be revoked on its own.
 - The local Grafana's compose file sends SMTP to Mailpit. `.env.example` and `.env.test` set
   `ALERT_EMAILS` to a placeholder address, since Mailpit accepts any.
 - The panel check reads the rule files too (§ Data rules).
-- A panel for `metrics.database_connection` on the operations dashboard, which this PR creates
-  if `dashboards.md` PR 1 has not.
 - `ALERT_EMAILS` joins the `production` Environment, and `deploy-web`'s Grafana step passes it.
 - `ARCHITECTURE.md`:
   - § Alerts: the Data row names the rule folder in place of its **Open**.
