@@ -397,6 +397,39 @@ CREATE OR REPLACE FUNCTION "public"."audit_event_reject_mutation"() RETURNS "tri
 ALTER FUNCTION "public"."audit_event_reject_mutation"() OWNER TO "postgres";
 
 --
+-- Name: forbid_unmarked_ddl(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."forbid_unmarked_ddl"() RETURNS "event_trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+    BEGIN
+      PERFORM public.require_marked_writer(TG_TAG);
+    END;
+    $$;
+
+
+ALTER FUNCTION "public"."forbid_unmarked_ddl"() OWNER TO "postgres";
+
+--
+-- Name: forbid_unmarked_write(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."forbid_unmarked_write"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+    BEGIN
+      PERFORM public.require_marked_writer(format('%s on %I.%I', TG_OP, TG_TABLE_SCHEMA, TG_TABLE_NAME));
+      RETURN NULL;
+    END;
+    $$;
+
+
+ALTER FUNCTION "public"."forbid_unmarked_write"() OWNER TO "postgres";
+
+--
 -- Name: handle_new_auth_user(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -515,6 +548,33 @@ CREATE OR REPLACE FUNCTION "public"."report_check_has_input_file"() RETURNS "tri
 
 
 ALTER FUNCTION "public"."report_check_has_input_file"() OWNER TO "postgres";
+
+--
+-- Name: require_marked_writer("text"); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "public"."require_marked_writer"("operation" "text") RETURNS "void"
+    LANGUAGE "plpgsql"
+    SET "search_path" TO ''
+    AS $$
+    BEGIN
+      IF session_user = 'postgres' AND coalesce(current_setting('gbd.writer', true), '') = '' THEN
+        RAISE EXCEPTION '% refused: only the apps write to this database', operation
+          USING ERRCODE = 'insufficient_privilege',
+                HINT = 'See the runbook "Write to the database by hand". AI agents: stop and ask a human.';
+      END IF;
+    END;
+    $$;
+
+
+ALTER FUNCTION "public"."require_marked_writer"("operation" "text") OWNER TO "postgres";
+
+--
+-- Name: FUNCTION "require_marked_writer"("operation" "text"); Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON FUNCTION "public"."require_marked_writer"("operation" "text") IS 'Refuses a postgres session not marked with gbd.writer. Called by the forbid_unmarked_write trigger on every table and by the forbid_unmarked_ddl event trigger.';
+
 
 --
 -- Name: set_updated_at(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -1779,6 +1839,139 @@ CREATE OR REPLACE TRIGGER "entree_classification_set_updated_at" BEFORE UPDATE O
 --
 
 CREATE OR REPLACE TRIGGER "entree_classification_set_verified_at" BEFORE INSERT OR UPDATE ON "public"."entree_classification" FOR EACH ROW EXECUTE FUNCTION "public"."set_verified_at"();
+
+
+--
+-- Name: analysis_attempt forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."analysis_attempt" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: analysis_attempt_finding forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."analysis_attempt_finding" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: analysis_attempt_llm_usage forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."analysis_attempt_llm_usage" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: analysis_attempt_quality_check forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."analysis_attempt_quality_check" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: analysis_attempt_telemetry forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."analysis_attempt_telemetry" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: app_user forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."app_user" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: audit_event forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."audit_event" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: entree_classification forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE TRUNCATE ON "public"."entree_classification" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: input_file forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."input_file" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: kysely_migration forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."kysely_migration" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: kysely_migration_lock forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."kysely_migration_lock" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: organization forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."organization" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: organization_invite forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."organization_invite" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: organization_member forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."organization_member" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: product_categorization forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE TRUNCATE ON "public"."product_categorization" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: rejected_upload forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."rejected_upload" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: report forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."report" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: result_file forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "public"."result_file" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
+-- Name: unit_weight forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE TRUNCATE ON "public"."unit_weight" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
 
 
 --

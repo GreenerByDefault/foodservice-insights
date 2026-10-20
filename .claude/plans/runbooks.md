@@ -55,4 +55,25 @@ The worker, and later the lab, insert unverified rows into `product_categorizati
 2. Fix `category` (or the label, or the weight) in place if it's wrong, then tick `is_verified`.
    The next worker claim and the next lab pull pick it up.
 3. To reject a suggestion, leave it unverified. To have the pipeline suggest again, delete it.
-   To verify many rows at once, run an `UPDATE` in the SQL editor.
+   To verify many rows at once, run an `UPDATE` in the SQL editor. `TRUNCATE` is refused.
+
+### Write to the database by hand
+
+The database refuses writes and schema changes from Supabase Studio, locally as well as in
+production, apart from reviewing the caches above. For anything else, such as making someone a
+superadmin, run one transaction in the SQL editor that marks itself as a deliberate writer:
+
+```sql
+begin;
+set local gbd.writer = 'manual:<your name>';
+update app_user set is_superadmin = true
+where id = (select id from auth.users where email = '<their email>');
+commit;
+```
+
+Always `set local` inside the transaction, never a bare `set`: the dashboard may reuse its
+connection, and a session-level mark would leave it unguarded for whoever runs SQL next.
+
+If the guard itself misbehaves, this is also how to get past it: `drop event trigger
+forbid_unmarked_ddl`, or `create or replace function require_marked_writer`. Then fix it in a
+migration.

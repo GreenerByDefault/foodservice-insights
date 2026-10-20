@@ -167,7 +167,7 @@ that would violate this.
 
 ### Superadmin
 
-Users are manually set to superadmin in the Supabase web UI. Superadmins are automatically
+Users are set to superadmin by hand, in the Supabase SQL editor. Superadmins are automatically
 admins for *all* organizations.
 
 - The UI does not show the superadmin in an organization's membership management.
