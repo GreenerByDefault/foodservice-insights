@@ -24,6 +24,9 @@ a Chromium bug. Get evidence before you fix anything.
   attempt's job ids, and `.../jobs/<job id>/logs` its log.
 - **Before blaming a PR, compare the "Runner Image" group** in each job log for a passing and a
   failing run.
+- **A job that runs past its `timeout-minutes` and ignores a cancel is a lost runner, not a hung
+  test**: the runner agent enforces both. `POST .../actions/runs/<id>/force-cancel` ends it, and
+  since that attempt's log is never uploaded, there is nothing to investigate — re-run instead.
 
 ## Locally, reproduce before theorizing
 
