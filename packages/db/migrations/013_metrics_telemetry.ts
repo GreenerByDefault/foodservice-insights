@@ -13,12 +13,16 @@ import { type Kysely, sql } from 'kysely';
 // Rejected: copying the verdict onto the telemetry row. After a fenced or lost ending, the parent
 // that writes the telemetry does not know the attempt's final status, and the tombstone already
 // keeps it.
+//
+// It also indexes what the dashboards filter and join on, for the `metrics` views from `009` and
+// `011` as well as these, so a panel's time range reads its weeks rather than the whole table.
 
 export async function up(database: Kysely<any>): Promise<void> {
   await qualityStatus(database);
   await attemptTelemetryView(database);
   await llmUsageView(database);
   await qualityCheckView(database);
+  await dashboardIndexes(database);
 }
 
 async function qualityStatus(database: Kysely<any>): Promise<void> {
@@ -153,5 +157,38 @@ async function qualityCheckView(database: Kysely<any>): Promise<void> {
   await sql`
     COMMENT ON VIEW metrics.attempt_quality_check IS
       'How many warning and error findings each quality check reported for an attempt whose report was built. A check with no row passed. For a firing rate, divide by the attempts in metrics.attempt_telemetry whose quality_status is not null.'
+  `.execute(database);
+}
+
+async function dashboardIndexes(database: Kysely<any>): Promise<void> {
+  // A view's filter reaches both halves of its UNION ALL, so a tombstone table gets the same index
+  // as its live table.
+  //
+  // `$__timeFilter(created_at)` on `metrics.report` and `metrics.attempt`.
+  await sql`CREATE INDEX report_created_at ON public.report (created_at)`.execute(database);
+  await sql`CREATE INDEX purged_report_created_at ON metrics.purged_report (created_at)`.execute(
+    database,
+  );
+  await sql`CREATE INDEX analysis_attempt_created_at ON public.analysis_attempt (created_at)`.execute(
+    database,
+  );
+  await sql`CREATE INDEX purged_attempt_created_at ON metrics.purged_attempt (created_at)`.execute(
+    database,
+  );
+  // Failures per week bucket by `finished_at`.
+  await sql`CREATE INDEX analysis_attempt_finished_at ON public.analysis_attempt (finished_at)`.execute(
+    database,
+  );
+  await sql`CREATE INDEX purged_attempt_finished_at ON metrics.purged_attempt (finished_at)`.execute(
+    database,
+  );
+  // A report's attempts, as `analysis_attempt_report_id_attempt_number` finds them for live rows.
+  await sql`
+    CREATE INDEX purged_attempt_report_id_attempt_number
+      ON metrics.purged_attempt (report_id, attempt_number)
+  `.execute(database);
+  // A report's cost sums the usage of every attempt at it.
+  await sql`
+    CREATE INDEX analysis_attempt_telemetry_report_id ON public.analysis_attempt_telemetry (report_id)
   `.execute(database);
 }

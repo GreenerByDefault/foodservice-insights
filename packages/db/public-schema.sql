@@ -1625,6 +1625,20 @@ ALTER TABLE ONLY "public"."unit_weight"
 
 
 --
+-- Name: analysis_attempt_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "analysis_attempt_created_at" ON "public"."analysis_attempt" USING "btree" ("created_at");
+
+
+--
+-- Name: analysis_attempt_finished_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "analysis_attempt_finished_at" ON "public"."analysis_attempt" USING "btree" ("finished_at");
+
+
+--
 -- Name: analysis_attempt_notification_pending; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -1671,6 +1685,13 @@ CREATE INDEX "analysis_attempt_telemetry_organization_id" ON "public"."analysis_
 --
 
 CREATE INDEX "analysis_attempt_telemetry_recorded_at" ON "public"."analysis_attempt_telemetry" USING "btree" ("recorded_at");
+
+
+--
+-- Name: analysis_attempt_telemetry_report_id; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "analysis_attempt_telemetry_report_id" ON "public"."analysis_attempt_telemetry" USING "btree" ("report_id");
 
 
 --
@@ -1755,6 +1776,13 @@ CREATE INDEX "rejected_upload_created_by_user_id" ON "public"."rejected_upload" 
 --
 
 CREATE INDEX "rejected_upload_organization_id_created_at" ON "public"."rejected_upload" USING "btree" ("organization_id", "created_at" DESC);
+
+
+--
+-- Name: report_created_at; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX "report_created_at" ON "public"."report" USING "btree" ("created_at");
 
 
 --

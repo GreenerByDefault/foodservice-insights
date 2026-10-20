@@ -468,6 +468,34 @@ ALTER TABLE ONLY "metrics"."purged_user"
 
 
 --
+-- Name: purged_attempt_created_at; Type: INDEX; Schema: metrics; Owner: postgres
+--
+
+CREATE INDEX "purged_attempt_created_at" ON "metrics"."purged_attempt" USING "btree" ("created_at");
+
+
+--
+-- Name: purged_attempt_finished_at; Type: INDEX; Schema: metrics; Owner: postgres
+--
+
+CREATE INDEX "purged_attempt_finished_at" ON "metrics"."purged_attempt" USING "btree" ("finished_at");
+
+
+--
+-- Name: purged_attempt_report_id_attempt_number; Type: INDEX; Schema: metrics; Owner: postgres
+--
+
+CREATE INDEX "purged_attempt_report_id_attempt_number" ON "metrics"."purged_attempt" USING "btree" ("report_id", "attempt_number");
+
+
+--
+-- Name: purged_report_created_at; Type: INDEX; Schema: metrics; Owner: postgres
+--
+
+CREATE INDEX "purged_report_created_at" ON "metrics"."purged_report" USING "btree" ("created_at");
+
+
+--
 -- Name: purged_attempt forbid_unmarked_write; Type: TRIGGER; Schema: metrics; Owner: postgres
 --
 
