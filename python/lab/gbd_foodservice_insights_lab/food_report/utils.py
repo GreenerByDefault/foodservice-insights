@@ -55,7 +55,7 @@ def load_diner_meal_mapping_from_json(
     if not dm_path.exists():
         raise FileNotFoundError(f"Diner-meal JSON not found: {dm_path}")
 
-    with open(dm_path) as f:
+    with Path(dm_path).open() as f:
         raw = json.load(f)
 
     return normalize_diner_meal_mapping(raw)

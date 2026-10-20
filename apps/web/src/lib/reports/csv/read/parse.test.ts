@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { type CsvDelimiter, CsvParseError, parseCsv } from './parse.ts';
 
-const records = (
+function records(
   text: string,
   delimiter: CsvDelimiter = ',',
   maxFields = Number.POSITIVE_INFINITY,
-) => [...parseCsv(text, delimiter, maxFields)];
+) {
+  return [...parseCsv(text, delimiter, maxFields)];
+}
 
 describe('parseCsv', () => {
   test('splits a plain file into records and fields', () => {

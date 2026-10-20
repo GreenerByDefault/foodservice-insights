@@ -99,12 +99,13 @@ export async function upsertDataSource(
   dataSource: DataSource,
   token?: string,
 ): Promise<void> {
-  const send = (method: string, path: string) =>
-    fetch(new URL(path, grafanaUrl), {
+  function send(method: string, path: string) {
+    return fetch(new URL(path, grafanaUrl), {
       method,
       headers: grafanaHeaders(token),
       body: JSON.stringify(dataSource),
     });
+  }
 
   let response = await send('PUT', `/api/datasources/uid/${dataSource.uid}`);
   if (response.status === 404) response = await send('POST', '/api/datasources');

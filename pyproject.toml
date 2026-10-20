@@ -29,6 +29,7 @@ select = [
     "SIM", # flake8-simplify
     "TID", # flake8-tidy-imports, which enforces the lab boundary below
     "RUF", # ruff-specific
+    "PTH", # flake8-use-pathlib
 ]
 # Deliberate typography in plot labels.
 allowed-confusables = ["×", "–", "ℹ"]

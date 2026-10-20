@@ -176,7 +176,7 @@ def _load_existing_metadata(base_filepath: str | Path) -> dict[str, Any]:
     metadata_path = Path(base_filepath) / "client_metadata.json"
     if not metadata_path.exists():
         return {}
-    with open(metadata_path) as f:
+    with Path(metadata_path).open() as f:
         try:
             return json.load(f)
         # Catch JSON parsing errors to avoid crashing if the file is corrupted, which has
@@ -419,7 +419,7 @@ def save_client_metadata(config: dict[str, Any], env_path: str | Path, pdf_extra
     config_serializable["pdf_extracted"] = pdf_extracted
 
     metadata_path = Path(config["base_filepath"]) / "client_metadata.json"
-    with open(metadata_path, "w") as f:
+    with Path(metadata_path).open("w") as f:
         json.dump(config_serializable, indent=2, fp=f)
 
     print(f"✓ Saved client metadata to {metadata_path.name}")
@@ -441,7 +441,7 @@ def load_client_metadata(
             "Please run prepare step first to generate metadata."
         )
 
-    with open(metadata_path) as f:
+    with Path(metadata_path).open() as f:
         metadata = json.load(f)
 
     env_path = metadata.pop("env_path")
@@ -523,10 +523,10 @@ def update_metadata(updates: dict) -> None:
     if not metadata_path.exists():
         logger.warning("client_metadata.json not found in %s. Metadata not updated.", Path.cwd())
         return
-    with open(metadata_path) as f:
+    with Path(metadata_path).open() as f:
         metadata = json.load(f)
     metadata.update(updates)
-    with open(metadata_path, "w") as f:
+    with Path(metadata_path).open("w") as f:
         json.dump(_to_json_serializable(metadata), f, indent=2)
     logger.info("Updated client_metadata.json: %s", list(updates.keys()))
 

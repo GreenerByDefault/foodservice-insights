@@ -157,7 +157,9 @@ describe('analysis_attempt', () => {
     // module loads, which is before any transaction starts — and so before the `created_at` it is
     // supposed to be compared against.
     const LONG_AGO = new Date('2020-01-01T00:00:00Z');
-    const anHourFromNow = () => new Date(Date.now() + 60 * 60 * 1000);
+    function anHourFromNow() {
+      return new Date(Date.now() + 60 * 60 * 1000);
+    }
 
     test.each([
       {

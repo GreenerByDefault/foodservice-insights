@@ -13,9 +13,9 @@ import { expectScreenshots } from '../lib/screenshots.ts';
  * `--repeat-each` needs `--workers=1`. */
 const test = base.extend<{ showEmailAs: (email: string) => Promise<void> }>({
   showEmailAs: async ({ db, user }, use) => {
-    const setEmail = async (email: string) => {
+    async function setEmail(email: string) {
       await db.updateTable('auth.users').set({ email }).where('id', '=', user.id).execute();
-    };
+    }
     await use(setEmail);
     await setEmail(user.email);
   },

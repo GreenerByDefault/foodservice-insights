@@ -41,7 +41,7 @@ What they established:
   already never auto-approved except in `bypassPermissions` mode.
 - **Instruction files:** `typescript.md` (183 lines) repeats READMEs or code comments in roughly a
   third of its lines, scopes 42% of itself to `apps/web` or `packages/db` by prose only, and
-  carries about nineteen stale claims (listed under PR 4). The hook matcher names `MultiEdit`,
+  carries about nineteen stale claims (listed under PR 3). The hook matcher names `MultiEdit`,
   which no longer exists.
 
 Decisions already taken with Eric: compress AGENTS.md § General development principles but keep
@@ -90,6 +90,12 @@ optional PRs (guard hook, storage guard, lint-instead-of-prose).
   larger team are listed at the end as manual steps for Eric.
 - *Rejected: hardening `scripts/supabase` to refuse hosted flags.* The hook sees the bare CLI and
   `pnpm exec supabase` as well as the wrapper; a wrapper-only check covers one of three forms.
+- **A rule bullet that a linter can enforce becomes the linter's job**, even when that takes a
+  repo-wide conversion, so neither a person nor an agent has to remember it. Biome's nursery rule
+  `useConsistentFunctionStyle` (`style: "declaration"`) makes every named function a declaration,
+  local ones included, and leaves inline callbacks and type-annotated consts (SvelteKit's
+  `export const load: PageServerLoad`) alone. Ruff's `PTH` replaces `os.path` and the builtin
+  `open()`.
 - *Rejected: a `Stop` hook that runs the verification gate.* AGENTS.md's instruction plus CI
   already gate merges; the hook would cost minutes per turn.
 
@@ -207,22 +213,7 @@ syntax since it runs under the system `python3`, and ty's 3.14 target does not m
 Where this stops: a command assembled from variables or `sh -c` passes. That is the documented limit
 of text matching; the sandbox and the server-side guards are the boundary beyond it.
 
-## PR 3: Lint instead of prose
-
-Each item turns a rule bullet into an enforced check, so PR 4 can delete the bullet.
-
-- **Biome:** enable `useConsistentFunctionStyle` (nursery, present in the installed 2.5.15; read
-  its options in `node_modules/@biomejs/biome/configuration_schema.json`) as an error, configured
-  for declarations at module scope. Fix the six test files that use `const name = () =>` at module
-  scope: `apps/web/src/hooks.server.test.ts`, `apps/web/src/lib/server/storage.test.ts`,
-  `apps/web/src/lib/reports/csv/read/parse.test.ts`, `…/csv/rules/dates.test.ts`,
-  `…/csv/rules/date-order.test.ts`, `packages/email/src/messages/layout.test.ts`. If the rule
-  cannot express "declarations at module scope, arrows as callbacks", leave Biome alone and keep
-  the bullet in PR 4.
-- **Ruff:** add `"PTH"` to `select` in the root `pyproject.toml` and fix the three remaining
-  `os.path` uses.
-
-## PR 4: Rules and AGENTS.md hold only what the code cannot say
+## PR 3: Rules and AGENTS.md hold only what the code cannot say
 
 Every bullet removed below is either enforced by a tool, stated in a README or code comment, or
 stale; the table says where each fact lives afterwards. Where a fact had no home outside the rule,
@@ -268,7 +259,7 @@ first.
 | --- | --- | --- |
 | Gate; iteration loop with the vitest `--filter` form; Playwright through Turbo and why; `test:system` not in the gate; background gate and no concurrent Turbo | The script inventory and `--filter` fallback paragraph | derivable from `package.json` files; README § Everyday commands |
 | Test organization, compressed to three lines | — | — |
-| `async`/`await`; cross-package imports by name; `dist/` + `^build` (reworded: tasks that need a build declare it, not "every other task"); logging via `@gbd/core/log` with `err` and ids | Module-scope `function` declarations | Biome, PR 3 (keep if PR 3 skipped it) |
+| `async`/`await`; cross-package imports by name; `dist/` + `^build` (reworded: tasks that need a build declare it, not "every other task"); logging via `@gbd/core/log` with `err` and ids | Module-scope `function` declarations | Biome `useConsistentFunctionStyle` |
 | | Test-file suffixes | README's table; the rule keeps one pointer line |
 | Cross-cutting database bullets: `db: DatabaseExecutor` first; `withRollback` and the concurrency exception (point at `concurrency.ts`, which already explains it); classify failures with `isTransientDatabaseError`/`isPermanentDatabaseError` in app code (fix: `packages/db` itself matches codes); fixture naming (point at `fixtures/index.ts` header; drop "in its table's file", which is false) | `TEST_DB=1`, `scripts/supabase`, snake_case, "to read the schema", `database()` placement, the importer list | README § The two databases; the deny rule; `db.md`; `packages/db/README.md` |
 | Blob store: one line, `isBlobStoreError` and `packages/storage/README.md` | the second sentence | that README |
@@ -305,7 +296,7 @@ big rules so a contract edit loads 8 lines instead of 263.
 | Lab boundary: direction, where code goes, "check the product needs it", "no caller ≠ dead" | "Ruff enforces this; the root pyproject holds the reasoning" | make it true: put the one-paragraph reasoning on the `banned-api` block |
 | `LlmClient` seam; `KeywordLlmClient` in tests | Gemini ban | Ruff `banned-api` |
 | ty, annotate new code | "the ported library largely is not annotated" and `[[tool.ty.overrides]]` | false: 99% annotated, no overrides exist |
-| Fail loudly; row counts; nothing per row | `pathlib` over `os.path` | Ruff `PTH`, PR 3 |
+| Fail loudly; row counts; nothing per row | `pathlib` over `os.path` | Ruff `PTH` |
 
 **Also in this PR:** fix the `.github/filters.yml` comment only if a path it names moved (none
 should); run `scripts/ci/check_filters.py` anyway.
@@ -323,8 +314,7 @@ should); run `scripts/ci/check_filters.py` anyway.
   run `doctl account get` and `gh pr view`: the first is blocked with the hook's reason, the second
   runs. Temporarily rename `python3` off `PATH` in a scratch shell to confirm the `|| exit 2` path
   blocks with the "command not found" message.
-- **PR 3:** `pnpm lint` and `just lint` pass, each after fixing exactly the listed violations.
-- **PR 4:** line counts within target; `/context` after reading a file under `apps/web` shows
+- **PR 3:** line counts within target; `/context` after reading a file under `apps/web` shows
   `typescript.md` and `web.md` loaded and not `db.md`; after reading `contract/contract.json` only
   `contract.md`. With Claude Code ≥ 2.1.283, `/doctor prompt-audit` reports no stale or conflicting
   instructions. Every pointer written into a rule resolves (`grep` each path).
@@ -346,4 +336,4 @@ once there is a second developer:
    reads its commit from `deploy/web`, which anyone with push can currently move.
 4. **Local `doctl` and `gcx` tokens:** scope them to read, or remove them when not deploying by
    hand. Both are configured on this machine; PR 1 and PR 2 stop the usual invocation only.
-5. **Update Claude Code to ≥ 2.1.283** before PR 4, for `/doctor prompt-audit`.
+5. **Update Claude Code to ≥ 2.1.283** before PR 3, for `/doctor prompt-audit`.

@@ -9,12 +9,14 @@ import type { DateReading } from './dates.ts';
 
 const BOUNDS = { earliest: '2000-01-01', latest: '2026-12-31' };
 
-const numeric = (first: number, second: number, year: number): DateReading => ({
-  kind: 'numeric',
-  first,
-  second,
-  year,
-});
+function numeric(first: number, second: number, year: number): DateReading {
+  return {
+    kind: 'numeric',
+    first,
+    second,
+    year,
+  };
+}
 
 describe('dateOrderProvenBy', () => {
   test.for([

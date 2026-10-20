@@ -182,10 +182,11 @@ type Outcome<Row> =
 
 /** Keep the last row of each key, as `CategorizationCache.from_frame` does. */
 function collect<Row>(outcomes: readonly Outcome<Row>[], valueName: string): Cleaned<Row> {
-  const notes = (kind: 'skip' | 'refuse') =>
-    outcomes.flatMap((outcome) =>
+  function notes(kind: 'skip' | 'refuse') {
+    return outcomes.flatMap((outcome) =>
       outcome.kind === kind ? [{ line: outcome.line, reason: outcome.reason }] : [],
     );
+  }
   const candidates = outcomes.flatMap((outcome) => (outcome.kind === 'row' ? [outcome] : []));
 
   const latest = new Map<string, (typeof candidates)[number]>();

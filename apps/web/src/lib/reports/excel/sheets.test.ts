@@ -168,7 +168,9 @@ describe('chooseSheet', () => {
   });
 
   describe('where the header may sit', () => {
-    const junk = (count: number): Cell[][] => Array.from({ length: count }, () => ['Ordered by']);
+    function junk(count: number): Cell[][] {
+      return Array.from({ length: count }, () => ['Ordered by']);
+    }
 
     test('below a title and blank rows, which the CSV reader also looks past', () => {
       const orders = sheet('Orders', ['Q1 orders'], [], [null, null], HEADER);

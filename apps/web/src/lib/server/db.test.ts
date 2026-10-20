@@ -55,7 +55,9 @@ describe('withDbErrorHandling', () => {
   /** That a real outage arrives in this shape is `@gbd/db`'s own test, against a closed port. This
    * only needs something that is one.
    */
-  const databaseIsDown = () => Promise.reject(anUnreachableDatabaseError());
+  function databaseIsDown() {
+    return Promise.reject(anUnreachableDatabaseError());
+  }
 
   test('logs context and 503s an unreachable database', async () => {
     const thrown = await withDbErrorHandling(databaseIsDown, {
@@ -77,8 +79,9 @@ describe('withDbErrorHandling', () => {
   });
 
   test('503s a statement the database gave up on', async () => {
-    const canceled = () =>
-      Promise.reject(aDatabaseError('canceling statement due to timeout', '57014'));
+    function canceled() {
+      return Promise.reject(aDatabaseError('canceling statement due to timeout', '57014'));
+    }
 
     const thrown = await withDbErrorHandling(canceled, { action: 'load a widget' }).catch(
       (error: unknown) => error,
@@ -92,13 +95,13 @@ describe('withDbErrorHandling', () => {
   });
 
   test('passes through the answer a caller gave itself', async () => {
-    const conflict = async () => {
+    async function conflict() {
       try {
         await divideByZero(database());
       } catch {
         error(409, 'That report already has an attempt running');
       }
-    };
+    }
 
     const thrown = await withDbErrorHandling(conflict, { action: 'enqueue a retry' }).catch(
       (cause: unknown) => cause,
@@ -137,10 +140,14 @@ describe('isUniqueViolation', () => {
 });
 
 describe('isCheckViolation', () => {
-  const violation = (constraint: string) =>
-    Object.assign(aDatabaseError('check constraint violated', POSTGRES_CODE_CHECK_VIOLATION), {
-      constraint,
-    });
+  function violation(constraint: string) {
+    return Object.assign(
+      aDatabaseError('check constraint violated', POSTGRES_CODE_CHECK_VIOLATION),
+      {
+        constraint,
+      },
+    );
+  }
 
   test('recognizes a violation of the named constraint', () => {
     expect(

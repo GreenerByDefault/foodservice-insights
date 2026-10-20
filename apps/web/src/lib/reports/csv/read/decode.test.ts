@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { decodeCsv } from './decode.ts';
 
-const utf8 = (text: string) => new TextEncoder().encode(text);
+function utf8(text: string) {
+  return new TextEncoder().encode(text);
+}
 
 function utf16(text: string, endianness: 'le' | 'be'): Uint8Array {
   const bytes = new Uint8Array(text.length * 2);

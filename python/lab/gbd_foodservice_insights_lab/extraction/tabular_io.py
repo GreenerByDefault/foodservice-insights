@@ -100,7 +100,7 @@ def detect_single_multi_sheet_excel(
 def detect_file_encoding(filepath: str | Path) -> str:
     """Detect a file's text encoding with chardet, falling back to ``"utf-8"`` on error."""
     try:
-        with open(filepath, "rb") as f:
+        with Path(filepath).open("rb") as f:
             raw_data = f.read(100000)
             result = chardet.detect(raw_data)
             return result["encoding"] or "utf-8"
@@ -225,7 +225,7 @@ def read_csv_with_auto_detection(
 
     delimiter = ","
     try:
-        with open(filepath, encoding=encoding) as f_sniff:
+        with Path(filepath).open(encoding=encoding) as f_sniff:
             sample = f_sniff.read(5000)
             dialect = csv.Sniffer().sniff(sample)
             delimiter = dialect.delimiter
@@ -442,7 +442,7 @@ def experimental_excel_extraction_code(
     """
     del desired_columns, numeric_columns, product_name_column
 
-    with open(csv_filename, encoding="utf-8") as f:
+    with Path(csv_filename).open(encoding="utf-8") as f:
         csv_data = f.read()
 
     markdown = experimental_csv_extraction_to_markdown(

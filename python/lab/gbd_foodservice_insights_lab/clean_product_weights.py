@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -367,8 +366,8 @@ def create_unclear_items_csv(
     # Clean up client_name for filename
     filename = f"{client_name}_items_with_unclear_weights_units.csv"
     if output_dir:
-        os.makedirs(output_dir, exist_ok=True)
-        filepath = os.path.join(output_dir, filename)
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        filepath = Path(output_dir) / filename
     else:
         filepath = filename
 

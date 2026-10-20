@@ -36,7 +36,7 @@ class Category:
 
 @cache
 def categories() -> tuple[Category, ...]:
-    with open(PACKAGE_DIR / "data_files" / "GBD_categories.yaml") as f:
+    with (PACKAGE_DIR / "data_files" / "GBD_categories.yaml").open() as f:
         return _parse_categories(yaml.safe_load(f))
 
 
