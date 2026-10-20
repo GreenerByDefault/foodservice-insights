@@ -114,6 +114,27 @@ CREATE OR REPLACE FUNCTION "metrics"."tombstone_user"() RETURNS "trigger"
 
 ALTER FUNCTION "metrics"."tombstone_user"() OWNER TO "postgres";
 
+--
+-- Name: tombstone_user_country(); Type: FUNCTION; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE FUNCTION "metrics"."tombstone_user_country"() RETURNS "trigger"
+    LANGUAGE "plpgsql" SECURITY DEFINER
+    SET "search_path" TO ''
+    AS $$
+    BEGIN
+      IF OLD.country IS NOT NULL THEN
+        INSERT INTO metrics.purged_user_country (id, country)
+        VALUES (OLD.id, OLD.country)
+        ON CONFLICT (id) DO NOTHING;
+      END IF;
+      RETURN NULL;
+    END;
+    $$;
+
+
+ALTER FUNCTION "metrics"."tombstone_user_country"() OWNER TO "postgres";
+
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
@@ -141,23 +162,47 @@ COMMENT ON TABLE "metrics"."purged_user" IS 'What metrics.app_user showed of eac
 
 
 --
+-- Name: purged_user_country; Type: TABLE; Schema: metrics; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "metrics"."purged_user_country" (
+    "id" "uuid" NOT NULL,
+    "country" "text" NOT NULL,
+    CONSTRAINT "purged_user_country_country_format" CHECK (("country" ~ '^[A-Z]{2}$'::"text"))
+);
+
+
+ALTER TABLE "metrics"."purged_user_country" OWNER TO "postgres";
+
+--
+-- Name: TABLE "purged_user_country"; Type: COMMENT; Schema: metrics; Owner: postgres
+--
+
+COMMENT ON TABLE "metrics"."purged_user_country" IS 'The country of each deleted account that had one, keyed like metrics.purged_user.';
+
+
+--
 -- Name: app_user; Type: VIEW; Schema: metrics; Owner: postgres
 --
 
 CREATE OR REPLACE VIEW "metrics"."app_user" AS
- SELECT "users"."id",
-    "users"."created_at",
-    "users"."email_confirmed_at",
-    "users"."last_sign_in_at",
-    NULL::timestamp with time zone AS "purged_at"
-   FROM "auth"."users"
+ SELECT "u"."id",
+    "u"."created_at",
+    "u"."email_confirmed_at",
+    "u"."last_sign_in_at",
+    NULL::timestamp with time zone AS "purged_at",
+    "a"."country"
+   FROM ("auth"."users" "u"
+     LEFT JOIN "public"."app_user" "a" ON (("a"."id" = "u"."id")))
 UNION ALL
- SELECT "purged_user"."id",
-    "purged_user"."created_at",
-    "purged_user"."email_confirmed_at",
-    "purged_user"."last_sign_in_at",
-    "purged_user"."purged_at"
-   FROM "metrics"."purged_user";
+ SELECT "p"."id",
+    "p"."created_at",
+    "p"."email_confirmed_at",
+    "p"."last_sign_in_at",
+    "p"."purged_at",
+    "c"."country"
+   FROM ("metrics"."purged_user" "p"
+     LEFT JOIN "metrics"."purged_user_country" "c" ON (("c"."id" = "p"."id")));
 
 
 ALTER VIEW "metrics"."app_user" OWNER TO "postgres";
@@ -166,7 +211,7 @@ ALTER VIEW "metrics"."app_user" OWNER TO "postgres";
 -- Name: VIEW "app_user"; Type: COMMENT; Schema: metrics; Owner: postgres
 --
 
-COMMENT ON VIEW "metrics"."app_user" IS 'One row per auth.users row, including deleted accounts. A row exists as soon as someone requests a sign-in code, so count email_confirmed_at, not created_at, for users who actually signed in. purged_at is the account''s deletion, null while the row exists.';
+COMMENT ON VIEW "metrics"."app_user" IS 'One row per auth.users row, including deleted accounts. A row exists as soon as someone requests a sign-in code, so count email_confirmed_at, not created_at, for users who actually signed in. purged_at is the account''s deletion, null while the row exists. country is the ISO 3166-1 alpha-2 code of the browser''s time zone, null when unknown.';
 
 
 --
@@ -483,6 +528,14 @@ ALTER TABLE ONLY "metrics"."purged_report"
 
 
 --
+-- Name: purged_user_country purged_user_country_pkey; Type: CONSTRAINT; Schema: metrics; Owner: postgres
+--
+
+ALTER TABLE ONLY "metrics"."purged_user_country"
+    ADD CONSTRAINT "purged_user_country_pkey" PRIMARY KEY ("id");
+
+
+--
 -- Name: purged_user purged_user_pkey; Type: CONSTRAINT; Schema: metrics; Owner: postgres
 --
 
@@ -540,6 +593,13 @@ CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPD
 
 
 --
+-- Name: purged_user_country forbid_unmarked_write; Type: TRIGGER; Schema: metrics; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPDATE OR TRUNCATE ON "metrics"."purged_user_country" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
+
+
+--
 -- Name: SCHEMA "metrics"; Type: ACL; Schema: -; Owner: postgres
 --
 
@@ -551,6 +611,13 @@ GRANT USAGE ON SCHEMA "metrics" TO "metrics_reader";
 --
 
 GRANT SELECT ON TABLE "metrics"."purged_user" TO "metrics_reader";
+
+
+--
+-- Name: TABLE "purged_user_country"; Type: ACL; Schema: metrics; Owner: postgres
+--
+
+GRANT SELECT ON TABLE "metrics"."purged_user_country" TO "metrics_reader";
 
 
 --

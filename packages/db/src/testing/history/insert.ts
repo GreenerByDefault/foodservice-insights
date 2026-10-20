@@ -57,6 +57,7 @@ async function writeHistory(
       ...(user.emailConfirmedMsAgo !== null && {
         emailConfirmedAt: dbMsAgo(user.emailConfirmedMsAgo),
       }),
+      ...(user.country !== null && { country: user.country }),
     });
     userIds.push(id);
     return id;

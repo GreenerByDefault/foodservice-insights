@@ -39,6 +39,10 @@ const IDENTIFIER_TEXT_COLUMNS = new Set([
   'attempt_llm_usage.served_model',
   // A Postgres role name, set by us or by Supabase.
   'database_connection.role',
+  // app_user_country_format: two capital letters.
+  'app_user.country',
+  // purged_user_country_country_format: the same.
+  'purged_user_country.country',
 ]);
 
 async function readAsMetricsReader<Row>(
@@ -177,9 +181,9 @@ describe('metrics.report', () => {
 });
 
 describe('metrics.app_user', () => {
-  test('carries a user’s sign-up, confirmation and last sign-in', async () => {
+  test('carries a user’s sign-up, confirmation, last sign-in and country', async () => {
     const { user, rows } = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertAppUser(transaction);
+      const { id } = await insertAppUser(transaction, { country: 'NL' });
       const user = await transaction
         .updateTable('auth.users')
         .set({ emailConfirmedAt: dbMsAgo(50_000), lastSignInAt: dbMsAgo(10_000) })
@@ -193,7 +197,7 @@ describe('metrics.app_user', () => {
       return { user, rows };
     });
 
-    expect(rows).toEqual([{ ...user, purgedAt: null }]);
+    expect(rows).toEqual([{ ...user, purgedAt: null, country: 'NL' }]);
   });
 });
 
@@ -593,9 +597,9 @@ describe('tombstones', () => {
     });
   });
 
-  test('keep a deleted account', async () => {
+  test('keep a deleted account, with its country', async () => {
     const { before, after, now } = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertAppUser(transaction);
+      const { id } = await insertAppUser(transaction, { country: 'NL' });
       await transaction
         .updateTable('auth.users')
         .set({ emailConfirmedAt: dbMsAgo(50_000), lastSignInAt: dbMsAgo(10_000) })
@@ -612,8 +616,21 @@ describe('tombstones', () => {
       };
     });
 
-    expect(before).toHaveLength(1);
+    expect(before.map(({ country }) => country)).toEqual(['NL']);
     expect(after).toEqual(before.map((row) => ({ ...row, purgedAt: now })));
+  });
+
+  test('keep nothing for a deleted account with no country', async () => {
+    const countries = await withRollback(DATABASE, async (transaction) => {
+      const { id } = await insertAppUser(transaction);
+      await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
+      const { rows } = await sql`
+        SELECT country FROM metrics.purged_user_country WHERE id = ${id}
+      `.execute(transaction);
+      return rows;
+    });
+
+    expect(countries).toEqual([]);
   });
 
   // The dev seed's placeholder user is one such id.
@@ -682,6 +699,18 @@ describe('tombstones', () => {
       });
 
       expect(deleted).toBe(1n);
+    });
+  });
+
+  test('purged_user_country rejects a country that is not two capital letters', async () => {
+    await withRollback(DATABASE, async (transaction) => {
+      await expectConstraintViolation(
+        sql`
+          INSERT INTO metrics.purged_user_country (id, country)
+          VALUES (${crypto.randomUUID()}, 'nl')
+        `.execute(transaction),
+        'purged_user_country_country_format',
+      );
     });
   });
 

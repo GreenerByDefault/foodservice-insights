@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 describe('renameSelf', () => {
-  test('PATCHes the account with the new name', async () => {
+  test('PATCHes the account with the new name and the browser’s time zone', async () => {
     const fetchMock = stubFetch(new Response(null, { status: 204 }));
 
     await expect(renameSelf('Sam Cook')).resolves.toEqual({ kind: 'renamed' });
@@ -20,7 +20,7 @@ describe('renameSelf', () => {
     expectFetched(fetchMock, {
       url: '/api/account',
       method: 'PATCH',
-      body: { displayName: 'Sam Cook' },
+      body: { displayName: 'Sam Cook', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
     });
   });
 

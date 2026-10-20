@@ -653,6 +653,37 @@ SET default_tablespace = '';
 SET default_table_access_method = "heap";
 
 --
+-- Name: app_user; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE IF NOT EXISTS "public"."app_user" (
+    "id" "uuid" NOT NULL,
+    "display_name" "text",
+    "is_superadmin" boolean DEFAULT false NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "country" "text",
+    CONSTRAINT "app_user_country_format" CHECK (("country" ~ '^[A-Z]{2}$'::"text")),
+    CONSTRAINT "app_user_display_name_trimmed_length" CHECK ((("display_name" IS NULL) OR (("display_name" = "btrim"("display_name")) AND (("char_length"("display_name") >= 1) AND ("char_length"("display_name") <= 100)))))
+);
+
+
+ALTER TABLE "public"."app_user" OWNER TO "postgres";
+
+--
+-- Name: TABLE "app_user"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE "public"."app_user" IS 'Mirrors auth.users, which owns email and created_at. Rows are created by a trigger on auth.users.';
+
+
+--
+-- Name: COLUMN "app_user"."country"; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN "public"."app_user"."country" IS 'ISO 3166-1 alpha-2 code for the time zone the user''s browser last reported, null when it reported none that maps to a country. Set at onboarding and on each rename.';
+
+
+--
 -- Name: report; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -1028,28 +1059,6 @@ COMMENT ON TABLE "public"."analysis_attempt_finding" IS 'The warning and error f
 --
 
 COMMENT ON COLUMN "public"."analysis_attempt_finding"."position" IS 'Zero-based place in the PDF''s list, which is the order to show them in.';
-
-
---
--- Name: app_user; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."app_user" (
-    "id" "uuid" NOT NULL,
-    "display_name" "text",
-    "is_superadmin" boolean DEFAULT false NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "app_user_display_name_trimmed_length" CHECK ((("display_name" IS NULL) OR (("display_name" = "btrim"("display_name")) AND (("char_length"("display_name") >= 1) AND ("char_length"("display_name") <= 100)))))
-);
-
-
-ALTER TABLE "public"."app_user" OWNER TO "postgres";
-
---
--- Name: TABLE "app_user"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE "public"."app_user" IS 'Mirrors auth.users, which owns email and created_at. Rows are created by a trigger on auth.users.';
 
 
 --
@@ -2010,6 +2019,13 @@ CREATE OR REPLACE TRIGGER "metrics_tombstone" AFTER DELETE ON "public"."analysis
 
 
 --
+-- Name: app_user metrics_tombstone; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE OR REPLACE TRIGGER "metrics_tombstone" AFTER DELETE ON "public"."app_user" FOR EACH ROW EXECUTE FUNCTION "metrics"."tombstone_user_country"();
+
+
+--
 -- Name: report metrics_tombstone; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -2233,6 +2249,15 @@ GRANT USAGE ON SCHEMA "public" TO "service_role";
 
 
 --
+-- Name: TABLE "app_user"; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."app_user" TO "anon";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."app_user" TO "authenticated";
+GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."app_user" TO "service_role";
+
+
+--
 -- Name: TABLE "report"; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -2284,15 +2309,6 @@ GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_q
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."analysis_attempt_finding" TO "service_role";
-
-
---
--- Name: TABLE "app_user"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."app_user" TO "anon";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."app_user" TO "authenticated";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."app_user" TO "service_role";
 
 
 --

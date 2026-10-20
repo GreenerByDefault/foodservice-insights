@@ -6,12 +6,14 @@ import { type InviteAuditAction, recordAuditEvent } from '#lib/server/audit.js';
 import { requireAuth } from '#lib/server/auth/guards.js';
 import type { AuthenticatedUser } from '#lib/server/auth/types.js';
 import { parseBody } from '#lib/server/body.js';
+import { countryForTimeZone } from '#lib/server/country.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { notifyGbd } from '#lib/server/email.js';
 import { attemptMemberWrite, lastAdminResponse } from '#lib/server/orgs/members.js';
 import type { RequestHandler } from './$types';
 
-/** Rename yourself. Changing an email is not here: that is a browser-side Supabase call. */
+/** Rename yourself, which onboarding does too. Changing an email is not here: that is a
+ * browser-side Supabase call. */
 export const PATCH: RequestHandler = async (event) => {
   const { user } = requireAuth(event.locals);
   const body = await event.request.json();
@@ -24,18 +26,31 @@ export const DELETE: RequestHandler = async (event) => {
   return await _deleteAccount(database(), { user });
 };
 
-/** Set `userId`'s display name. 400 for an invalid one, 204 on success. */
+/** Set `userId`'s display name, and their country from the browser's `timeZone` when it sent one.
+ * 400 for an invalid name, 204 on success. A time zone that maps to no country stores null rather
+ * than failing the rename. */
 export async function _renameSelf(
   db: DatabaseExecutor,
   userId: UserId,
   body: unknown,
 ): Promise<Response> {
-  const parsed = parseBody(v.object({ displayName: DisplayNameSchema }), body);
+  const parsed = parseBody(
+    v.object({ displayName: DisplayNameSchema, timeZone: v.optional(v.string()) }),
+    body,
+  );
   if (!parsed.ok) return parsed.response;
-  const { displayName } = parsed.value;
+  const { displayName, timeZone } = parsed.value;
 
   await withDbErrorHandling(
-    () => db.updateTable('appUser').set({ displayName }).where('id', '=', userId).execute(),
+    () =>
+      db
+        .updateTable('appUser')
+        .set({
+          displayName,
+          ...(timeZone !== undefined && { country: countryForTimeZone(timeZone) }),
+        })
+        .where('id', '=', userId)
+        .execute(),
     { action: 'rename a user', context: { userId } },
   );
 

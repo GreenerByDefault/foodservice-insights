@@ -53,7 +53,10 @@ describe('DisplayNameForm', () => {
     expectFetched(fetchMock, {
       url: '/api/account',
       method: 'PATCH',
-      body: { displayName: 'Alex Baker' },
+      body: {
+        displayName: 'Alex Baker',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
     });
     await expect.element(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
   });

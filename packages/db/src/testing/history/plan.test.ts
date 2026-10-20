@@ -28,6 +28,14 @@ describe('planSyntheticHistory', () => {
     expect(plan.unconfirmedUsers.length).toBeGreaterThan(0);
   });
 
+  test('covers a user in the US, in Europe, elsewhere, and in no known country', () => {
+    const countries = plan.organizations.flatMap(({ admin, members }) =>
+      [admin, ...members].map(({ country }) => country),
+    );
+
+    expect(countries).toEqual(expect.arrayContaining(['US', 'GB', 'CA', null]));
+  });
+
   test('covers every failure reason', () => {
     const reasons = attemptsOf(plan)
       .flat()

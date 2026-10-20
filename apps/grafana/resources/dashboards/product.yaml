@@ -651,6 +651,170 @@ spec:
                 mode: single
                 sort: none
           version: 13.2.4
+    users-by-country:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: table
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT country AS "Country", count(*) AS "Users"
+                      FROM metrics.app_user
+                      WHERE email_confirmed_at IS NOT NULL AND purged_at IS NULL AND country IS NOT NULL
+                      GROUP BY country
+                      ORDER BY count(*) DESC, country
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: 'The users in Users by region whose country is known, by ISO 3166
+          code: GB is the United Kingdom.'
+        id: 8
+        links: []
+        title: Users by country
+        vizConfig:
+          group: bargauge
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: blue
+                  mode: fixed
+                decimals: 0
+                min: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides: []
+            options:
+              displayMode: basic
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: false
+              maxVizHeight: 24
+              minVizHeight: 16
+              minVizWidth: 8
+              namePlacement: left
+              orientation: horizontal
+              reduceOptions:
+                calcs:
+                - lastNotNull
+                fields: ""
+                values: true
+              showUnfilled: true
+              sizing: manual
+              text:
+                titleSize: 14
+                valueSize: 14
+              valueMode: text
+          version: 13.2.4
+    users-by-region:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: table
+                    rawQuery: true
+                    rawSql: |-
+                      WITH users AS (
+                        SELECT country,
+                          -- The EU and the rest of the continent: the UK, Switzerland, Norway, the Balkans, Ukraine, Russia.
+                          country = ANY ('{AD,AL,AT,AX,BA,BE,BG,BY,CH,CY,CZ,DE,DK,EE,ES,FI,FO,FR,GB,GG,GI,GR,HR,HU,IE,IM,IS,IT,JE,LI,LT,LU,LV,MC,MD,ME,MK,MT,NL,NO,PL,PT,RO,RS,RU,SE,SI,SJ,SK,SM,UA,VA,XK}') AS in_europe
+                        FROM metrics.app_user
+                        WHERE email_confirmed_at IS NOT NULL AND purged_at IS NULL
+                      )
+                      SELECT
+                        count(*) FILTER (WHERE country = 'US') AS "United States",
+                        count(*) FILTER (WHERE in_europe) AS "Europe",
+                        count(*) FILTER (WHERE country <> 'US' AND NOT in_europe) AS "Rest of world",
+                        count(*) FILTER (WHERE country IS NULL) AS "Unknown"
+                      FROM users
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: 'Users signed in and not deleted, today, whatever the time range, by
+          where their browser''s time zone puts them. Set when they first give their
+          name and again whenever they rename themselves. Unknown is a browser whose time
+          zone is in no country, such as UTC, or someone who has not yet given a name.'
+        id: 7
+        links: []
+        title: Users by region
+        vizConfig:
+          group: bargauge
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: blue
+                  mode: fixed
+                decimals: 0
+                min: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides: []
+            options:
+              displayMode: basic
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: false
+              maxVizHeight: 52
+              minVizHeight: 44
+              minVizWidth: 8
+              namePlacement: top
+              orientation: horizontal
+              reduceOptions:
+                calcs:
+                - lastNotNull
+                fields: ""
+                values: false
+              showUnfilled: true
+              sizing: manual
+              text:
+                titleSize: 14
+                valueSize: 14
+              valueMode: text
+          version: 13.2.4
     users-over-time:
       kind: Panel
       spec:
@@ -823,6 +987,24 @@ spec:
           width: 24
           x: 0
           "y": 20
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: users-by-region
+          height: 10
+          width: 8
+          x: 0
+          "y": 29
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: users-by-country
+          height: 10
+          width: 16
+          x: 8
+          "y": 29
   links: []
   liveNow: false
   preload: false
