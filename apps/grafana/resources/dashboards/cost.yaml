@@ -136,6 +136,14 @@ spec:
                   value:
                     fixedColor: '#8e8e8e'
                     mode: fixed
+              - matcher:
+                  id: byName
+                  options: Unknown
+                properties:
+                - id: color
+                  value:
+                    fixedColor: '#d0d0d0'
+                    mode: fixed
             options:
               legend:
                 calcs: []
@@ -332,7 +340,6 @@ spec:
                     mode: none
                   thresholdsStyle:
                     mode: "off"
-                decimals: 0
                 max: 1
                 thresholds:
                   mode: absolute
@@ -505,11 +512,11 @@ spec:
                     rawSql: |-
                       SELECT
                         date_trunc('week', recorded_at) AS time,
-                        sum(cache_raw_name_products)::double precision / sum(input_unique_products)
+                        sum(cache_raw_name_products)::double precision / nullif(sum(input_unique_products), 0)
                           AS "Cache, by name as uploaded",
-                        sum(cache_cleaned_name_products)::double precision / sum(input_unique_products)
+                        sum(cache_cleaned_name_products)::double precision / nullif(sum(input_unique_products), 0)
                           AS "Cache, by cleaned name",
-                        sum(llm_matched_products)::double precision / sum(input_unique_products)
+                        sum(llm_matched_products)::double precision / nullif(sum(input_unique_products), 0)
                           AS "LLM"
                       FROM metrics.attempt_telemetry
                       WHERE cache_raw_name_products IS NOT NULL AND $__timeFilter(recorded_at)
@@ -565,7 +572,6 @@ spec:
                     mode: normal
                   thresholdsStyle:
                     mode: "off"
-                decimals: 0
                 max: 1
                 min: 0
                 thresholds:

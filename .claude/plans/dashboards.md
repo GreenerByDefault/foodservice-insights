@@ -100,7 +100,8 @@ same rule. `impact`'s months are the exception the table names: emissions are re
   succeeded green and failed red, as `product`'s reasons are);
 - a p95 as the dashed twin of its p50, in the same color;
 - whole-number axes (`decimals: 0`) on a count, and no legend on a single-series panel, whose
-  title already names it;
+  title already names it. Never `decimals: 0` on a `percentunit` field: it limits the axis to
+  whole steps of the 0–1 value, so it draws only 0% and 100%;
 - headline numbers in one stat panel with one query, and no more than about six panels.
 
 ## PR 1 — the operations dashboard
