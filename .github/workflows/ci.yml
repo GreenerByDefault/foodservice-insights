@@ -32,12 +32,12 @@ jobs:
       python_lab: ${{ steps.affected.outputs.python_lab }}
       system: ${{ steps.affected.outputs.system }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check that every filter exclusion still describes reality
         run: python3 scripts/ci/check_filters.py
 
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         if: github.event_name == 'pull_request'
         with:
@@ -75,7 +75,7 @@ jobs:
     timeout-minutes: 10
     steps:
       # Turbo's --affected needs the base ref locally.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-node
@@ -89,7 +89,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # see ts-static
       - uses: ./.github/actions/setup-node
@@ -104,7 +104,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # for the base branch's migrations
       - uses: ./.github/actions/setup-node
@@ -148,14 +148,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # see ts-static
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/playwright-browsers
       - uses: ./.github/actions/setup-supabase
       - run: pnpm exec turbo run test:e2e "$TURBO_SCOPE"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
@@ -179,7 +179,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # see ts-static
       - uses: ./.github/actions/setup-node
@@ -187,7 +187,7 @@ jobs:
       - run: pnpm exec turbo run test:screenshots "$TURBO_SCOPE"
       # Before the regenerate step below, whose rerun wipes test-results/ — and for a flaky diff,
       # this run's actual/expected/diff images are the only record of which pixels differed.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: screenshot-diffs
@@ -225,7 +225,7 @@ jobs:
           msg+='run and commit that.'
           echo "::notice::$msg"
           pnpm --filter @gbd/web run screenshots:update
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: screenshots
@@ -240,7 +240,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-python
       - run: just lint
       - run: just check
@@ -252,7 +252,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-python
       - run: just test
 
@@ -265,7 +265,7 @@ jobs:
     env:
       TEST_DB: '1'
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-python
       - run: just lint
       # The cache pull's tests run against the migrated test stack. After lint, so that it still
@@ -283,7 +283,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-node
       - uses: ./.github/actions/playwright-browsers
       - uses: ./.github/actions/setup-supabase
@@ -304,7 +304,7 @@ jobs:
         run: sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
 
       - run: pnpm exec turbo run test:system
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() }}
         with:
           name: system-playwright-report
