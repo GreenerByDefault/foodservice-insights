@@ -6,7 +6,6 @@ These are the only LLM calls that go through LLM Whisperer, and the only ones wi
 Transport lives in `llm`, prompt text in `llm_prompts`.
 """
 
-import os
 import random
 import time
 from pathlib import Path
@@ -203,7 +202,7 @@ def extract_pdf_text_whisper_with_metadata(
     max_retries: int = 3,
 ) -> dict[str, Any]:
     """Extract PDF text with retry metadata so callers can spot upstream pressure."""
-    file = os.path.join(file_path, file_name)
+    file = Path(file_path) / file_name
     last_exception: Exception | None = None
     resolved_profile = profile_settings or {
         "mode": "high_quality",

@@ -29,7 +29,10 @@ select = [
     "SIM", # flake8-simplify
     "TID", # flake8-tidy-imports, which enforces the lab boundary below
     "RUF", # ruff-specific
+    "PTH", # flake8-use-pathlib
 ]
+# Builtin `open()` is fine; only the `os`/`os.path` calls PTH replaces matter.
+ignore = ["PTH123"]
 # Deliberate typography in plot labels.
 allowed-confusables = ["×", "–", "ℹ"]
 

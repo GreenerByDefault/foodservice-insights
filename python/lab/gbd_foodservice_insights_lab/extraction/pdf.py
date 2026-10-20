@@ -29,7 +29,6 @@ import hashlib
 import io
 import json
 import logging
-import os
 import random
 import re
 import time
@@ -2584,7 +2583,7 @@ def combine_extracted_pdf_pages(
             extra_cols = set(df.columns) - set(intended_columns_lower)
             if missing_cols or extra_cols:
                 print(
-                    f"Warning: {os.path.basename(str(file))} has missing columns "
+                    f"Warning: {Path(str(file)).name} has missing columns "
                     f"{list(missing_cols)} and extra columns {list(extra_cols)}"
                 )
             # Keep columns that are in intended_columns, preserving order

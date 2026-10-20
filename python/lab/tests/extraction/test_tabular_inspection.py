@@ -1,5 +1,4 @@
 import ast
-import os
 import shutil
 from pathlib import Path
 
@@ -80,7 +79,7 @@ def test_raw_data_report_return_dict(create_test_files):
 def test_raw_data_report_recursive(create_test_files):
     """Ensures recursive scanning captures nested files, which is common in client folder drops."""
     sub_dir = create_test_files / "subdir"
-    os.makedirs(sub_dir)
+    sub_dir.mkdir(parents=True)
     csv_data = pd.DataFrame({"G": [1]})
     csv_data.to_csv(sub_dir / "test3.csv", index=False)
 
@@ -93,7 +92,7 @@ def test_raw_data_report_recursive(create_test_files):
 def test_raw_data_report_column_consistency(create_test_files, capsys):
     """Verifies both the pass and warning messages, so schema drift is visible before analysis."""
     consistent_dir = create_test_files / "consistent"
-    os.makedirs(consistent_dir)
+    consistent_dir.mkdir(parents=True)
     df = pd.DataFrame({"A": [1], "B": [2]})
     df.to_csv(consistent_dir / "cons1.csv", index=False)
     df.to_csv(consistent_dir / "cons2.csv", index=False)
@@ -103,7 +102,7 @@ def test_raw_data_report_column_consistency(create_test_files, capsys):
     assert "All Excel and CSV files have IDENTICAL columns" in captured.out
 
     inconsistent_dir = create_test_files / "inconsistent"
-    os.makedirs(inconsistent_dir)
+    inconsistent_dir.mkdir(parents=True)
     df1 = pd.DataFrame({"A": [1], "B": [2]})
     df2 = pd.DataFrame({"A": [1], "C": [2]})
     df1.to_csv(inconsistent_dir / "incons1.csv", index=False)
