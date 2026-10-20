@@ -2,7 +2,7 @@
 
 Loads GBD's three cache CSVs into `product_categorization`, `entree_classification` and
 `unit_weight` as verified rows, when the caches move to Supabase
-([`.claude/plans/caches-to-supabase.md`](../../../../.claude/plans/caches-to-supabase.md) § Go-live):
+([`.claude/plans/caches-to-supabase.md`](../../../../.claude/plans/caches-to-supabase.md) § The final import):
 first an interim copy, then GBD's final one, which replaces it. It is also how a developer
 without the hosted cache loads a CSV into their local database.
 **This directory is deleted as soon as the final production import is checked.** After that,

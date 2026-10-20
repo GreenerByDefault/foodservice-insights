@@ -52,7 +52,9 @@ export default defineConfig(({ command }) => ({
           // bits-ui writes `style` attributes, during SSR and through `setAttribute`, and neither
           // can carry a nonce. `script-src` is what protects the session cookie.
           'style-src': ['self', 'unsafe-inline'],
-          // Vite inlines `favicon.svg` as a `data:` URI.
+          // Vite inlines `favicon.svg` as a `data:` URI. CSP checks every redirect hop, so an
+          // `<img>` that redirects to a signed storage URL is blocked: add the storage origin at
+          // runtime, as `applySecurityHeaders` does for `connect-src`, or stream the bytes.
           'img-src': ['self', 'data:'],
           'connect-src': ['self'],
           // fflate unzips a workbook entry of 512 KiB or more in a `blob:` worker.

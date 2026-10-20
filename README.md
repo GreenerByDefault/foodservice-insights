@@ -122,6 +122,24 @@ Two stacks live here, and they share no toolchain. Pick yours:
 
 Everything above the TypeScript heading applies to both.
 
+### Working with Claude Code
+
+The repo configures Claude Code for you; there is nothing to set up.
+
+- **What it reads on its own:** [`AGENTS.md`](AGENTS.md) in every session, a stack's rules in
+  [`.claude/rules/`](.claude/rules/) once it touches that stack's files, and the Svelte MCP server
+  from [`.mcp.json`](.mcp.json) (approve it when asked).
+- **Skills you type:** `/plan-adopt` to bring a plan mode plan into
+  [`.claude/plans/`](.claude/plans/), `/plan-advance` to fold a finished PR back into its plan,
+  and `/prune-comments` and `/test-rigor` before opening a PR. Claude loads the other skills in
+  [`.claude/skills/`](.claude/skills/) itself when they apply.
+- **A refusal means stop and ask a person.** When the database, a hook or a permission rule
+  refuses something, the answer is never to find another way round it.
+- **`.claude/settings.local.json` is yours**, and gitignored; the shared settings are in
+  [`.claude/settings.json`](.claude/settings.json).
+- **After changing the rules or skills,** run `/doctor prompt-audit` (Claude Code 2.1.283 or
+  later) to catch stale or conflicting instructions.
+
 ## Documentation
 
 | Doc | What it covers |
@@ -170,8 +188,6 @@ Beyond [Run the app locally](#run-the-app-locally):
   ```sh
   sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
   ```
-
-- If you're using LLMs, set up the [Svelte MCP server](https://svelte.dev/docs/ai/local-setup).
 
 ### The two databases
 
