@@ -22,9 +22,10 @@ name: Deploy
 # deploys from main, so a dispatch of another branch's copy of this file — which may have dropped
 # its `environment:` lines and every check below — runs without credentials.
 #
-# Every third-party action on the deploy path, including inside the composite actions these jobs
-# call, is pinned by commit SHA: the build jobs push the image prod runs, and the deploy jobs
-# hold prod credentials. Dependabot keeps the pins current.
+# Every action in the repo, first-party included and inside composite actions too, is pinned by
+# commit SHA, because a tag can be moved to point at new code. That matters most here: the build
+# jobs push the image prod runs, and the deploy jobs hold prod credentials. Dependabot keeps the
+# pins current.
 on:
   push:
     branches: [main]
@@ -46,7 +47,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/build-image
         with:
@@ -65,7 +66,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/build-image
         with:
@@ -86,7 +87,7 @@ jobs:
     permissions:
       contents: write # to move the deploy/web tag on success
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # for the supersession check below, and to move the tag
 
@@ -204,7 +205,7 @@ jobs:
           echo "::error::The worker deploys from main only, not ${GITHUB_REF#refs/heads/}. Run the workflow again with 'Use workflow from' set to main."
           exit 1
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # need full history and tags for the steps below, and to move the tag
 

@@ -6,7 +6,7 @@ runs:
   steps:
     # Keyed on the catalog file rather than the resolved version, so it
     # over-invalidates on unrelated catalog edits instead of under-invalidating.
-    - uses: actions/cache@v6
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       id: cache
       with:
         path: ~/.cache/ms-playwright
