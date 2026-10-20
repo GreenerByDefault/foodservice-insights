@@ -398,10 +398,12 @@ its spec in [`.do/`](.do/README.md).
 
 **No edge of our own sits in front of App Platform.** Its edge is Cloudflare's network, so
 volumetric DDoS protection comes with the host. It passes none of Cloudflare's headers to the app,
-so nothing here learns a visitor's country from the network. *Rejected: a Cloudflare zone of our
-own.* The free plan runs DNS for a whole zone, so it meant moving GBD's website DNS to Cloudflare
-or registering a second domain, plus a Worker to rewrite `Host` the way App Platform's proxy
-guidance requires, to buy a WAF, geo-restriction and country counts that are not worth a vendor
+so nothing here learns a visitor's country from the network; the users-by-country panel reads the
+browser's time zone instead ([`country.ts`](apps/web/src/lib/server/country.ts)).
+*Rejected: a Cloudflare zone of our own.* The free plan runs DNS for a whole zone, so it meant
+moving GBD's website DNS to Cloudflare or registering a second domain, plus a Worker to rewrite
+`Host` the way App Platform's proxy guidance requires, to buy a WAF, geo-restriction and country
+counts that are not worth a vendor
 ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/6af236b7c5dcdf58bcf4d05168aeb5ae883a1772/.claude/plans/cloudflare-and-domain.md)).
 
 *Rejected: Railway and Render.* Railway documents neither a digest deploy nor a long shutdown

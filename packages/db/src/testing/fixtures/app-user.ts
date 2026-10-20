@@ -8,6 +8,7 @@ export async function insertAppUser(
     id?: string;
     displayName?: string;
     isSuperadmin?: boolean;
+    country?: string;
     email?: string;
     /** Left out, null, as `auth.users` has no default for it. */
     createdAt?: Date | RawBuilder<Date>;
@@ -32,12 +33,17 @@ export async function insertAppUser(
 
   // The `app_user` row itself is written by the `on_auth_user_created` trigger, not by us.
   // These fields have to be set manually afterwards.
-  if (overrides.displayName !== undefined || overrides.isSuperadmin !== undefined) {
+  if (
+    overrides.displayName !== undefined ||
+    overrides.isSuperadmin !== undefined ||
+    overrides.country !== undefined
+  ) {
     await database
       .updateTable('appUser')
       .set({
         ...(overrides.displayName !== undefined ? { displayName: overrides.displayName } : {}),
         ...(overrides.isSuperadmin !== undefined ? { isSuperadmin: overrides.isSuperadmin } : {}),
+        ...(overrides.country !== undefined ? { country: overrides.country } : {}),
       })
       .where('id', '=', id)
       .execute();

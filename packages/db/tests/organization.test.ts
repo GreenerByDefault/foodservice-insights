@@ -113,6 +113,24 @@ describe('app_user', () => {
       await expectConstraintViolation(insert, 'app_user_display_name_trimmed_length');
     });
   });
+
+  describe('country validation', () => {
+    test('accepts a two-letter code', async () => {
+      const user = await withRollback(DATABASE, async (transaction) => {
+        return await insertAppUser(transaction, { country: 'NL' });
+      });
+
+      expect(user.country).toBe('NL');
+    });
+
+    test.each(['nl', 'NLD', 'N1', ''])('rejects %j', async (country) => {
+      const insert = withRollback(DATABASE, async (transaction) => {
+        await insertAppUser(transaction, { country });
+      });
+
+      await expectConstraintViolation(insert, 'app_user_country_format');
+    });
+  });
 });
 
 describe('organization', () => {

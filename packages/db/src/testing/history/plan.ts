@@ -65,7 +65,37 @@ const FAILURE_REASONS = Object.keys({
   unusable_data: null,
 } satisfies Record<AnalysisFailureReason, null>) as AnalysisFailureReason[];
 
-export type PlannedUser = { createdMsAgo: number; emailConfirmedMsAgo: number | null };
+/** Where confirmed users are, taken in turn so every region the dashboard splits by occurs, and
+ * weighted toward the US and Europe. `null` is a browser whose time zone maps to no country. */
+const COUNTRIES = [
+  'US',
+  'GB',
+  'US',
+  'DE',
+  'CA',
+  'US',
+  'NL',
+  null,
+  'US',
+  'FR',
+  'GB',
+  'AU',
+  'US',
+  'IE',
+  'DE',
+  'US',
+  'SG',
+  'DK',
+  'US',
+  'MX',
+];
+
+/** `country` is null for an unconfirmed user, who never reached onboarding to send one. */
+export type PlannedUser = {
+  createdMsAgo: number;
+  emailConfirmedMsAgo: number | null;
+  country: string | null;
+};
 
 type Run = {
   createdMsAgo: number;
@@ -107,6 +137,7 @@ export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
   // A stream of its own, so the telemetry can change without moving any time above it.
   const telemetryRandom = seededRandom(~seed);
   let failures = 0;
+  let confirmedUsers = 0;
 
   function planAttempt(createdMsAgo: number, upload: Upload): PlannedAttempt {
     const outcome = random.next();
@@ -178,6 +209,7 @@ export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
     return {
       createdMsAgo,
       emailConfirmedMsAgo: createdMsAgo - random.between(30_000, 10 * MINUTE_MS),
+      country: COUNTRIES[confirmedUsers++ % COUNTRIES.length] ?? null,
     };
   }
 
@@ -201,6 +233,7 @@ export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
   const unconfirmedUsers = Array.from({ length: 12 }, () => ({
     createdMsAgo: random.between(NEWEST_REPORT_MS_AGO, SYNTHETIC_HISTORY_SPAN_MS),
     emailConfirmedMsAgo: null,
+    country: null,
   }));
 
   return { organizations, unconfirmedUsers };

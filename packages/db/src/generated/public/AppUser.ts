@@ -13,6 +13,9 @@ export default interface AppUserTable {
   isSuperadmin: ColumnType<boolean, boolean | undefined, boolean>;
 
   updatedAt: ColumnType<Date, Date | string | undefined, Date | string>;
+
+  /** ISO 3166-1 alpha-2 code for the time zone the user's browser last reported, null when it reported none that maps to a country. Set at onboarding and on each rename. */
+  country: ColumnType<string | null, string | null, string | null>;
 }
 
 export type AppUser = Selectable<AppUserTable>;

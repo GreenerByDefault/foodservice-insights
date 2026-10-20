@@ -36,6 +36,55 @@ describe('_renameSelf', () => {
     });
   });
 
+  describe('the browser’s time zone', () => {
+    async function renameAndReadCountry(body: object, country?: string): Promise<string | null> {
+      return await withRollback(database(), async (transaction) => {
+        const user = await insertAppUser(transaction, {
+          displayName: 'Sam Cook',
+          ...(country !== undefined && { country }),
+        });
+
+        const response = await _renameSelf(transaction, user.id, {
+          displayName: 'Alex Baker',
+          ...body,
+        });
+
+        expect(response.status).toBe(204);
+        const row = await transaction
+          .selectFrom('appUser')
+          .select('country')
+          .where('id', '=', user.id)
+          .executeTakeFirstOrThrow();
+        return row.country;
+      });
+    }
+
+    test('stores its country', async () => {
+      expect(await renameAndReadCountry({ timeZone: 'Europe/Amsterdam' }, 'US')).toBe('NL');
+    });
+
+    test('one that maps to no country stores null', async () => {
+      expect(await renameAndReadCountry({ timeZone: 'Made/Up' }, 'US')).toBeNull();
+    });
+
+    test('left out, leaves the country as it was', async () => {
+      expect(await renameAndReadCountry({}, 'US')).toBe('US');
+    });
+
+    test('of the wrong type answers 400', async () => {
+      await withRollback(database(), async (transaction) => {
+        const user = await insertAppUser(transaction, { displayName: 'Sam Cook' });
+
+        const response = await _renameSelf(transaction, user.id, {
+          displayName: 'Alex Baker',
+          timeZone: 42,
+        });
+
+        expect(response.status).toBe(400);
+      });
+    });
+  });
+
   test.for([
     ['null', { displayName: null }],
     ['empty', { displayName: '' }],

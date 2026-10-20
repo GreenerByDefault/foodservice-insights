@@ -39,6 +39,10 @@ const IDENTIFIER_TEXT_COLUMNS = new Set([
   'attempt_llm_usage.served_model',
   // A Postgres role name, set by us or by Supabase.
   'database_connection.role',
+  // app_user_country_format: two capital letters.
+  'app_user.country',
+  // purged_user_country_country_format: the same.
+  'purged_user_country.country',
 ]);
 
 async function readAsMetricsReader<Row>(
@@ -177,9 +181,9 @@ describe('metrics.report', () => {
 });
 
 describe('metrics.app_user', () => {
-  test('carries a user’s sign-up, confirmation and last sign-in', async () => {
+  test('carries a user’s sign-up, confirmation, last sign-in and country', async () => {
     const { user, rows } = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertAppUser(transaction);
+      const { id } = await insertAppUser(transaction, { country: 'NL' });
       const user = await transaction
         .updateTable('auth.users')
         .set({ emailConfirmedAt: dbMsAgo(50_000), lastSignInAt: dbMsAgo(10_000) })
@@ -193,7 +197,7 @@ describe('metrics.app_user', () => {
       return { user, rows };
     });
 
-    expect(rows).toEqual([{ ...user, purgedAt: null }]);
+    expect(rows).toEqual([{ ...user, purgedAt: null, country: 'NL' }]);
   });
 });
 
@@ -593,9 +597,14 @@ describe('tombstones', () => {
     });
   });
 
-  test('keep a deleted account', async () => {
+  test.each([
+    ['NL', 'NL'],
+    ['no', undefined],
+  ])('keep a deleted account with %s country', async (_, country) => {
     const { before, after, now } = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertAppUser(transaction);
+      const { id } = await insertAppUser(transaction, {
+        ...(country !== undefined && { country }),
+      });
       await transaction
         .updateTable('auth.users')
         .set({ emailConfirmedAt: dbMsAgo(50_000), lastSignInAt: dbMsAgo(10_000) })
@@ -612,7 +621,7 @@ describe('tombstones', () => {
       };
     });
 
-    expect(before).toHaveLength(1);
+    expect(before.map((row) => row.country)).toEqual([country ?? null]);
     expect(after).toEqual(before.map((row) => ({ ...row, purgedAt: now })));
   });
 
@@ -620,28 +629,25 @@ describe('tombstones', () => {
   test('keep the first of two accounts deleted under the same id', async () => {
     const { first, rows } = await withRollback(DATABASE, async (transaction) => {
       const id = crypto.randomUUID() as UsersId;
-      async function insertAndDelete(createdAt: RawBuilder<Date>) {
-        await transaction
-          .insertInto('auth.users')
-          .values({ id, email: `${id}@example.test`, createdAt })
-          .execute();
+      async function insertAndDelete(createdAt: RawBuilder<Date>, country: string) {
+        await insertAppUser(transaction, { id, createdAt, country });
         await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
       }
 
-      await insertAndDelete(dbMsAgo(60_000));
+      await insertAndDelete(dbMsAgo(60_000), 'NL');
       const first = await readAsMetricsReader(
         transaction,
-        sql`SELECT * FROM metrics.app_user WHERE id = ${id}`,
+        sql<Row>`SELECT * FROM metrics.app_user WHERE id = ${id}`,
       );
-      await insertAndDelete(dbMsAgo(30_000));
+      await insertAndDelete(dbMsAgo(30_000), 'DE');
       const rows = await readAsMetricsReader(
         transaction,
-        sql`SELECT * FROM metrics.app_user WHERE id = ${id}`,
+        sql<Row>`SELECT * FROM metrics.app_user WHERE id = ${id}`,
       );
       return { first, rows };
     });
 
-    expect(first).toHaveLength(1);
+    expect(first.map((row) => row.country)).toEqual(['NL']);
     expect(rows).toEqual(first);
   });
 
@@ -682,6 +688,44 @@ describe('tombstones', () => {
       });
 
       expect(deleted).toBe(1n);
+    });
+
+    // That role cannot write an `app_user` row to give it a country, and only a superuser can
+    // grant it to the test role. So a role created in the transaction stands in for it: like it,
+    // it can delete an `app_user` row and holds nothing in `metrics`. A cascaded delete runs the
+    // tombstone trigger as the role that deleted the parent row, so this is the same check.
+    test('a user with a country can still be deleted, keeping it', async () => {
+      const rows = await withRollback(DATABASE, async (transaction) => {
+        const { id } = await insertAppUser(transaction, { country: 'NL' });
+        const standIn = sql.id(`auth_admin_stand_in_${crypto.randomUUID().replaceAll('-', '')}`);
+        await sql`CREATE ROLE ${standIn} NOLOGIN`.execute(transaction);
+        await sql`GRANT ${standIn} TO CURRENT_USER`.execute(transaction);
+        await sql`GRANT SELECT, DELETE ON public.app_user TO ${standIn}`.execute(transaction);
+
+        await sql`SET LOCAL ROLE ${standIn}`.execute(transaction);
+        await transaction.deleteFrom('appUser').where('id', '=', id).execute();
+        await sql`RESET ROLE`.execute(transaction);
+        await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
+
+        return await readAsMetricsReader(
+          transaction,
+          sql<Row>`SELECT country FROM metrics.app_user WHERE id = ${id}`,
+        );
+      });
+
+      expect(rows).toEqual([{ country: 'NL' }]);
+    });
+  });
+
+  test('purged_user_country rejects a country that is not two capital letters', async () => {
+    await withRollback(DATABASE, async (transaction) => {
+      await expectConstraintViolation(
+        sql`
+          INSERT INTO metrics.purged_user_country (id, country)
+          VALUES (${crypto.randomUUID()}, 'nl')
+        `.execute(transaction),
+        'purged_user_country_country_format',
+      );
     });
   });
 

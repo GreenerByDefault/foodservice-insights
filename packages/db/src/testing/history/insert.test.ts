@@ -16,6 +16,7 @@ type UserRow = {
   createdMsAgo: number;
   emailConfirmedMsAgo: number | null;
   lastSignInMsAgo: number | null;
+  country: string | null;
 };
 type OrganizationRow = { createdMsAgo: number; members: number };
 type AttemptRow = {
@@ -62,7 +63,7 @@ async function readHistory(
   await sql`SET LOCAL ROLE metrics_reader`.execute(transaction);
   const { rows: users } = await sql<UserRow>`
     SELECT ${msAgo('created_at')} AS "createdMsAgo", ${msAgo('email_confirmed_at')} AS "emailConfirmedMsAgo",
-      ${msAgo('last_sign_in_at')} AS "lastSignInMsAgo"
+      ${msAgo('last_sign_in_at')} AS "lastSignInMsAgo", country
     FROM metrics.app_user WHERE id = ANY(${userIds}::uuid[])
   `.execute(transaction);
   const { rows: reports } = await sql<{ createdMsAgo: number }>`
