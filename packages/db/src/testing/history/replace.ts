@@ -38,6 +38,11 @@ export async function replaceSyntheticHistory(
 
     if (organizations.length > 0) {
       const organizationIds = organizations.map(({ id }) => id);
+      // Telemetry has no foreign key to cascade from, and the usage and quality rows cascade from it.
+      await transaction
+        .deleteFrom('analysisAttemptTelemetry')
+        .where('organizationId', 'in', organizationIds)
+        .execute();
       await sql`
         WITH reports AS (
           DELETE FROM metrics.purged_report

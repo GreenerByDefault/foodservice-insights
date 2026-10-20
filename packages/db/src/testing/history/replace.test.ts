@@ -9,7 +9,7 @@ import { replaceSyntheticHistory } from './replace.ts';
 
 describe('replaceSyntheticHistory', () => {
   test('run twice, leaves one history, no tombstones of the first, and rows it did not make', async () => {
-    // Enough for every kind of tombstone. The whole history, written twice, ran past the 5s
+    // Enough for every kind of tombstone, and telemetry. The whole history, written twice, ran past the 5s
     // timeout in CI.
     const { organizations, unconfirmedUsers } = planSyntheticHistory(SYNTHETIC_HISTORY_SEED);
     const plan = {
@@ -18,6 +18,10 @@ describe('replaceSyntheticHistory', () => {
         .map((organization) => ({ ...organization, reports: organization.reports.slice(0, 1) })),
       unconfirmedUsers: unconfirmedUsers.slice(0, 1),
     };
+
+    const claimedAttempts = plan.organizations
+      .flatMap(({ reports }) => reports.flatMap(({ attempts }) => attempts))
+      .filter(({ status }) => status !== 'canceled').length;
 
     const counts = await withRollback(DATABASE, async (transaction) => {
       const unmarked = await insertReportWithAttempt(transaction, { status: 'succeeded' });
@@ -30,7 +34,7 @@ describe('replaceSyntheticHistory', () => {
           .execute()
       ).map(({ id }) => id);
 
-      await replaceSyntheticHistory(transaction, plan);
+      const second = await replaceSyntheticHistory(transaction, plan);
 
       const { rows } = await sql<Record<string, number>>`
         SELECT
@@ -42,6 +46,10 @@ describe('replaceSyntheticHistory', () => {
             + (SELECT count(*)::int FROM metrics.purged_attempt WHERE report_id = ANY(${firstReportIds}::uuid[]))
             + (SELECT count(*)::int FROM metrics.purged_user WHERE id = ANY(${first.userIds}::uuid[]))
             AS "firstHistoryTombstones",
+          (SELECT count(*)::int FROM analysis_attempt_telemetry
+            WHERE organization_id = ANY(${first.organizationIds}::uuid[])) AS "firstHistoryTelemetry",
+          (SELECT count(*)::int FROM analysis_attempt_telemetry
+            WHERE organization_id = ANY(${second.organizationIds}::uuid[])) AS telemetry,
           (SELECT count(*)::int FROM analysis_attempt WHERE id = ${unmarked.attempt.id})
             AS "unmarkedAttempts"
       `.execute(transaction);
@@ -54,6 +62,8 @@ describe('replaceSyntheticHistory', () => {
         plan.organizations.reduce((sum, { members }) => sum + 1 + members.length, 0) +
         plan.unconfirmedUsers.length,
       firstHistoryTombstones: 0,
+      firstHistoryTelemetry: 0,
+      telemetry: claimedAttempts,
       unmarkedAttempts: 1,
     });
   });

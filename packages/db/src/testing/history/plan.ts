@@ -1,5 +1,5 @@
-/** Several months of organizations, users, reports and attempts, planned without a database, so a
- * dashboard has a shape to draw before production has one.
+/** Several months of organizations, users, reports, attempts and their telemetry, planned without a
+ * database, so a dashboard has a shape to draw before production has one.
  *
  * Every time is an offset into the past from Postgres's `now()` at insertion, so the same seed
  * always plans the same history, shifted to end today. The history goes into the dev database, so
@@ -12,6 +12,16 @@
  */
 
 import type AnalysisFailureReason from '../../generated/public/AnalysisFailureReason.ts';
+import type CountsBasis from '../../generated/public/CountsBasis.ts';
+import {
+  type OrganizationProfile,
+  type PlannedTelemetry,
+  planCountsBasis,
+  planOrganizationProfile,
+  planTelemetry,
+  planUpload,
+  type Upload,
+} from './telemetry.ts';
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -57,16 +67,26 @@ const FAILURE_REASONS = Object.keys({
 
 export type PlannedUser = { createdMsAgo: number; emailConfirmedMsAgo: number | null };
 
-type Run = { createdMsAgo: number; claimedMsAgo: number; finishedMsAgo: number };
+type Run = {
+  createdMsAgo: number;
+  claimedMsAgo: number;
+  finishedMsAgo: number;
+  notifiedMsAgo: number;
+  telemetry: PlannedTelemetry;
+};
 
 export type PlannedAttempt =
-  | ({ status: 'succeeded'; notifiedMsAgo: number } & Run)
-  | ({ status: 'failed'; failureReason: AnalysisFailureReason; notifiedMsAgo: number } & Run)
-  /** Canceled while still `pending`, so never claimed. */
+  | ({ status: 'succeeded' } & Run)
+  | ({ status: 'failed'; failureReason: AnalysisFailureReason } & Run)
+  /** Canceled while still `pending`, so never claimed, and so with no telemetry. */
   | { status: 'canceled'; createdMsAgo: number; finishedMsAgo: number };
 
 /** Created by the organization's admin. `attempts` is in order, the last one settling the report. */
-export type PlannedReport = { createdMsAgo: number; attempts: PlannedAttempt[] };
+export type PlannedReport = {
+  createdMsAgo: number;
+  countsBasis: CountsBasis | null;
+  attempts: PlannedAttempt[];
+};
 
 export type PlannedOrganization = {
   name: string;
@@ -84,9 +104,11 @@ export type SyntheticHistoryPlan = {
 
 export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
   const random = seededRandom(seed);
+  // A stream of its own, so the telemetry can change without moving any time above it.
+  const telemetryRandom = seededRandom(~seed);
   let failures = 0;
 
-  function planAttempt(createdMsAgo: number): PlannedAttempt {
+  function planAttempt(createdMsAgo: number, upload: Upload): PlannedAttempt {
     const outcome = random.next();
     if (outcome >= 0.94) {
       return {
@@ -103,17 +125,22 @@ export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
     const finishedMsAgo = claimedMsAgo - random.between(MINUTE_MS, 15 * MINUTE_MS);
     const notifiedMsAgo = finishedMsAgo - random.between(1_000, 30_000);
     const run = { createdMsAgo, claimedMsAgo, finishedMsAgo, notifiedMsAgo };
-    if (outcome < 0.82) return { status: 'succeeded', ...run };
+    const runMs = claimedMsAgo - finishedMsAgo;
+    if (outcome < 0.82) {
+      const telemetry = planTelemetry(telemetryRandom, upload, runMs, null);
+      return { status: 'succeeded', ...run, telemetry };
+    }
     // In turn rather than at random, so every reason occurs once there are enough failures.
     const failureReason = FAILURE_REASONS[
       failures++ % FAILURE_REASONS.length
     ] as AnalysisFailureReason;
-    return { status: 'failed', failureReason, ...run };
+    const telemetry = planTelemetry(telemetryRandom, upload, runMs, failureReason);
+    return { status: 'failed', failureReason, ...run, telemetry };
   }
 
   /** A failure is retried, by hand, about half the time, until an attempt settles the report. */
-  function planAttempts(reportCreatedMsAgo: number): PlannedAttempt[] {
-    const attempts = [planAttempt(reportCreatedMsAgo)];
+  function planAttempts(reportCreatedMsAgo: number, upload: Upload): PlannedAttempt[] {
+    const attempts = [planAttempt(reportCreatedMsAgo, upload)];
     for (;;) {
       const last = attempts[attempts.length - 1] as PlannedAttempt;
       if (last.status !== 'failed' || attempts.length === MAX_ATTEMPTS || !random.chance(0.5)) {
@@ -121,16 +148,27 @@ export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
       }
       const retryMsAgo = last.finishedMsAgo - random.between(10 * MINUTE_MS, 6 * HOUR_MS);
       if (retryMsAgo < NEWEST_RETRY_MS_AGO) return attempts;
-      attempts.push(planAttempt(retryMsAgo));
+      attempts.push(planAttempt(retryMsAgo, upload));
     }
   }
 
   /** Arrivals at a steady rate per organization, so the total grows as organizations join. */
-  function planReports(organizationCreatedMsAgo: number): PlannedReport[] {
+  function planReports(
+    organizationCreatedMsAgo: number,
+    profile: OrganizationProfile,
+  ): PlannedReport[] {
     const reports: PlannedReport[] = [];
     let createdMsAgo = organizationCreatedMsAgo - random.between(HOUR_MS, 3 * DAY_MS);
     while (createdMsAgo > NEWEST_REPORT_MS_AGO) {
-      reports.push({ createdMsAgo, attempts: planAttempts(createdMsAgo) });
+      const countsBasis = planCountsBasis(telemetryRandom);
+      const upload = planUpload(
+        telemetryRandom,
+        profile,
+        reports.length,
+        countsBasis,
+        1 - createdMsAgo / SYNTHETIC_HISTORY_SPAN_MS,
+      );
+      reports.push({ createdMsAgo, countsBasis, attempts: planAttempts(createdMsAgo, upload) });
       createdMsAgo -= random.exponential(4 * DAY_MS);
     }
     return reports;
@@ -156,7 +194,8 @@ export function planSyntheticHistory(seed: number): SyntheticHistoryPlan {
     const members = Array.from({ length: random.between(0, 4) }, () =>
       planConfirmedUser(random.between(NEWEST_REPORT_MS_AGO, createdMsAgo)),
     );
-    return { name, createdMsAgo, admin, members, reports: planReports(createdMsAgo) };
+    const profile = planOrganizationProfile(telemetryRandom);
+    return { name, createdMsAgo, admin, members, reports: planReports(createdMsAgo, profile) };
   });
 
   const unconfirmedUsers = Array.from({ length: 12 }, () => ({
@@ -181,7 +220,10 @@ function seededRandom(seed: number) {
   return {
     next,
     between: (min: number, max: number) => Math.floor(min + next() * (max - min)),
+    uniform: (min: number, max: number) => min + next() * (max - min),
     chance: (probability: number) => next() < probability,
     exponential: (mean: number) => Math.floor(-Math.log(1 - next()) * mean),
   };
 }
+
+export type Random = ReturnType<typeof seededRandom>;

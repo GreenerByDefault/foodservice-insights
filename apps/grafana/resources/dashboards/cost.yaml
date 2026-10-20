@@ -1,0 +1,693 @@
+apiVersion: dashboard.grafana.app/v2beta1
+kind: Dashboard
+metadata:
+  annotations:
+    grafana.app/folder: foodservice-insights
+    grafana.app/grant-permissions: default
+  labels: null
+  name: cost
+  namespace: ""
+spec:
+  annotations:
+  - kind: AnnotationQuery
+    spec:
+      builtIn: true
+      enable: true
+      hide: true
+      iconColor: rgba(0, 211, 255, 1)
+      name: Annotations & Alerts
+      query:
+        datasource:
+          name: -- Grafana --
+        group: grafana
+        kind: DataQuery
+        spec: {}
+        version: v0
+  cursorSync: "Off"
+  description: What the analysis spends on the LLM, and what the categorization cache saves.
+  editable: true
+  elements:
+    ai-cost-per-week:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        date_trunc('week', recorded_at) AS time,
+                        coalesce(initcap(status::text), 'Unknown') AS metric,
+                        sum(cost_usd) AS cost
+                      FROM metrics.attempt_llm_usage
+                      WHERE $__timeFilter(recorded_at)
+                      GROUP BY 1, 2
+                      ORDER BY 1, 2
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: LLM spend at list price each week, Monday to Sunday in UTC, stacked
+          by how the attempt that spent it ended. A retry spends again, so failed
+          is what failures cost on top. Includes attempts since deleted.
+        id: 2
+        links: []
+        title: AI cost per week, by attempt outcome
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: bars
+                  fillOpacity: 80
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: normal
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 2
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: currencyUSD
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Succeeded
+                properties:
+                - id: color
+                  value:
+                    fixedColor: green
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Failed
+                properties:
+                - id: color
+                  value:
+                    fixedColor: red
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Canceled
+                properties:
+                - id: color
+                  value:
+                    fixedColor: '#8e8e8e'
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Unknown
+                properties:
+                - id: color
+                  value:
+                    fixedColor: '#d0d0d0'
+                    mode: fixed
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    at-a-glance:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: table
+                    rawQuery: true
+                    rawSql: |-
+                      WITH usage AS (
+                        SELECT status, cost_usd FROM metrics.attempt_llm_usage
+                        WHERE $__timeFilter(recorded_at)
+                      ), telemetry AS (
+                        SELECT * FROM metrics.attempt_telemetry
+                        WHERE $__timeFilter(recorded_at)
+                      )
+                      SELECT
+                        (SELECT sum(cost_usd) FROM usage) AS "AI cost",
+                        (SELECT sum(cost_usd) FROM usage)
+                          / nullif((SELECT count(*) FROM telemetry WHERE status = 'succeeded'), 0)
+                          AS "AI cost per report delivered",
+                        (SELECT sum(cost_usd) FILTER (WHERE status = 'failed') / nullif(sum(cost_usd), 0)
+                          FROM usage) AS "Spent on failed attempts",
+                        (SELECT sum(cache_raw_name_products + cache_cleaned_name_products)::double precision
+                            / nullif(sum(input_unique_products), 0)
+                          FROM telemetry WHERE cache_raw_name_products IS NOT NULL) AS "Cache hit rate",
+                        (SELECT least(1, sum(categorized_kilograms) / nullif(sum(input_kilograms), 0))
+                          FROM telemetry WHERE status = 'succeeded') AS "Categorized by weight"
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: 'Over the time range: LLM spend at list price, including failed
+          and canceled attempts; that spend divided by the reports delivered, so it
+          carries the cost of failures; the share of it spent on attempts that failed;
+          the share of unique products the categorization cache knew, which need no
+          match call; and the share of delivered reports'' kilograms that were categorized.'
+        id: 1
+        links: []
+        title: At a glance
+        vizConfig:
+          group: stat
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: text
+                  mode: fixed
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides:
+              - matcher:
+                  id: byName
+                  options: AI cost
+                properties:
+                - id: unit
+                  value: currencyUSD
+                - id: decimals
+                  value: 2
+              - matcher:
+                  id: byName
+                  options: AI cost per report delivered
+                properties:
+                - id: unit
+                  value: currencyUSD
+                - id: decimals
+                  value: 3
+              - matcher:
+                  id: byRegexp
+                  options: Spent on failed attempts|Cache hit rate|Categorized by weight
+                properties:
+                - id: unit
+                  value: percentunit
+                - id: decimals
+                  value: 0
+            options:
+              colorMode: value
+              graphMode: none
+              justifyMode: center
+              orientation: vertical
+              percentChangeColorMode: standard
+              reduceOptions:
+                calcs:
+                - lastNotNull
+                fields: ""
+                values: false
+              showPercentChange: false
+              textMode: value_and_name
+              wideLayout: true
+          version: 13.2.4
+    categorized-share-by-weight:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        date_trunc('week', recorded_at) AS time,
+                        least(1, sum(categorized_kilograms) / nullif(sum(input_kilograms), 0)) AS "All reports",
+                        least(1, min(categorized_kilograms_share)) AS "Lowest report"
+                      FROM metrics.attempt_telemetry
+                      WHERE status = 'succeeded' AND $__timeFilter(recorded_at)
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Of the kilograms in the reports delivered each week, Monday to
+          Sunday in UTC, the share whose products were categorized and so counted
+          in the report. All reports weighs each by its kilograms; lowest report is
+          the week's worst single report. A product the cache or the LLM answered
+          with "No Matches Found" is left out of its report.
+        id: 5
+        links: []
+        title: Categorized share by weight, per week
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: green
+                  mode: fixed
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 2
+                  pointSize: 4
+                  scaleDistribution:
+                    type: linear
+                  showPoints: always
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                max: 1
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: percentunit
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Lowest report
+                properties:
+                - id: custom.lineStyle
+                  value:
+                    dash:
+                    - 6
+                    - 4
+                    fill: dash
+                - id: custom.lineWidth
+                  value: 1
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    cost-per-report-delivered:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      WITH delivered AS (
+                        SELECT report_id, recorded_at FROM metrics.attempt_telemetry
+                        WHERE status = 'succeeded' AND $__timeFilter(recorded_at)
+                      ), report_cost AS (
+                        SELECT d.recorded_at, coalesce(sum(u.cost_usd), 0) AS cost_usd
+                        FROM delivered d
+                        LEFT JOIN metrics.attempt_llm_usage u ON u.report_id = d.report_id
+                        GROUP BY d.report_id, d.recorded_at
+                      )
+                      SELECT
+                        date_trunc('week', recorded_at) AS time,
+                        percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd) AS "p50",
+                        percentile_cont(0.95) WITHIN GROUP (ORDER BY cost_usd) AS "p95"
+                      FROM report_cost
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Median and 95th percentile of what each report delivered that
+          week cost, Monday to Sunday in UTC. A report's cost is the LLM spend of
+          all its attempts, failed retries included, at list price.
+        id: 3
+        links: []
+        title: AI cost per report delivered, per week
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: purple
+                  mode: fixed
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 2
+                  pointSize: 4
+                  scaleDistribution:
+                    type: linear
+                  showPoints: always
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 2
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: currencyUSD
+              overrides:
+              - matcher:
+                  id: byName
+                  options: p95
+                properties:
+                - id: custom.lineStyle
+                  value:
+                    dash:
+                    - 6
+                    - 4
+                    fill: dash
+                - id: custom.lineWidth
+                  value: 1
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    products-by-match-type:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        date_trunc('week', recorded_at) AS time,
+                        sum(cache_raw_name_products)::double precision / nullif(sum(input_unique_products), 0)
+                          AS "Cache, by name as uploaded",
+                        sum(cache_cleaned_name_products)::double precision / nullif(sum(input_unique_products), 0)
+                          AS "Cache, by cleaned name",
+                        sum(llm_matched_products)::double precision / nullif(sum(input_unique_products), 0)
+                          AS "LLM"
+                      FROM metrics.attempt_telemetry
+                      WHERE cache_raw_name_products IS NOT NULL AND $__timeFilter(recorded_at)
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: How the unique products of each week's attempts were categorized,
+          Monday to Sunday in UTC, over every attempt that finished categorizing.
+          The two cache shares together are the cache hit rate. A product the cache
+          missed by name costs a call to clean its name, and one it missed again costs
+          a call to match it. The cache gains a product only once someone reviews
+          what the LLM suggested.
+        id: 4
+        links: []
+        title: How products were categorized, per week
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: bars
+                  fillOpacity: 80
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: normal
+                  thresholdsStyle:
+                    mode: "off"
+                max: 1
+                min: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: percentunit
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Cache, by name as uploaded
+                properties:
+                - id: color
+                  value:
+                    fixedColor: dark-green
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Cache, by cleaned name
+                properties:
+                - id: color
+                  value:
+                    fixedColor: light-green
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: LLM
+                properties:
+                - id: color
+                  value:
+                    fixedColor: orange
+                    mode: fixed
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+  layout:
+    kind: GridLayout
+    spec:
+      items:
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: at-a-glance
+          height: 4
+          width: 24
+          x: 0
+          "y": 0
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: ai-cost-per-week
+          height: 8
+          width: 12
+          x: 0
+          "y": 4
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: cost-per-report-delivered
+          height: 8
+          width: 12
+          x: 12
+          "y": 4
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: products-by-match-type
+          height: 8
+          width: 12
+          x: 0
+          "y": 12
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: categorized-share-by-weight
+          height: 8
+          width: 12
+          x: 12
+          "y": 12
+  links: []
+  liveNow: false
+  preload: false
+  tags: []
+  timeSettings:
+    autoRefresh: ""
+    autoRefreshIntervals:
+    - 5s
+    - 10s
+    - 30s
+    - 1m
+    - 5m
+    - 15m
+    - 30m
+    - 1h
+    - 2h
+    - 1d
+    fiscalYearStartMonth: 0
+    from: now-6M
+    hideTimepicker: false
+    timezone: browser
+    to: now
+  title: Cost
+  variables: []
