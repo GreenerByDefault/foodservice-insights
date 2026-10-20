@@ -6,7 +6,6 @@ argument-hint: "<plan-file-path> [merged-commit-sha]"
 # squash-merged to origin/main. Normally omit it and this runs against the current branch
 # (committed and uncommitted changes alike) relative to origin/main.
 allowed-tools: Bash(git fetch *), Bash(git diff *), Bash(git show *), Bash(git merge-base *), Bash(git log *), Bash(git status), Bash(git rm *), Read, Edit, Write
-disable-model-invocation: true
 ---
 
 `$ARGUMENTS` is `<plan-file-path> [merged-commit-sha]`.

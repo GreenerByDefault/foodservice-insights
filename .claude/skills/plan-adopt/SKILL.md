@@ -3,7 +3,6 @@ name: plan-adopt
 description: Bring a Claude Code plan mode plan into `.claude/plans/` under a name that will still route correctly months later
 argument-hint: "[source-path] [feature-name]"
 allowed-tools: Bash(ls *), Bash(cat *), Bash(head *), Bash(cp *), Read, Write
-disable-model-invocation: true
 ---
 
 Plan mode writes to `~/.claude/plans/` under a name generated from the opening words of the
