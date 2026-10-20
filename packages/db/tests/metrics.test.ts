@@ -689,6 +689,32 @@ describe('tombstones', () => {
 
       expect(deleted).toBe(1n);
     });
+
+    // That role cannot write an `app_user` row to give it a country, and only a superuser can
+    // grant it to the test role. So a role created in the transaction stands in for it: like it,
+    // it can delete an `app_user` row and holds nothing in `metrics`. A cascaded delete runs the
+    // tombstone trigger as the role that deleted the parent row, so this is the same check.
+    test('a user with a country can still be deleted, keeping it', async () => {
+      const rows = await withRollback(DATABASE, async (transaction) => {
+        const { id } = await insertAppUser(transaction, { country: 'NL' });
+        const standIn = sql.id(`auth_admin_stand_in_${crypto.randomUUID().replaceAll('-', '')}`);
+        await sql`CREATE ROLE ${standIn} NOLOGIN`.execute(transaction);
+        await sql`GRANT ${standIn} TO CURRENT_USER`.execute(transaction);
+        await sql`GRANT SELECT, DELETE ON public.app_user TO ${standIn}`.execute(transaction);
+
+        await sql`SET LOCAL ROLE ${standIn}`.execute(transaction);
+        await transaction.deleteFrom('appUser').where('id', '=', id).execute();
+        await sql`RESET ROLE`.execute(transaction);
+        await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
+
+        return await readAsMetricsReader(
+          transaction,
+          sql<Row>`SELECT country FROM metrics.app_user WHERE id = ${id}`,
+        );
+      });
+
+      expect(rows).toEqual([{ country: 'NL' }]);
+    });
   });
 
   test('purged_user_country rejects a country that is not two capital letters', async () => {
