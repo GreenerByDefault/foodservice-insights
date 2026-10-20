@@ -1,13 +1,15 @@
 ---
+name: plan-adopt
 description: Bring a Claude Code plan mode plan into `.claude/plans/` under a name that will still route correctly months later
 argument-hint: "[source-path] [feature-name]"
-allowed-tools: Bash(ls *), Bash(cat *), Bash(head *), Bash(cp *), Read, Write, Glob
+allowed-tools: Bash(ls *), Bash(cat *), Bash(head *), Bash(cp *), Read, Write
+disable-model-invocation: true
 ---
 
 Plan mode writes to `~/.claude/plans/` under a name generated from the opening words of the
 prompt that started it — `i-want-to-implement-kind-lovelace.md`. That name cannot route:
-`AGENTS.md` § Plans has agents pick plans by filename alone, so the name *is* the index. This
-command fixes the name and brings the plan into the repo.
+`AGENTS.md` § Claude Code plans has agents pick plans by filename alone, so the name *is* the
+index. This skill fixes the name and brings the plan into the repo.
 
 ## Find the source
 
@@ -33,8 +35,8 @@ not resolve it by appending a number.
 
 ## Copy it verbatim
 
-This command is a rename, not an edit — the content is copied unchanged. If the plan has no
+This skill is a rename, not an edit — the content is copied unchanged. If the plan has no
 `## PR N` sections for `/plan-advance` to fold in, or no `## Context`, say so, because the
-lifecycle in `AGENTS.md` § Plans has nothing to grip. Still copy it.
+lifecycle in `AGENTS.md` § Claude Code plans has nothing to grip. Still copy it.
 
 Report the source path, the new path, and why the name is the one that will route.

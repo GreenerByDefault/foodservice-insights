@@ -1,5 +1,5 @@
 /** The site password: how `placeholder` mode signs a visitor in until there is an email provider.
- * Deleted with that mode (`.claude/plans/email-provider.md`).
+ * Deleted with that mode (`.claude/plans/production-sign-in.md` PR 2).
  *
  * Whoever knows `SITE_PASSWORD` is the placeholder user, a superadmin, so this password is all that
  * stands between the internet and every organization's data. Nothing rate-limits a guess; its

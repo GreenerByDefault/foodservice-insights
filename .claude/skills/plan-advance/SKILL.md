@@ -1,10 +1,12 @@
 ---
+name: plan-advance
 description: Fold a landed precursor PR back into its plan file, so the plan reads fresh for what's left
 argument-hint: "<plan-file-path> [merged-commit-sha]"
 # merged-commit-sha is only for the rare case of folding in a precursor PR that's already
 # squash-merged to origin/main. Normally omit it and this runs against the current branch
 # (committed and uncommitted changes alike) relative to origin/main.
-allowed-tools: Bash(git fetch *), Bash(git diff *), Bash(git show *), Bash(git merge-base *), Bash(git log *), Bash(git status), Bash(git rm *), Read, Grep, Glob, Edit, Write
+allowed-tools: Bash(git fetch *), Bash(git diff *), Bash(git show *), Bash(git merge-base *), Bash(git log *), Bash(git status), Bash(git rm *), Read, Edit, Write
+disable-model-invocation: true
 ---
 
 `$ARGUMENTS` is `<plan-file-path> [merged-commit-sha]`.
@@ -46,7 +48,7 @@ changelog, not the old plan with strikethrough. Concretely:
 3. **Reconcile every reference against what actually shipped, not what was planned.** Walk
    `Context`, `Decisions`, and every remaining `## PR N` section for filenames, function names,
    types, and API shapes the diff changed — a rename, a signature that grew a parameter, a
-   decision that was reversed mid-review. Read the current file at that path (via Grep/Glob/Read)
+   decision that was reversed mid-review. Read the current file at that path (via `Read`)
    before asserting it still matches; the plan is very often stale here even on small precursors.
    A follow-up commit that changed course between PR 1 and its own last commit is what future PRs
    need to see reflected — not the first-draft version.

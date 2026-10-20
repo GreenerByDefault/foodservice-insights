@@ -57,6 +57,13 @@ Keep the set curated. The unit to weigh is a *screen*, not an image — adding o
 per viewport, and every one of them is CI minutes and a file a reviewer has to look at on any
 visual change. Capture screens that carry real visual risk, not every route.
 
+An `<img>` whose `src` redirects to a signed storage URL cannot render in the browser container.
+The signed URL names `127.0.0.1`, which is the container's own loopback, and the Host is part of
+the signature, so it cannot be rewritten; nor can `page.route()` intercept the redirected leg.
+Route the pre-redirect, app-origin URL instead and fulfill it with a committed synthetic image —
+never real report output. Before a `fullPage` shot, wait for every lazy `<img>` to report
+`complete`. *Untried: signing with `host.docker.internal` from the start, as `tests/e2e` does.*
+
 ## Database state
 
 `e2e/fixtures/reports.ts` is the source of truth for what each report state contains.
