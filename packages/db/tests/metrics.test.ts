@@ -597,9 +597,14 @@ describe('tombstones', () => {
     });
   });
 
-  test('keep a deleted account, with its country', async () => {
+  test.each([
+    ['NL', 'NL'],
+    ['no', undefined],
+  ])('keep a deleted account with %s country', async (_, country) => {
     const { before, after, now } = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertAppUser(transaction, { country: 'NL' });
+      const { id } = await insertAppUser(transaction, {
+        ...(country !== undefined && { country }),
+      });
       await transaction
         .updateTable('auth.users')
         .set({ emailConfirmedAt: dbMsAgo(50_000), lastSignInAt: dbMsAgo(10_000) })
@@ -616,49 +621,33 @@ describe('tombstones', () => {
       };
     });
 
-    expect(before.map(({ country }) => country)).toEqual(['NL']);
+    expect(before.map((row) => row.country)).toEqual([country ?? null]);
     expect(after).toEqual(before.map((row) => ({ ...row, purgedAt: now })));
-  });
-
-  test('keep nothing for a deleted account with no country', async () => {
-    const countries = await withRollback(DATABASE, async (transaction) => {
-      const { id } = await insertAppUser(transaction);
-      await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
-      const { rows } = await sql`
-        SELECT country FROM metrics.purged_user_country WHERE id = ${id}
-      `.execute(transaction);
-      return rows;
-    });
-
-    expect(countries).toEqual([]);
   });
 
   // The dev seed's placeholder user is one such id.
   test('keep the first of two accounts deleted under the same id', async () => {
     const { first, rows } = await withRollback(DATABASE, async (transaction) => {
       const id = crypto.randomUUID() as UsersId;
-      async function insertAndDelete(createdAt: RawBuilder<Date>) {
-        await transaction
-          .insertInto('auth.users')
-          .values({ id, email: `${id}@example.test`, createdAt })
-          .execute();
+      async function insertAndDelete(createdAt: RawBuilder<Date>, country: string) {
+        await insertAppUser(transaction, { id, createdAt, country });
         await transaction.deleteFrom('auth.users').where('id', '=', id).execute();
       }
 
-      await insertAndDelete(dbMsAgo(60_000));
+      await insertAndDelete(dbMsAgo(60_000), 'NL');
       const first = await readAsMetricsReader(
         transaction,
-        sql`SELECT * FROM metrics.app_user WHERE id = ${id}`,
+        sql<Row>`SELECT * FROM metrics.app_user WHERE id = ${id}`,
       );
-      await insertAndDelete(dbMsAgo(30_000));
+      await insertAndDelete(dbMsAgo(30_000), 'DE');
       const rows = await readAsMetricsReader(
         transaction,
-        sql`SELECT * FROM metrics.app_user WHERE id = ${id}`,
+        sql<Row>`SELECT * FROM metrics.app_user WHERE id = ${id}`,
       );
       return { first, rows };
     });
 
-    expect(first).toHaveLength(1);
+    expect(first.map((row) => row.country)).toEqual(['NL']);
     expect(rows).toEqual(first);
   });
 
