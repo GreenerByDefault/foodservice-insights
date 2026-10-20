@@ -65,3 +65,23 @@ PR.
 `pnpm test` then runs every panel's query through a test Grafana, on port 65330, against a
 database of its own holding the synthetic history. A panel fails if its query errors or returns
 no rows.
+
+### Conventions
+
+The dashboards should look like one product:
+
+- **Each dashboard answers one reader's questions.** Put a panel where its reader looks, and
+  keep a dashboard to a stat panel of headline numbers, with one query, plus about five more.
+  Grafana's pool serves four queries at once (`METRICS_POOL` in
+  [`data-source.ts`](src/data-source.ts)), so a bigger dashboard loads in waves.
+- **Bucket by week, Monday to Sunday in UTC, and say so in the description.** With a few
+  attempts a day, a daily percentile is the slowest of one or two and draws noise. `impact` is
+  the exception: emissions are reported by month.
+- **Give each series a fixed color**, never the classic palette's next one, so a failure reason,
+  a stage or an outcome keeps its color across panels, and two series in a panel never share a
+  hue. Succeeded is green and failed red.
+- **Draw a p95 as the dashed twin of its p50**, in the same color.
+- **Use `decimals: 0` on a count, and never on a `percentunit` field**, where it allows only
+  whole steps of the 0–1 value, so the axis draws just 0% and 100%. A single-series panel has
+  no legend, since its title names the series.
+- **A number read live ignores the time range**, so its title or name says *now*.
