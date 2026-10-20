@@ -63,7 +63,8 @@ of data, which this way carries its own regeneration script.
 - `packages/core`: the table, its script, and `countryForTimeZone()`.
 - `apps/web`: after sign-in, the `(app)` layout posts the time zone to a small endpoint once per
   session, and the endpoint stores the mapped country. Nothing waits on it.
-- `metrics`: a `users_by_country` view and a Grafana panel, following `dashboards.md`.
+- `metrics`: a `users_by_country` view and a Grafana panel, following
+  `apps/grafana/README.md`'s recipe.
 - The privacy notice, if there is one by then, gains a line.
 - Delete this plan.
 

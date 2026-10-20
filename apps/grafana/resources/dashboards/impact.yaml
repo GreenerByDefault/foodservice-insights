@@ -1,0 +1,702 @@
+apiVersion: dashboard.grafana.app/v2beta1
+kind: Dashboard
+metadata:
+  annotations:
+    grafana.app/folder: foodservice-insights
+    grafana.app/grant-permissions: default
+  labels: null
+  name: impact
+  namespace: ""
+spec:
+  annotations:
+  - kind: AnnotationQuery
+    spec:
+      builtIn: true
+      enable: true
+      hide: true
+      iconColor: rgba(0, 211, 255, 1)
+      name: Annotations & Alerts
+      query:
+        datasource:
+          name: -- Grafana --
+        group: grafana
+        kind: DataQuery
+        spec: {}
+        version: v0
+  cursorSync: "Off"
+  description: The food and emissions the reports delivered have analyzed, and whether
+    the organizations behind them are buying more plants.
+  editable: true
+  elements:
+    at-a-glance:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: table
+                    rawQuery: true
+                    rawSql: |-
+                      WITH delivered AS (
+                        SELECT organization_id, recorded_at, categorized_kilograms, total_co2e_kg, plant_pct_by_weight
+                        FROM metrics.attempt_telemetry
+                        WHERE status = 'succeeded'
+                      ), in_range AS (
+                        SELECT * FROM delivered WHERE $__timeFilter(recorded_at)
+                      ), first_report AS (
+                        SELECT DISTINCT ON (organization_id) organization_id, recorded_at, plant_pct_by_weight
+                        FROM delivered
+                        ORDER BY organization_id, recorded_at
+                      ), latest_report AS (
+                        SELECT DISTINCT ON (organization_id) organization_id, recorded_at, plant_pct_by_weight
+                        FROM in_range
+                        ORDER BY organization_id, recorded_at DESC
+                      )
+                      SELECT
+                        (SELECT count(*) FROM in_range) AS "Reports delivered",
+                        (SELECT count(DISTINCT organization_id) FROM in_range) AS "Organizations",
+                        (SELECT sum(categorized_kilograms) / 1000 FROM in_range) AS "Food analyzed (tonnes)",
+                        (SELECT sum(total_co2e_kg) / 1000 FROM in_range) AS "CO₂e analyzed (tonnes)",
+                        (SELECT sum(plant_pct_by_weight * categorized_kilograms) / nullif(sum(categorized_kilograms), 0) / 100
+                          FROM in_range) AS "Plant share by weight",
+                        (SELECT avg(l.plant_pct_by_weight - f.plant_pct_by_weight)
+                          FROM latest_report l
+                          JOIN first_report f USING (organization_id)
+                          WHERE l.recorded_at > f.recorded_at) AS "Plant share gain per org"
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: 'Over the time range, counting only reports delivered: how many,
+          and for how many organizations; the food they categorized, and its emissions,
+          in tonnes; and the plant share of that food by weight. Plant share gain per org
+          is how many percentage points an organization''s plant share
+          has risen from its first report ever to its latest in the time range, averaged
+          over the organizations with at least two reports. 40% to 45% is a gain of
+          5 points; a fall is negative. Includes reports since deleted. A file uploaded
+          twice counts twice.'
+        id: 1
+        links: []
+        title: At a glance
+        vizConfig:
+          group: stat
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: text
+                  mode: fixed
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+              overrides:
+              - matcher:
+                  id: byRegexp
+                  options: Reports delivered|Organizations
+                properties:
+                - id: decimals
+                  value: 0
+              - matcher:
+                  id: byName
+                  options: Food analyzed (tonnes)
+                properties:
+                - id: unit
+                  value: locale
+                - id: decimals
+                  value: 0
+              - matcher:
+                  id: byName
+                  options: CO₂e analyzed (tonnes)
+                properties:
+                - id: unit
+                  value: locale
+                - id: decimals
+                  value: 0
+              - matcher:
+                  id: byName
+                  options: Plant share by weight
+                properties:
+                - id: unit
+                  value: percentunit
+                - id: decimals
+                  value: 1
+              - matcher:
+                  id: byName
+                  options: Plant share gain per org
+                properties:
+                - id: unit
+                  value: suffix:points
+                - id: decimals
+                  value: 1
+            options:
+              colorMode: value
+              graphMode: none
+              justifyMode: center
+              orientation: vertical
+              percentChangeColorMode: standard
+              reduceOptions:
+                calcs:
+                - lastNotNull
+                fields: ""
+                values: false
+              showPercentChange: false
+              textMode: value_and_name
+              wideLayout: true
+          version: 13.2.4
+    co2e-analyzed-per-month:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        date_trunc('month', recorded_at) AS time,
+                        sum(total_co2e_kg) / 1000 AS "CO₂e analyzed"
+                      FROM metrics.attempt_telemetry
+                      WHERE status = 'succeeded' AND $__timeFilter(recorded_at)
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: The emissions of the food in the reports delivered each month,
+          in UTC, in tonnes of CO₂e. A report counts in the month it was delivered,
+          not the months its food was bought, so this tracks how much the product
+          analyzes rather than when anyone emitted it. Includes reports since deleted.
+          A file uploaded twice counts twice.
+        id: 2
+        links: []
+        title: CO₂e analyzed per month
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: orange
+                  mode: fixed
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: bars
+                  fillOpacity: 80
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 1
+                  pointSize: 5
+                  scaleDistribution:
+                    type: linear
+                  showPoints: auto
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 0
+                min: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: suffix:t
+              overrides: []
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: false
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    co2e-per-diner-and-meal:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        date_trunc('month', recorded_at) AS time,
+                        sum(total_co2e_kg) FILTER (WHERE counts_basis = 'people')
+                          / nullif(sum(total_co2e_kg / co2e_kg_per_diner_or_meal) FILTER (WHERE counts_basis = 'people'), 0)
+                          AS "Per diner",
+                        sum(total_co2e_kg) FILTER (WHERE counts_basis = 'meals')
+                          / nullif(sum(total_co2e_kg / co2e_kg_per_diner_or_meal) FILTER (WHERE counts_basis = 'meals'), 0)
+                          AS "Per meal"
+                      FROM metrics.attempt_telemetry
+                      WHERE status = 'succeeded' AND co2e_kg_per_diner_or_meal > 0 AND $__timeFilter(recorded_at)
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Over the reports delivered each month, in UTC, whose uploader
+          gave diner or meal counts, their CO₂e divided by the diners or meals they
+          counted, so a larger report weighs more. Per diner and per meal are separate
+          because the two do not average. A report without counts is left out.
+        id: 3
+        links: []
+        title: CO₂e per diner and per meal, per month
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 2
+                  pointSize: 4
+                  scaleDistribution:
+                    type: linear
+                  showPoints: always
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 1
+                min: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: suffix:kg
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Per diner
+                properties:
+                - id: color
+                  value:
+                    fixedColor: purple
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Per meal
+                properties:
+                - id: color
+                  value:
+                    fixedColor: blue
+                    mode: fixed
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    plant-share-by-weight:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      SELECT
+                        date_trunc('month', recorded_at) AS time,
+                        sum(plant_pct_by_weight * categorized_kilograms) / nullif(sum(categorized_kilograms), 0) / 100
+                          AS "All food",
+                        sum(plant_protein_pct_by_weight * categorized_kilograms)
+                          / nullif(sum(categorized_kilograms) FILTER (WHERE plant_protein_pct_by_weight IS NOT NULL), 0) / 100
+                          AS "Protein foods"
+                      FROM metrics.attempt_telemetry
+                      WHERE status = 'succeeded' AND $__timeFilter(recorded_at)
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: Of the food in the reports delivered each month, in UTC, the
+          share by weight that is plant-based. Protein foods is the same share among
+          the protein categories alone, weighted by each report's food, since the
+          telemetry does not keep its protein weight. Organizations come and go between
+          months, so a move here can be a change in who reported rather than in what
+          anyone bought; the panel beside this one follows each organization against
+          itself.
+        id: 4
+        links: []
+        title: Plant share by weight, per month
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  mode: palette-classic
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 2
+                  pointSize: 4
+                  scaleDistribution:
+                    type: linear
+                  showPoints: always
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                min: 0
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: percentunit
+              overrides:
+              - matcher:
+                  id: byName
+                  options: All food
+                properties:
+                - id: color
+                  value:
+                    fixedColor: green
+                    mode: fixed
+              - matcher:
+                  id: byName
+                  options: Protein foods
+                properties:
+                - id: color
+                  value:
+                    fixedColor: dark-yellow
+                    mode: fixed
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+    plant-share-change:
+      kind: Panel
+      spec:
+        data:
+          kind: QueryGroup
+          spec:
+            queries:
+            - kind: PanelQuery
+              spec:
+                hidden: false
+                query:
+                  datasource:
+                    name: metrics
+                  group: grafana-postgresql-datasource
+                  kind: DataQuery
+                  spec:
+                    editorMode: code
+                    format: time_series
+                    rawQuery: true
+                    rawSql: |-
+                      WITH delivered AS (
+                        SELECT organization_id, recorded_at, plant_pct_by_weight
+                        FROM metrics.attempt_telemetry
+                        WHERE status = 'succeeded'
+                      ), first_report AS (
+                        SELECT DISTINCT ON (organization_id) organization_id, recorded_at, plant_pct_by_weight
+                        FROM delivered
+                        ORDER BY organization_id, recorded_at
+                      ), change AS (
+                        SELECT
+                          date_trunc('month', d.recorded_at) AS time,
+                          avg(d.plant_pct_by_weight - f.plant_pct_by_weight) AS points
+                        FROM delivered d
+                        JOIN first_report f USING (organization_id)
+                        WHERE d.recorded_at > f.recorded_at AND $__timeFilter(d.recorded_at)
+                        GROUP BY 1, d.organization_id
+                      )
+                      SELECT
+                        time,
+                        avg(points) AS "Average organization",
+                        min(points) AS "Organization that gained least"
+                      FROM change
+                      GROUP BY 1
+                      ORDER BY 1
+                  version: v0
+                refId: A
+            queryOptions: {}
+            transformations: []
+        description: How many percentage points each organization's plant share
+          by weight has risen since its first report ever, over the reports it delivered
+          each month, in UTC; 40% to 45% is a gain of 5 points, and a fall is negative.
+          Each organization counts once a month however many reports it made, and
+          its first report is left out. Comparing each organization with itself means
+          a newcomer cannot move the line. When the organization that gained least
+          is above zero, every organization reporting that month buys a larger share
+          of plants than it did at first.
+        id: 5
+        links: []
+        title: Plant share gain since each organization's first report
+        vizConfig:
+          group: timeseries
+          kind: VizConfig
+          spec:
+            fieldConfig:
+              defaults:
+                color:
+                  fixedColor: green
+                  mode: fixed
+                custom:
+                  axisBorderShow: false
+                  axisCenteredZero: false
+                  axisColorMode: text
+                  axisLabel: ""
+                  axisPlacement: auto
+                  axisSoftMax: 0
+                  axisSoftMin: 0
+                  barAlignment: 0
+                  barWidthFactor: 0.6
+                  drawStyle: line
+                  fillOpacity: 0
+                  gradientMode: none
+                  hideFrom:
+                    legend: false
+                    tooltip: false
+                    viz: false
+                  insertNulls: false
+                  lineInterpolation: linear
+                  lineWidth: 2
+                  pointSize: 4
+                  scaleDistribution:
+                    type: linear
+                  showPoints: always
+                  showValues: false
+                  spanNulls: false
+                  stacking:
+                    group: A
+                    mode: none
+                  thresholdsStyle:
+                    mode: "off"
+                decimals: 1
+                thresholds:
+                  mode: absolute
+                  steps:
+                  - color: green
+                    value: 0
+                  - color: red
+                    value: 80
+                unit: suffix:points
+              overrides:
+              - matcher:
+                  id: byName
+                  options: Organization that gained least
+                properties:
+                - id: custom.lineStyle
+                  value:
+                    dash:
+                    - 6
+                    - 4
+                    fill: dash
+                - id: custom.lineWidth
+                  value: 1
+            options:
+              legend:
+                calcs: []
+                displayMode: list
+                placement: bottom
+                showLegend: true
+              tooltip:
+                hideZeros: false
+                mode: multi
+                sort: none
+          version: 13.2.4
+  layout:
+    kind: GridLayout
+    spec:
+      items:
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: at-a-glance
+          height: 4
+          width: 24
+          x: 0
+          "y": 0
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: co2e-analyzed-per-month
+          height: 8
+          width: 12
+          x: 0
+          "y": 4
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: co2e-per-diner-and-meal
+          height: 8
+          width: 12
+          x: 12
+          "y": 4
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: plant-share-by-weight
+          height: 8
+          width: 12
+          x: 0
+          "y": 12
+      - kind: GridLayoutItem
+        spec:
+          element:
+            kind: ElementReference
+            name: plant-share-change
+          height: 8
+          width: 12
+          x: 12
+          "y": 12
+  links: []
+  liveNow: false
+  preload: false
+  tags: []
+  timeSettings:
+    autoRefresh: ""
+    autoRefreshIntervals:
+    - 5s
+    - 10s
+    - 30s
+    - 1m
+    - 5m
+    - 15m
+    - 30m
+    - 1h
+    - 2h
+    - 1d
+    fiscalYearStartMonth: 0
+    from: now-6M/M
+    hideTimepicker: false
+    timezone: utc
+    to: now
+  title: Impact
+  variables: []
