@@ -110,7 +110,7 @@ async function main(): Promise<void> {
     });
 
     let draining = false;
-    const onSignal = (signal: NodeJS.Signals) => {
+    function onSignal(signal: NodeJS.Signals) {
       if (draining) {
         log.warn({ signal }, 'Received a signal again while draining; exiting immediately');
         process.exit(1);
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
       // `run()`'s own `finally` awaits the same memoized drain; this `catch` is only so that an
       // unexpected rejection cannot reach the event loop and kill the process mid-drain.
       void worker.drain().catch((error) => log.error({ err: error }, 'The drain failed'));
-    };
+    }
     process.on('SIGTERM', onSignal);
     process.on('SIGINT', onSignal);
 

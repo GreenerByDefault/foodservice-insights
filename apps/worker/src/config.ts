@@ -229,9 +229,9 @@ function notificationRetryWindowMs(
  * per relation the config breaks. */
 function workerConfigViolations(config: WorkerConfig, platformShutdownGraceMs?: number): string[] {
   const violations: string[] = [];
-  const check = (holds: boolean, violation: string) => {
+  function check(holds: boolean, violation: string) {
     if (!holds) violations.push(violation);
-  };
+  }
 
   check(
     config.workerId.trim() !== '',

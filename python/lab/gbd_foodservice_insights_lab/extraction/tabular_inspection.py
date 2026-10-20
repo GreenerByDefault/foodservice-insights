@@ -695,7 +695,7 @@ def raw_data_report(
                 hdr = df_preview.columns.tolist()
                 csv_headers.append(tuple(hdr))
 
-                with open(cf, newline="", encoding=encoding) as f:
+                with Path(cf).open(newline="", encoding=encoding) as f:
                     nrows = sum(1 for _ in csv.reader(f, delimiter=delimiter)) - 1
 
                 print(f"[{file_idx}/{len(csv_files)}] {cf.relative_to(base)}")

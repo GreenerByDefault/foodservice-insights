@@ -476,8 +476,8 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
   // -----------------------------------------------------------
 
   async function run(): Promise<void> {
-    const ticker = (name: string, tick: () => Promise<unknown>, intervalMs: number) =>
-      startTicker(
+    function ticker(name: string, tick: () => Promise<unknown>, intervalMs: number) {
+      return startTicker(
         tick,
         intervalMs,
         failureStreak(log.child({ ticker: name }), clock, {
@@ -485,6 +485,7 @@ export function createWorker(dependencies: WorkerDependencies): Worker {
           recovered: 'The worker tick recovered',
         }),
       );
+    }
     const tickers = [
       ticker('direct', direct, config.directIntervalMs),
       ticker('reap', reap, config.reapIntervalMs),

@@ -187,7 +187,7 @@ def _read_json_artifact(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
-        with open(path, encoding="utf-8") as handle:
+        with Path(path).open(encoding="utf-8") as handle:
             loaded = json.load(handle)
     except (json.JSONDecodeError, UnicodeDecodeError, OSError) as exc:
         logging.warning("Could not read sidecar %s: %s", path, exc)
@@ -198,7 +198,7 @@ def _read_json_artifact(path: Path) -> dict[str, Any]:
 def _write_json_artifact(path: Path, payload: dict[str, Any]) -> None:
     """All sidecars are JSON so analysts can inspect them without custom tooling."""
     path.parent.mkdir(exist_ok=True)
-    with open(path, "w", encoding="utf-8") as handle:
+    with Path(path).open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, ensure_ascii=True)
 
 

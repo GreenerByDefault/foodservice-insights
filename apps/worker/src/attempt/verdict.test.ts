@@ -95,10 +95,12 @@ describe('classifyVerdict', () => {
     });
 
     describe('an unknown failure', () => {
-      const unknown = (traceback: string | null): DocumentRead => ({
-        kind: 'failure',
-        failure: { reason: 'unknown', detail: 'division by zero', traceback },
-      });
+      function unknown(traceback: string | null): DocumentRead {
+        return {
+          kind: 'failure',
+          failure: { reason: 'unknown', detail: 'division by zero', traceback },
+        };
+      }
 
       test('appends its traceback to the detail', () => {
         const traceback = 'Traceback (most recent call last):\n  ZeroDivisionError\n';

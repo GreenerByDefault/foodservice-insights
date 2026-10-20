@@ -122,8 +122,10 @@ async function scan({
     Object.assign(window, { setTimeout, clearTimeout });
   }
 
-  const covers = (rule: string, element: Element | undefined) => (exemption: Exemption) =>
-    exemption.rule === rule && element?.closest(exemption.within) != null;
+  function covers(rule: string, element: Element | undefined) {
+    return (exemption: Exemption) =>
+      exemption.rule === rule && element?.closest(exemption.within) != null;
+  }
 
   const unfixedMatched: number[] = [];
   const violations = results.violations

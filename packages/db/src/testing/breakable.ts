@@ -58,10 +58,10 @@ async function startTcpProxy(targetHost: string, targetPort: number): Promise<Tc
     const upstream = connect(targetPort, targetHost);
     sockets.add(client);
     sockets.add(upstream);
-    const detach = () => {
+    function detach() {
       sockets.delete(client);
       sockets.delete(upstream);
-    };
+    }
     client.on('error', () => upstream.destroy());
     upstream.on('error', () => client.destroy());
     client.on('close', () => {

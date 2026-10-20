@@ -69,7 +69,7 @@ def _load_metadata_dict(metadata_path: Path) -> dict[str, Any]:
     """Load client metadata, or ``{}`` if the file is absent or not a JSON object."""
     if not metadata_path.exists():
         return {}
-    with open(metadata_path) as f:
+    with Path(metadata_path).open() as f:
         loaded = json.load(f)
     return loaded if isinstance(loaded, dict) else {}
 
@@ -117,7 +117,7 @@ def update_metadata_with_report_outputs(
     metadata["report_invalid_issue_count"] = issue_counts["error"]
     metadata["last_report_run_timestamp"] = datetime.now().isoformat()
 
-    with open(metadata_path, "w") as f:
+    with Path(metadata_path).open("w") as f:
         json.dump(metadata, f, indent=2)
 
     logger.info("Updated client metadata with report outputs at %s", metadata_path)
@@ -183,7 +183,7 @@ def write_run_manifest(
     if error_message is not None:
         manifest["error_message"] = error_message
 
-    with open(manifest_path, "w") as f:
+    with Path(manifest_path).open("w") as f:
         json.dump(manifest, f, indent=2)
 
     logger.info("Run manifest saved to %s", manifest_path)

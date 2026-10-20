@@ -36,7 +36,7 @@ def _write_client_metadata(data_dir: Path, **overrides: object) -> dict:
         "pdf_extracted": False,
     }
     metadata.update(overrides)
-    with open(data_dir / "client_metadata.json", "w") as f:
+    with (data_dir / "client_metadata.json").open("w") as f:
         json.dump(metadata, f, indent=2)
     return metadata
 
@@ -261,7 +261,7 @@ def test_update_metadata_with_categorization_stats_sets_expected_keys(tmp_path, 
     }
     update_metadata_with_categorization_stats(summary)
 
-    with open(data_dir / "client_metadata.json") as f:
+    with (data_dir / "client_metadata.json").open() as f:
         updated = json.load(f)
 
     assert updated["categorized_output_file"] == summary["output_file"]
@@ -290,7 +290,7 @@ def test_update_metadata_with_categorization_stats_serializes_numpy_scalars(tmp_
 
     update_metadata_with_categorization_stats(summary)
 
-    with open(data_dir / "client_metadata.json") as f:
+    with (data_dir / "client_metadata.json").open() as f:
         updated = json.load(f)
 
     assert updated["categorization_stats"]["n_products_before"] == 10

@@ -37,7 +37,9 @@ function anEvent(pathname = '/', routeId: RouteId | null = null): RequestEvent {
   } as RequestEvent;
 }
 
-const respond = async () => new Response('ok');
+async function respond() {
+  return new Response('ok');
+}
 
 /** What `handle` binds to every line of one request. */
 function requestIdOf(response: Response): string {

@@ -6,21 +6,21 @@ import { retryOnTransientDbError, TRANSIENT_RETRY_WAITS_MS } from './retry.ts';
 
 function recordingSleep() {
   const waits: number[] = [];
-  const sleep = (ms: number) => {
+  function sleep(ms: number) {
     waits.push(ms);
     return Promise.resolve();
-  };
+  }
   return { waits, sleep };
 }
 
 function failingThenSucceeding(failures: unknown[]) {
   let calls = 0;
-  const fn = () => {
+  function fn() {
     calls++;
     const failure = failures[calls - 1];
     if (failure !== undefined) return Promise.reject(failure);
     return Promise.resolve('done');
-  };
+  }
   return { fn, calls: () => calls };
 }
 

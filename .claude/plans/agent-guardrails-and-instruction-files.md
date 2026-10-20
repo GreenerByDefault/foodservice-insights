@@ -90,10 +90,12 @@ optional PRs (guard hook, storage guard, lint-instead-of-prose).
   larger team are listed at the end as manual steps for Eric.
 - *Rejected: hardening `scripts/supabase` to refuse hosted flags.* The hook sees the bare CLI and
   `pnpm exec supabase` as well as the wrapper; a wrapper-only check covers one of three forms.
-- *Rejected: Biome `useConsistentFunctionStyle`.* With `style: "declaration"` it flags every local
-  `const f = () =>` too, about 36 sites across 19 files, with no option to limit it to module scope
-  (`allowArrowFunctions: true` disables it entirely). Ruff `PTH` is on, with `PTH123` ignored
-  because a builtin `open()` is fine.
+- **A rule bullet that a linter can enforce becomes the linter's job**, even when that takes a
+  repo-wide conversion, so neither a person nor an agent has to remember it. Biome's nursery rule
+  `useConsistentFunctionStyle` (`style: "declaration"`) makes every named function a declaration,
+  local ones included, and leaves inline callbacks and type-annotated consts (SvelteKit's
+  `export const load: PageServerLoad`) alone. Ruff's `PTH` replaces `os.path` and the builtin
+  `open()`.
 - *Rejected: a `Stop` hook that runs the verification gate.* AGENTS.md's instruction plus CI
   already gate merges; the hook would cost minutes per turn.
 
@@ -257,7 +259,7 @@ first.
 | --- | --- | --- |
 | Gate; iteration loop with the vitest `--filter` form; Playwright through Turbo and why; `test:system` not in the gate; background gate and no concurrent Turbo | The script inventory and `--filter` fallback paragraph | derivable from `package.json` files; README § Everyday commands |
 | Test organization, compressed to three lines | — | — |
-| `async`/`await`; cross-package imports by name; `dist/` + `^build` (reworded: tasks that need a build declare it, not "every other task"); logging via `@gbd/core/log` with `err` and ids | Module-scope `function` declarations | nothing enforces it: Biome's `useConsistentFunctionStyle` also flags local arrows, so keep the bullet and scope it to module scope |
+| `async`/`await`; cross-package imports by name; `dist/` + `^build` (reworded: tasks that need a build declare it, not "every other task"); logging via `@gbd/core/log` with `err` and ids | Module-scope `function` declarations | Biome `useConsistentFunctionStyle` |
 | | Test-file suffixes | README's table; the rule keeps one pointer line |
 | Cross-cutting database bullets: `db: DatabaseExecutor` first; `withRollback` and the concurrency exception (point at `concurrency.ts`, which already explains it); classify failures with `isTransientDatabaseError`/`isPermanentDatabaseError` in app code (fix: `packages/db` itself matches codes); fixture naming (point at `fixtures/index.ts` header; drop "in its table's file", which is false) | `TEST_DB=1`, `scripts/supabase`, snake_case, "to read the schema", `database()` placement, the importer list | README § The two databases; the deny rule; `db.md`; `packages/db/README.md` |
 | Blob store: one line, `isBlobStoreError` and `packages/storage/README.md` | the second sentence | that README |

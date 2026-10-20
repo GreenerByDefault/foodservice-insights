@@ -41,6 +41,12 @@
       "preset": "recommended",
       "style": {
         "useTemplate": "error"
+      },
+      "nursery": {
+        "useConsistentFunctionStyle": {
+          "level": "error",
+          "options": { "style": "declaration" }
+        }
       }
     }
   },

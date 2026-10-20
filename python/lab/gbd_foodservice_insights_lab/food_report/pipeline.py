@@ -83,7 +83,7 @@ def _resolve_input_file(input_file: str | Path | None) -> Path:
                 "No input provided and no client_metadata.json found in current directory."
             )
 
-        with open(metadata_path) as f:
+        with Path(metadata_path).open() as f:
             metadata = json.load(f)
 
         input_file = metadata.get("report_input_file")
@@ -180,7 +180,7 @@ def run_food_report(
     metadata_path = input_path.parent / "client_metadata.json"
     metadata: dict[str, Any] = {}
     if metadata_path.exists():
-        with open(metadata_path) as f:
+        with Path(metadata_path).open() as f:
             metadata = json.load(f)
 
     requested_mode = procurement_serving or metadata.get("procurement_serving")

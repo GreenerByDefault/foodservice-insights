@@ -264,12 +264,13 @@ function serializeErrorWithin(
   const errorFields = nested ? fields.filter(([, field]) => isErrorLike(field)).length : 0;
 
   const children = (cause ? 1 : 0) + aggregated.length + errorFields;
-  const child = (inner: ErrorLike) =>
-    serializeErrorWithin(
+  function child(inner: ErrorLike) {
+    return serializeErrorWithin(
       inner,
       { ...budget, stackBytes: budget.stackBytes / 2 / children },
       depth + 1,
     );
+  }
 
   return {
     type: error.constructor.name,

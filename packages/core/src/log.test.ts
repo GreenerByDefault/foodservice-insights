@@ -268,8 +268,9 @@ describe('error serializer', () => {
 
     sink.log.error(first, 'failed');
 
-    const messages = (error: { message: string; cause?: unknown } | undefined): string[] =>
-      error ? [error.message, ...messages(error.cause as typeof error)] : [];
+    function messages(error: { message: string; cause?: unknown } | undefined): string[] {
+      return error ? [error.message, ...messages(error.cause as typeof error)] : [];
+    }
     expect(messages(sink.records[0]?.err as { message: string })).toEqual([
       'first',
       'second',
@@ -280,8 +281,9 @@ describe('error serializer', () => {
 
   test("an aggregate's errors are kept, up to three", () => {
     const sink = collectingLogger();
-    const refused = (address: string) =>
-      Object.assign(new Error(`connect ECONNREFUSED ${address}`), { code: 'ECONNREFUSED' });
+    function refused(address: string) {
+      return Object.assign(new Error(`connect ECONNREFUSED ${address}`), { code: 'ECONNREFUSED' });
+    }
 
     sink.log.error(
       new AggregateError(['::1', '127.0.0.1', 'a', 'b'].map(refused), 'All attempts failed'),

@@ -29,8 +29,13 @@ describe('_retryReport', () => {
         createdByUserId: admin.id,
         status: 'failed',
       });
-      const retry = (actor: Actor) =>
-        _retryReport(transaction, { organizationId: organization.id, reportId: report.id, actor });
+      function retry(actor: Actor) {
+        return _retryReport(transaction, {
+          organizationId: organization.id,
+          reportId: report.id,
+          actor,
+        });
+      }
 
       const response = await retry({ userId: admin.id, role: 'member' });
       expect(response.status).toBe(204);
@@ -65,8 +70,13 @@ describe('_retryReport', () => {
         createdByUserId: creator.id,
         status: 'failed',
       });
-      const retry = (actor: Actor) =>
-        _retryReport(transaction, { organizationId: organization.id, reportId: report.id, actor });
+      function retry(actor: Actor) {
+        return _retryReport(transaction, {
+          organizationId: organization.id,
+          reportId: report.id,
+          actor,
+        });
+      }
 
       await retry({ userId: admin.id, role: 'admin' });
 
@@ -99,8 +109,13 @@ describe('_retryReport', () => {
         createdByUserId: creator.id,
         status: 'failed',
       });
-      const retry = (actor: Actor) =>
-        _retryReport(transaction, { organizationId: organization.id, reportId: report.id, actor });
+      function retry(actor: Actor) {
+        return _retryReport(transaction, {
+          organizationId: organization.id,
+          reportId: report.id,
+          actor,
+        });
+      }
 
       await expect(
         statusOf(() => retry({ userId: bystander.id, role: 'member' })),
@@ -127,8 +142,13 @@ describe('_retryReport', () => {
         createdByUserId: admin.id,
         status: 'succeeded',
       });
-      const retry = (actor: Actor) =>
-        _retryReport(transaction, { organizationId: organization.id, reportId: report.id, actor });
+      function retry(actor: Actor) {
+        return _retryReport(transaction, {
+          organizationId: organization.id,
+          reportId: report.id,
+          actor,
+        });
+      }
 
       await expect(statusOf(() => retry({ userId: admin.id, role: 'admin' }))).resolves.toEqual({
         status: 409,
@@ -153,8 +173,13 @@ describe('_retryReport', () => {
           status: 'failed',
         });
       }
-      const retry = (actor: Actor) =>
-        _retryReport(transaction, { organizationId: organization.id, reportId: report.id, actor });
+      function retry(actor: Actor) {
+        return _retryReport(transaction, {
+          organizationId: organization.id,
+          reportId: report.id,
+          actor,
+        });
+      }
 
       await expect(statusOf(() => retry({ userId: admin.id, role: 'admin' }))).resolves.toEqual({
         status: 409,

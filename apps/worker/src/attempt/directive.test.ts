@@ -345,7 +345,9 @@ describe('the state transition', () => {
     // of the three default thresholds, so an unrenewed lease would fire before the
     // hung/hard-timeout boundary each sub-case is actually testing (those two are checked
     // first anyway, but there's no reason to rely on that ordering here).
-    const freshLease = (now: number) => aReading({ renewalIssuedAt: now });
+    function freshLease(now: number) {
+      return aReading({ renewalIssuedAt: now });
+    }
 
     expect(
       directiveOf(

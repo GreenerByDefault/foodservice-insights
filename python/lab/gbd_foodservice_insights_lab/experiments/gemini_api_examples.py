@@ -20,6 +20,7 @@ Setup:
     Get your API key at: https://aistudio.google.com/apikey
 """
 
+from pathlib import Path
 from typing import Any
 
 from google import genai
@@ -352,7 +353,7 @@ def analyze_local_image(client: genai.Client, image_path: str) -> str:
 
     This is the most common use case for image analysis.
     """
-    with open(image_path, "rb") as f:
+    with Path(image_path).open("rb") as f:
         image_bytes = f.read()
 
     response = client.models.generate_content(
@@ -375,7 +376,7 @@ def analyze_multiple_images(client: genai.Client, image_paths: list[str]) -> str
     ]
 
     for image_path in image_paths:
-        with open(image_path, "rb") as f:
+        with Path(image_path).open("rb") as f:
             image_bytes = f.read()
         content_parts.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
 

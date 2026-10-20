@@ -126,7 +126,9 @@ function cellXml(
   // No `<c/>` at all, as a real workbook writes one, which puts the reader's column-gap handling
   // under test.
   if (cell === null) return '';
-  const open = (attributes: string) => `<c r="${reference}"${attributes}>`;
+  function open(attributes: string) {
+    return `<c r="${reference}"${attributes}>`;
+  }
 
   if (isSharedString(cell)) return `${open(' t="s"')}<v>${strings.indexOf(cell)}</v></c>`;
   if (typeof cell === 'number') return `${open('')}<v>${cell}</v></c>`;

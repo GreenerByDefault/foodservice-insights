@@ -32,7 +32,7 @@ def _write_test_pdf(path: Path, num_pages: int = 1) -> None:
     writer = PdfWriter()
     for _ in range(num_pages):
         writer.add_blank_page(width=72, height=72)
-    with open(path, "wb") as handle:
+    with Path(path).open("wb") as handle:
         writer.write(handle)
 
 

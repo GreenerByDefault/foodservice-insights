@@ -218,7 +218,9 @@ describe('_loadReports', () => {
           organizationSlug: organization.slug,
           cursor: { direction: 'newest' },
         });
-        const statusOf = (id: string) => data.reports.find((row) => row.id === id)?.status;
+        function statusOf(id: string) {
+          return data.reports.find((row) => row.id === id)?.status;
+        }
 
         expect(statusOf(pending.id)).toBe('pending');
         expect(statusOf(processing.id)).toBe('processing');

@@ -16,7 +16,9 @@ const HOSTILE_ESCAPED = '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp;
 
 /** These tests exercise rendering, not `links.ts`'s url-building, so they stand in for it with a
  * bare cast rather than routing every fixture through a real builder. */
-const asUrl = (value: string): TrustedUrl => value as TrustedUrl;
+function asUrl(value: string): TrustedUrl {
+  return value as TrustedUrl;
+}
 
 function expectedHtml(heading: string, blockHtml: string): string {
   return [

@@ -5,12 +5,14 @@ const BOUNDS = { earliest: '2000-01-01', latest: '2026-12-31' };
 /** For the cases that are about a year rather than about the accepted range. */
 const ANY_YEAR = { earliest: '1000-01-01', latest: '2999-12-31' };
 
-const numeric = (first: number, second: number, year: number): DateReading => ({
-  kind: 'numeric',
-  first,
-  second,
-  year,
-});
+function numeric(first: number, second: number, year: number): DateReading {
+  return {
+    kind: 'numeric',
+    first,
+    second,
+    year,
+  };
+}
 
 describe('readDate', () => {
   test.for([

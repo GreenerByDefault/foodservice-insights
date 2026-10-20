@@ -727,11 +727,12 @@ describe('finishing', () => {
       const outcome = await withRollback(WORKER_DATABASE, async (transaction) => {
         const workerId = aWorkerId();
         const attemptId = await claimedAttempt(transaction, workerId);
-        const succeed = () =>
-          markAttemptSucceeded(transaction, attemptId, workerId, {
+        function succeed() {
+          return markAttemptSucceeded(transaction, attemptId, workerId, {
             result: A_RESULT,
             resultFiles: [aResultFile()],
           });
+        }
 
         const first = await succeed();
         const second = await succeed();

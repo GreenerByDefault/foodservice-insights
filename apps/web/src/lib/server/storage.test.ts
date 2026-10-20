@@ -8,7 +8,9 @@ import { SERVER_LOGS } from './testing/logs.ts';
 /** That a real failure arrives as a `BlobStoreError` is `@gbd/storage`'s own test, against its real
  * endpoint. These only need something that is one.
  */
-const blobStoreOutage = () => Promise.reject(aBlobStoreError('connection refused'));
+function blobStoreOutage() {
+  return Promise.reject(aBlobStoreError('connection refused'));
+}
 
 describe('blobStore', () => {
   test('writes and reads through the app handle, cleaning up after', async () => {
