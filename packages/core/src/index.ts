@@ -4,6 +4,7 @@
  */
 export const APP_NAME = 'Foodservice Insights';
 
+export * from './local-host.ts';
 export * from './time.ts';
 
 /** The name of the cookie `@supabase/ssr` keeps the session in. */

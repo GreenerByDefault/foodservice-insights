@@ -1,5 +1,4 @@
-/** The hosts a local Supabase stack answers on: from this machine, and from a container on it. */
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'host.docker.internal']);
+import { isLocalHost } from '@gbd/core';
 
 /** Query parameters `pg` connects with in place of the URL's own host and user. */
 const OVERRIDING_PARAMETERS = ['host', 'hostaddr', 'user'];
@@ -13,7 +12,7 @@ const LOCAL_HOSTED_ROLE = 'cache_client';
  * so is one with a host in its query string, since `pg` would connect there instead. */
 export function requireLocalConnectionString(connectionString: string): void {
   const host = parseConnectionString(connectionString).host;
-  if (host === undefined || !LOCAL_HOSTS.has(host)) {
+  if (host === undefined || !isLocalHost(host)) {
     throw new Error(`refusing ${host ?? 'an unparseable host'}: not a local database`);
   }
 }
@@ -28,7 +27,7 @@ export function requirePermittedConnectionString(
 ): void {
   if (isDeployed(siteUrl)) return;
   const { host, user } = parseConnectionString(connectionString);
-  if (host !== undefined && LOCAL_HOSTS.has(host)) return;
+  if (host !== undefined && isLocalHost(host)) return;
   if (user === LOCAL_HOSTED_ROLE || user?.startsWith(`${LOCAL_HOSTED_ROLE}.`)) return;
   throw new Error(
     `refusing to connect to ${host || 'an unparseable host'} as ${user || 'an unnamed user'}: ` +
@@ -39,7 +38,7 @@ export function requirePermittedConnectionString(
 
 function isDeployed(siteUrl: string | undefined): boolean {
   const host = siteUrl === undefined ? undefined : URL.parse(siteUrl)?.hostname;
-  return host !== undefined && host !== '' && !LOCAL_HOSTS.has(host);
+  return host !== undefined && host !== '' && !isLocalHost(host);
 }
 
 /** The host and user `pg` will connect with, or `undefined` where they can't be read from the URL
