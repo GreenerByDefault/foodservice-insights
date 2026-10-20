@@ -1,22 +1,17 @@
-# Agent guardrails and instruction files
+# Agent guardrails
 
 ## Context
 
 The repo is maintained almost entirely through AI agents, so far by one engineer. Teammates with
 less engineering background will follow, and the recent database lockdown (#672, #675, #677) is the
-first half of making that safe. This plan is the second half, in two parts:
+first half of making that safe. This plan is the second half: **an agent cannot do anything
+dangerous or irreversible from a checkout, in any permission mode.** Auto mode is the built-in
+starting mode from Claude Code v2.1.283, so permission prompts stop being a safety net: a
+classifier reviews actions instead of a person. Deny rules, hooks and server-side guards have to
+carry the weight on their own.
 
-1. **An agent cannot do anything dangerous or irreversible from a checkout, in any permission
-   mode.** Auto mode is the built-in starting mode from Claude Code v2.1.283, so permission
-   prompts stop being a safety net: a classifier reviews actions instead of a person. Deny rules,
-   hooks and server-side guards have to carry the weight on their own.
-2. **The instruction files hold only what an agent cannot derive from the code**, following
-   Anthropic's current guidance: the deletion test ("would removing this cause mistakes?"), under
-   200 lines per always-loaded file, skills for on-demand procedures, path-scoped rules for
-   always-on conventions, and "if Claude already does it, delete it or convert it to a hook/linter".
-
-Three audits fed this plan (danger surface, instruction files, current docs at code.claude.com).
-What they established:
+Two audits fed this plan (the danger surface, and the current docs at code.claude.com). What they
+established:
 
 - **The production boundary is already server-side and cannot be reached from a laptop.** The main
   ruleset requires a PR, the `CI` check and the merge queue, with no bypass actors. Production
@@ -39,24 +34,18 @@ What they established:
   variable). The OS-level boundary is the Bash sandbox, which also makes `.claude/`, `.mcp.json`
   and `.git/hooks` unwritable from shell commands. Writes to `.claude/` through the file tools are
   already never auto-approved except in `bypassPermissions` mode.
-- **Instruction files:** `typescript.md` (183 lines) repeats READMEs or code comments in roughly a
-  third of its lines, scopes 42% of itself to `apps/web` or `packages/db` by prose only, and
-  carries about nineteen stale claims (listed under PR 3). The hook matcher names `MultiEdit`,
-  which no longer exists.
+- **The `PostToolUse` hook matcher names `MultiEdit`**, which no longer exists.
 
-Decisions already taken with Eric: compress AGENTS.md § General development principles but keep
-every behavioural bullet (an agent's defaults differ: mutation, `for` loops, classes,
-over-generalization); leave the Bash sandbox out of this pass; forbid `bypassPermissions` mode in
-this repo; `.claude/plans/runbooks.md` stays a plan (Eric will revisit it); include all three
-optional PRs (guard hook, storage guard, lint-instead-of-prose).
+Decisions already taken with Eric: leave the Bash sandbox out of this pass, forbid
+`bypassPermissions` mode in this repo, and include the guard hook.
 
 ## Decisions
 
 - **Three layers, strongest first.** (1) Server-side: GitHub ruleset and Environment, the database
   write guard, narrow roles. (2) Code guards that hold in every permission mode and through any
-  wrapper: `requirePermittedConnectionString`, the Python `cache_sync` check, and, added
-  here, `requireLocalEndpoint`, which refuses the blob store's truncate on a hosted endpoint. (3) Claude Code configuration: deny/ask rules for the invocations an agent usually
-  produces, and a PreToolUse hook for the forms prefix rules cannot express. Nothing in layer 3 is
+  wrapper: `requirePermittedConnectionString`, the Python `cache_sync` check, and
+  `requireLocalEndpoint`, which refuses the blob store's truncate on a hosted endpoint. (3) Claude
+  Code configuration: deny/ask rules for the invocations an agent usually produces, and a PreToolUse hook for the forms prefix rules cannot express. Nothing in layer 3 is
   relied on as a boundary; it exists so that the common case stops early with a message that says
   "ask a person".
 - **Deny vs ask.** *Deny* anything that reaches a hosted or paid resource or administers an
@@ -80,22 +69,10 @@ optional PRs (guard hook, storage guard, lint-instead-of-prose).
 - **Keep auto mode available.** Its classifier blocks production deploys, force pushes, secret
   exfiltration and discarding uncommitted work on top of the rules here. Only bypass mode is
   removed (`permissions.disableBypassPermissionsMode`).
-- **Rules stay path-scoped `.claude/rules/*.md`, split by where they apply.** A bullet survives only
-  if a tool does not enforce it and no README or code comment already states it; otherwise it is
-  deleted or replaced by a one-line pointer to the file that owns the fact (writing-docs: one source
-  of truth per fact). *Rejected: nested `CLAUDE.md` files* (same lazy loading, but the repo's
-  convention is rules); *rejected: dropping `CLAUDE.md` → `@AGENTS.md` for native AGENTS.md
-  support*, which only applies when no CLAUDE.md exists and not in every session type.
 - **No CI or deploy workflow changes** (off limits). The GitHub-side controls that would help a
   larger team are listed at the end as manual steps for Eric.
 - *Rejected: hardening `scripts/supabase` to refuse hosted flags.* The hook sees the bare CLI and
   `pnpm exec supabase` as well as the wrapper; a wrapper-only check covers one of three forms.
-- **A rule bullet that a linter can enforce becomes the linter's job**, even when that takes a
-  repo-wide conversion, so neither a person nor an agent has to remember it. Biome's nursery rule
-  `useConsistentFunctionStyle` (`style: "declaration"`) makes every named function a declaration,
-  local ones included, and leaves inline callbacks and type-annotated consts (SvelteKit's
-  `export const load: PageServerLoad`) alone. Ruff's `PTH` replaces `os.path` and the builtin
-  `open()`.
 - *Rejected: a `Stop` hook that runs the verification gate.* AGENTS.md's instruction plus CI
   already gate merges; the hook would cost minutes per turn.
 
@@ -205,6 +182,9 @@ roughly fifteen allowed ones that sit right next to them: `gh pr view 12`, `gh p
 the exit-0 path writes nothing to stdout. Each case is one interpreter start, about 50 ms, so the
 file adds about 2 s serial and well under a second under `-n auto`, locally and in CI.
 
+Extend AGENTS.md § Off limits, whose guardrails line names only `.claude/settings.json` so far, to
+name `scripts/claude/` too.
+
 Wire it into the Python gate: `Justfile` `test` → `uv run pytest -n auto python/insights
 python/worker_child scripts`. `just check` already typechecks `scripts`; keep the script on 3.9
 syntax since it runs under the system `python3`, and ty's 3.14 target does not mind. The CI
@@ -212,94 +192,6 @@ syntax since it runs under the system `python3`, and ty's 3.14 target does not m
 
 Where this stops: a command assembled from variables or `sh -c` passes. That is the documented limit
 of text matching; the sandbox and the server-side guards are the boundary beyond it.
-
-## PR 3: Rules and AGENTS.md hold only what the code cannot say
-
-Every bullet removed below is either enforced by a tool, stated in a README or code comment, or
-stale; the table says where each fact lives afterwards. Where a fact had no home outside the rule,
-it moves into a comment on the file that enacts it, per the writing-docs skill. Load that skill
-first.
-
-**AGENTS.md** (keep every section):
-
-- § General development principles: compress to the version Eric approved, which keeps every
-  behavioural bullet and cuts only the hedging and generic sentences ("not rigid", "code is written
-  for humans", "not always the best choice", "don't be dogmatic"). The `### Functional style`
-  subheading goes; its bullets fold into the one list. Approved text:
-
-  > Context beats dogma: sometimes DRY is right, sometimes WET. Beyond that, the defaults we want
-  > differ from an agent's defaults:
-  >
-  > - **Solve it the simplest way.** Future needs are hard to predict; simple code is the easiest
-  >   to refactor, so no premature generalization.
-  > - **Keep the abstraction level a reader can hold**, about seven things at once: helper
-  >   functions, whitespace, data structures.
-  > - **Immutable by default**, and `map`/`filter`/`reduce` over an unconstrained `for` loop when
-  >   they read better.
-  > - **Make illegal states unrepresentable**: algebraic data types and `color: 'red' | 'green'`,
-  >   not `color: string`.
-  > - **Composition over inheritance; classes are often overkill**, and keep class-level state
-  >   minimal.
-  > - **Early returns**, so the main logic is not nested. **Extract pure functions** from impure
-  >   ones; they are what tests reach easily.
-
-- Routing table: TypeScript is `apps/`, `packages/`, `tests/`; the rule globs are the truth.
-- § Off limits: add `.claude/settings.json` and `scripts/claude/` ("the guardrails; change them
-  only when that is the task").
-- § Verifying a change is unchanged; the `--repeat-each` line stays (it prevents a real collision
-  and is one line).
-
-**`.claude/rules/typescript.md`** → three files plus a contract rule. Target under 70 lines for
-`typescript.md`, under 30 for `web.md`, under 12 for `db.md`, under 8 for `contract.md`.
-
-`typescript.md` (`paths`: `apps/**`, `packages/**`, `tests/**`, the root configs; drop
-`contract/**`):
-
-| Keep | Replace or drop | Where the fact lives now |
-| --- | --- | --- |
-| Gate; iteration loop with the vitest `--filter` form; Playwright through Turbo and why; `test:system` not in the gate; background gate and no concurrent Turbo | The script inventory and `--filter` fallback paragraph | derivable from `package.json` files; README § Everyday commands |
-| Test organization, compressed to three lines | — | — |
-| `async`/`await`; cross-package imports by name; `dist/` + `^build` (reworded: tasks that need a build declare it, not "every other task"); logging via `@gbd/core/log` with `err` and ids | Module-scope `function` declarations | Biome `useConsistentFunctionStyle` |
-| | Test-file suffixes | README's table; the rule keeps one pointer line |
-| Cross-cutting database bullets: `db: DatabaseExecutor` first; `withRollback` and the concurrency exception (point at `concurrency.ts`, which already explains it); classify failures with `isTransientDatabaseError`/`isPermanentDatabaseError` in app code (fix: `packages/db` itself matches codes); fixture naming (point at `fixtures/index.ts` header; drop "in its table's file", which is false) | `TEST_DB=1`, `scripts/supabase`, snake_case, "to read the schema", `database()` placement, the importer list | README § The two databases; the deny rule; `db.md`; `packages/db/README.md` |
-| Blob store: one line, `isBlobStoreError` and `packages/storage/README.md` | the second sentence | that README |
-| `catalog:` one line; quote parentheses | the exact-pin reasoning | a comment on the `vitest:` and `playwright:` lines of `pnpm-workspace.yaml` |
-| | "`lint` and `fmt` exist only at the root" and the per-package script list | derivable |
-| | The documentation rules "in AGENTS.md" | they are in the writing-docs skill; say so in the intro |
-
-`web.md` (`paths`: `apps/web/**`), new:
-
-| Keep | Drop | Where it lives now |
-| --- | --- | --- |
-| One line: Svelte in training data is Svelte 4, check the MCP server; `svelte-core-bestpractices` loads for `.svelte` files; hand self-contained component work to `svelte-file-editor` | "Svelte 5 runes only" | `runes: true` in `vite.config.ts` plus `svelte-check --fail-on-warnings` |
-| `svelte-kit sync` is inlined on purpose | `render` is async | the type signature |
-| `_`-prefixed route functions taking `db`, called from the handler; no `+` in test file names | Runtime config "dynamic, never static" | `src/env.ts` header and ARCHITECTURE § Secrets management; keep a pointer |
-| `withDbErrorHandling` / `withBlobStoreErrorHandling`: one line each pointing at the doc comments in `lib/server/db.ts` and `storage.ts` (fix: a blob store failure is "did not reach the store or came back refused") | the four paragraphs of mechanism | those doc comments |
-| `dependency` not `devDependency`, one line | the reasoning | `vite.config.ts:11-27` |
-
-`db.md` (`paths`: `packages/db/**`), new: migration columns in snake_case and why; read
-`public-schema.sql` and `src/generated/`, not the migrations; `packages/db/README.md`
-§ Conventions and § Writing a migration are the rules for this package.
-
-`contract.md` (`paths`: `contract/**`, `apps/worker/src/contract/**`,
-`python/worker_child/**`), new: `contract.json` and the fixtures change together, both stacks parse
-them, run both gates; the procedure is in `contract/README.md`. Remove `contract/**` from the two
-big rules so a contract edit loads 8 lines instead of 263.
-
-**`.claude/rules/python.md`** (same `paths` minus `contract/**`; target under 40 lines):
-
-| Keep | Drop | Where it lives now |
-| --- | --- | --- |
-| Gate, with `TEST_DB=1 just test-lab` for the lab (the bare form skips its database tests) | one venv; deps in the importing package; tests in `<package>/tests/` | `python/README.md`, root `pyproject.toml` comment |
-| No `[tool.ruff]` in a package `pyproject.toml`, one line | its explanation | a comment on `[tool.ruff]` in the root `pyproject.toml`, which is the file that enacts it |
-| Packaged assets via `PACKAGE_DIR`, one line | the *Rejected: importlib.resources* line | a comment in `gbd_foodservice_insights/__init__.py` next to `PACKAGE_DIR` |
-| Lab boundary: direction, where code goes, "check the product needs it", "no caller ≠ dead" | "Ruff enforces this; the root pyproject holds the reasoning" | make it true: put the one-paragraph reasoning on the `banned-api` block |
-| `LlmClient` seam; `KeywordLlmClient` in tests | Gemini ban | Ruff `banned-api` |
-| ty, annotate new code | "the ported library largely is not annotated" and `[[tool.ty.overrides]]` | false: 99% annotated, no overrides exist |
-| Fail loudly; row counts; nothing per row | `pathlib` over `os.path` | Ruff `PTH` |
-
-**Also in this PR:** fix the `.github/filters.yml` comment only if a path it names moved (none
-should); run `scripts/ci/check_filters.py` anyway.
 
 ## Verification
 
@@ -314,10 +206,6 @@ should); run `scripts/ci/check_filters.py` anyway.
   run `doctl account get` and `gh pr view`: the first is blocked with the hook's reason, the second
   runs. Temporarily rename `python3` off `PATH` in a scratch shell to confirm the `|| exit 2` path
   blocks with the "command not found" message.
-- **PR 3:** line counts within target; `/context` after reading a file under `apps/web` shows
-  `typescript.md` and `web.md` loaded and not `db.md`; after reading `contract/contract.json` only
-  `contract.md`. With Claude Code ≥ 2.1.283, `/doctor prompt-audit` reports no stale or conflicting
-  instructions. Every pointer written into a rule resolves (`grep` each path).
 - A PR that touches only `.claude/**` and Markdown runs no CI job beyond `changes`; that is the
   filters working, not a failure.
 
@@ -336,4 +224,3 @@ once there is a second developer:
    reads its commit from `deploy/web`, which anyone with push can currently move.
 4. **Local `doctl` and `gcx` tokens:** scope them to read, or remove them when not deploying by
    hand. Both are configured on this machine; PR 1 and PR 2 stop the usual invocation only.
-5. **Update Claude Code to ≥ 2.1.283** before PR 3, for `/doctor prompt-audit`.

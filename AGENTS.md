@@ -13,12 +13,15 @@ they load when you touch that stack's files:
 
 | Working on | Rules | Getting started |
 | --- | --- | --- |
-| TypeScript — `apps/`, `packages/` | [`.claude/rules/typescript.md`](.claude/rules/typescript.md) | [`README.md`](README.md) |
+| TypeScript — `apps/`, `packages/`, `tests/` | [`.claude/rules/typescript.md`](.claude/rules/typescript.md) | [`README.md`](README.md) |
 | Python — `python/` | [`.claude/rules/python.md`](.claude/rules/python.md) | [`python/README.md`](python/README.md) |
 
 If you are about to change one of those stacks and its rule file has not appeared in your
-context, read it first. Writing or changing a doc is covered by the `writing-docs` skill —
-where a doc belongs, how long it should be, and what must never go in one.
+context, read it first. Narrower rules load on top for the web app, the database package and the
+worker contract; each rule file's `paths` list is the truth for where it applies.
+
+Writing or changing a doc is covered by the `writing-docs` skill — where a doc belongs, how long
+it should be, and what must never go in one.
 
 For what the product must do, read [`REQUIREMENTS.md`](REQUIREMENTS.md). For how the system
 fits together and why, read [`ARCHITECTURE.md`](ARCHITECTURE.md) — both record *rejected*
@@ -55,33 +58,21 @@ Run Playwright's `--repeat-each` with `--workers=1` to avoid copies of one test 
 
 ## General development principles
 
-- All these principles are not rigid and depend on the context. For example, sometimes DRY
-  is appropriate. Other times, WET is appropriate.
-- Default to solving in the simplest way possible. It's hard to predict future needs.
-  Rather than "premature generalization", simple and maintainable code tends to be the
-  easiest to refactor.
-- Code is written for humans, not just machines. Maintainability and readability matter.
-- Constantly think about how a human can only remember 7 plus or minus 2 things at once
-  (chunking). Control the abstraction level, such as using helper functions, whitespace,
-  comments, immutability, data structures, etc.
+Context beats dogma: sometimes DRY is right, sometimes WET. Beyond that, the defaults we want
+differ from an agent's defaults:
 
-### Functional style
-
-- Generally, prefer functional programming style, but don't be dogmatic about it.
-- Default to immutability, which reduces the cognitive load of having to think about what
-  may change at any moment.
-- Default to functional constructs like `map`, `filter`, and `reduce`. They make it more
-  immediately obvious what the iteration will do than an unconstrained `for` loop.
-  However, they are not always the best choice.
-- Use the type system to make illegal states impossible. For example, use algebraic data
-  types, along with string variants like `color: 'red' | 'green'` rather than
-  `color: string`.
-- OOP can be useful, but generally prefer composition over inheritance and limit
-  class-level mutability by default. Classes are often overkill.
-- Early returns and "inverting the conditional" are often excellent. Fail early and exit
-  the function early so that the main logic is not deeply nested.
-- It's often useful to extract pure functions from impure functions. Pure functions are
-  much easier to test, and they are easier to reason with.
+- **Solve it the simplest way.** Future needs are hard to predict; simple code is the easiest
+  to refactor, so no premature generalization.
+- **Keep the abstraction level a reader can hold**, about seven things at once: helper
+  functions, whitespace, data structures.
+- **Immutable by default**, and `map`/`filter`/`reduce` over an unconstrained `for` loop when
+  they read better.
+- **Make illegal states unrepresentable**: algebraic data types and `color: 'red' | 'green'`,
+  not `color: string`.
+- **Composition over inheritance; classes are often overkill**, and keep class-level state
+  minimal.
+- **Early returns**, so the main logic is not nested. **Extract pure functions** from impure
+  ones; they are what tests reach easily.
 
 ### Comments
 
@@ -147,4 +138,5 @@ If not, write it. If so, the comment is a second copy of something that will dri
 ## Off limits
 
 - Do not touch CI, adapters, or deployment configuration unless that is the task.
+- Do not change the guardrails in `.claude/settings.json` unless that is the task.
 - Do not commit secrets or real customer data.

@@ -88,6 +88,8 @@ catalog:
   '@supabase/supabase-js': ^2.117.2
 
   # --- Vitest -----------------------------------------------------------------
+  # Vitest and Playwright are pinned exactly, not with `^`: within each family, packages declare
+  # exact peer ranges on each other, so with `strictPeerDependencies` a range breaks `pnpm install`.
   vitest: 4.1.11
   '@vitest/browser-playwright': 4.1.11
   vitest-browser-svelte: 3.1.0
