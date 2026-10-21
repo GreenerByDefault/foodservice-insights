@@ -8,7 +8,7 @@
  * In `supabase` mode it is the session cookie, validated by `getUser()` — a round trip to Supabase
  * Auth on every request, never the unverified `getSession()`. That round trip is also what catches a
  * deleted or banned user whose token has not expired yet. Supabase is a token service here and
- * nothing more; see `ARCHITECTURE.md` § Supabase.
+ * nothing more; see `ARCHITECTURE.md` § Supabase: database, auth, and blob store.
  */
 
 import { AUTH_COOKIE_NAME } from '@gbd/core';

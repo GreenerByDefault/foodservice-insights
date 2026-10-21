@@ -109,7 +109,7 @@ Bill = tuple[LineItem, ...]
 # Pro's compute credit applies to any size, so Small costs its difference over Micro. Small is set
 # by connections, not load: packages/db/src/budget.ts sums every pool against `max_connections`,
 # and Micro's 60 cannot hold it. The IPv4 add-on is what lets DigitalOcean, which has no outbound
-# IPv6, reach the direct host (ARCHITECTURE.md § Supabase).
+# IPv6, reach the direct host (ARCHITECTURE.md § Supabase: database, auth, and blob store).
 #
 # No usage lines, because Pro's quotas sit far above our usage. Storage only grows, since deleting
 # a report keeps its files (REQUIREMENTS.md § Data deletion), but at a few MB a report the planned
