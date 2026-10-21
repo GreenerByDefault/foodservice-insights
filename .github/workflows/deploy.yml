@@ -12,10 +12,10 @@ name: Deploy
 # workspace checkout rather than the image, which ships no migrations Node can import.
 #
 # The worker only ever deploys via workflow_dispatch from main, at the commit the web runs. This is
-# because deploying the worker risks killing in-flight requests, per ARCHITECTURE.md § Deployments.
+# because deploying the worker risks killing in-flight requests, per docs/architecture.md § Deployments.
 #
 # Nothing here rolls back: a bad deploy is reverted and deploys forward like any other change, per
-# ARCHITECTURE.md § Bad deploys are fixed forward.
+# docs/architecture.md § Bad deploys are fixed forward.
 #
 # Production secrets live only in the `production` Environment, never as repo secrets, which any
 # pull_request run from a same-repo branch can read by editing a workflow. The Environment only

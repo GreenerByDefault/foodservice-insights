@@ -501,7 +501,7 @@ async function harvestSuggestions(
  * is an unreachable store, where none of them did; and the objects a partial success orphans are
  * a report of a few hundred KB, well under what the bookkeeping would cost to read. Uploads also
  * precede the write, so a verdict that never lands orphans the same way. Both are acceptable under
- * "no automated data cleanup" in REQUIREMENTS.md.
+ * "no automated data cleanup" in docs/requirements.md.
  *
  * Settled with `Promise.allSettled`, not `Promise.all`: a `Promise.all` returns as soon as the
  * first upload rejects, leaving the others still in flight and unawaited — one can then land in

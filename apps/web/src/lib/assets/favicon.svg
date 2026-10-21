@@ -1,4 +1,4 @@
-<!-- A placeholder until GBD supplies the real mark (REQUIREMENTS.md § Landing page). The two raster
+<!-- A placeholder until GBD supplies the real mark (docs/requirements.md § Landing page). The two raster
      copies in `static/` are generated from this file; after changing it, regenerate them from
      `apps/web`:
        rsvg-convert -w 32 -h 32 src/lib/assets/favicon.svg | magick - static/favicon.ico

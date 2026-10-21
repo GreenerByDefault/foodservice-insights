@@ -23,8 +23,8 @@ worker contract; each rule file's `paths` list is the truth for where it applies
 Writing or changing a doc is covered by the `writing-docs` skill — where a doc belongs, how long
 it should be, and what must never go in one.
 
-For what the product must do, read [`REQUIREMENTS.md`](REQUIREMENTS.md). For how the system
-fits together and why, read [`ARCHITECTURE.md`](ARCHITECTURE.md) — both record *rejected*
+For what the product must do, read [`docs/requirements.md`](docs/requirements.md). For how the system
+fits together and why, read [`docs/architecture.md`](docs/architecture.md) — both record *rejected*
 alternatives, so check them before proposing a design change.
 
 ## Claude Code plans

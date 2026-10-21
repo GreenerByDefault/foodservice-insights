@@ -85,7 +85,7 @@ type ReportListRowQuery = {
  * against the outer query's own `reportCreatedAt`/`reportId` columns.
  *
  * The scalar subquery goes straight to `report`, not through the outer query, so it still
- * resolves for a soft-deleted cursor report — `REQUIREMENTS.md` § Data deletion keeps the row,
+ * resolves for a soft-deleted cursor report — `docs/requirements.md` § Data deletion keeps the row,
  * and a stale bookmark should still page correctly. `(created_at, id)` — not `created_at` alone —
  * is a total order: two reports can share a timestamp, and an order that isn't total lets paging
  * repeat or skip a row.

@@ -88,7 +88,7 @@ export async function _renameOrganization(
  * first would risk leaving live report rows pointing at files that are already gone.
  *
  * A failed object delete is logged, not raised: the organization is already gone by that point, so
- * answering with a 503 would claim the delete failed when it didn't. Per REQUIREMENTS.md, an
+ * answering with a 503 would claim the delete failed when it didn't. Per docs/requirements.md, an
  * orphaned blob prefix left behind this way is a manual-cleanup case — that's why this is the one
  * blob call that does *not* go through `withBlobStoreErrorHandling`, which always 503s.
  */

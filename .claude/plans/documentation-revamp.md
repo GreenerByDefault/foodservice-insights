@@ -3,13 +3,13 @@
 ## Context
 
 The docs' structure dates from the project's first weeks, when the root README was the only
-guide and ARCHITECTURE.md was partly a spec. The product is now built and close to go-live, and
+guide and the architecture doc was partly a spec. The product is now built and close to go-live, and
 the structure no longer fits:
 
 - **The root README is 413 lines, and its bottom 240 are the TypeScript developer guide.** The
   Python guide lives in `python/README.md`, so every reader, Python ones included, scrolls past
   one stack's guide, and the docs map sits in the middle where nobody looks for it.
-- **ARCHITECTURE.md (587 lines) carries detail one component owns, and that copy has drifted.**
+- **`docs/architecture.md` (587 lines) carries detail one component owns, and that copy has drifted.**
   § Worker opens with "The detail in this section moves to `apps/worker/README.md` when that
   package lands", long after it landed, while `apps/worker/README.md` points back at it. Most of
   § Worker and § Progress, leases, and reaping restates `apps/worker/src/failures.ts`,
@@ -18,9 +18,9 @@ the structure no longer fits:
   `canceled`, a fenced one writes nothing, `attempt/verdict.ts`), "probably 2 workers"
   (`.do/worker.yaml` runs 1), and `submission.ts` "is imported by the browser" (it is not;
   `inspect-file.ts` is).
-- **REQUIREMENTS.md has drifted from the product** it now describes: the server "sends requests
+- **`docs/requirements.md` has drifted from the product** it now describes: the server "sends requests
   to a Python worker" (it enqueues; the worker pulls), "CSRF protection tokens" (SvelteKit's origin
-  check), `HttpOnly` cookies (deliberately not, per ARCHITECTURE § Auth), an audit list missing
+  check), `HttpOnly` cookies (deliberately not, per docs/architecture.md § Auth), an audit list missing
   five event kinds `apps/web/src/lib/server/audit.ts` records, an expired invite that "does not
   redirect" (it does, for a user with no memberships), country-of-users as a nice-to-have (built
   in #687), and two `TBD`s that should be greppable `**Open:**`.
@@ -62,52 +62,22 @@ a doc is wrong because the code is awkward, fix the code.
 - **Runbooks are out of scope.** Another session owns `.claude/plans/runbooks.md` and where its
   entries land. The README's link into it (to the plan itself, "once it lands", since #693 dropped
   the section it used to anchor on), `012_write_guard.ts`'s hint naming "Write to the
-  database by hand", and ARCHITECTURE's "needs no runbook" line are left for that session. If it
+  database by hand", and the architecture doc's "needs no runbook" line are left for that session. If it
   chooses `docs/runbooks.md`, that fits the rule above.
-- **Leave the go-live gaps to the go-live plans.** ARCHITECTURE § Stack says Supabase Auth and
+- **Leave the go-live gaps to the go-live plans.** docs/architecture.md § Stack says Supabase Auth and
   Postmark while production still runs placeholder sign-in and the dropping email stub;
   `production-sign-in.md` and `email-provider.md` make that true within days, and `.do/README.md`
   already says so. Likewise § Alerts, § Logs and § Hosting, which `alerts.md`, `better-stack.md`
   and `custom-domain.md` rewrite: their headings stay, and this plan does not restructure them.
-- **Order.** PR 1 first, since every later PR edits the moved files. After that, PR 2, PRs 3–4,
-  and PR 5 are independent; PR 3 precedes PR 4 (both edit `docs/architecture.md`), and PR 6 goes
-  last (it edits `apps/worker/README.md` after PRs 2 and 3). PR 1 touches the in-flight plans by
-  one line each, a trivial conflict for whichever session lands second.
+- **Order.** PR 1, PRs 2–3, and PR 4 are independent; PR 2 precedes PR 3 (both edit
+  `docs/architecture.md`), and PR 5 goes last (it edits `apps/worker/README.md` after PRs 1
+  and 2).
 - *Rejected: `docs/python.md` beside `docs/typescript.md`.* Symmetric, but it moves the Python
   guide out of the only directory that holds Python.
 - *Rejected: keeping ARCHITECTURE.md and REQUIREMENTS.md at the root.* Updating references is
   mechanical, and with them in `docs/` the folder has an obvious charter.
 
-## PR 1 — Move ARCHITECTURE.md and REQUIREMENTS.md into docs/
-
-A pure move, so review is a rename plus reference updates and later PRs edit the new paths.
-
-- `git mv ARCHITECTURE.md docs/architecture.md`, `git mv REQUIREMENTS.md docs/requirements.md`.
-  Inside them, change only relative links (one level deeper) and each other's names, so
-  `git diff -M` shows near-100% renames.
-- Rewrite every reference: `git grep -n 'ARCHITECTURE\.md\|REQUIREMENTS\.md'` finds about 45 in
-  code comments, config and CI comments, 5 in skills, 20 in plans, 25 in other docs. Prose
-  becomes `docs/architecture.md § X`; Markdown links get the right relative depth. Fix the one
-  broken path, `packages/db/tests/analysis-attempt.test.ts:829` (`../../` → `../../../`). Skip the
-  frozen SQL body and its generated mirror, and add `001_initial_schema.ts` and
-  `public-schema.sql` to `check_doc_links.py`'s `UNCHECKED_PREFIXES`, since both cite
-  `ARCHITECTURE.md`.
-- `AGENTS.md`: the two lines naming them. `CLAUDE.md` is untouched (`@AGENTS.md`).
-- `.claude/skills/writing-docs/SKILL.md`: its description and links, and the `docs/` bullet
-  rewritten to the rule in Decisions: root holds README and AGENTS; `docs/` holds what no single
-  directory contains (product intent, the seams between components, the TypeScript guide);
-  everything else lives with its code.
-- The in-flight plans' references (`alerts.md`, `better-stack.md`, `custom-domain.md`,
-  `email-provider.md`, `production-sign-in.md`, `caches-to-supabase.md`), so they point at the
-  new paths when they land.
-- **Needs Eric's OK, CI again:** `.github/filters.yml` adds `'!docs/**'` to
-  `docs_and_agent_files`. Without it, a docs-only PR runs the `ts` and `system` jobs, because
-  `!*.md` matches only the root. `deploy.yml`'s two comments citing ARCHITECTURE.md also change.
-  `scripts/ci/check_filters.py` requires the new exclusion to match a tracked file, which it will.
-
-Other sessions' branches that edit ARCHITECTURE.md rebase onto the rename; git follows it.
-
-## PR 2 — The root README becomes a front door; the TypeScript guide moves to docs/typescript.md
+## PR 1 — The root README becomes a front door; the TypeScript guide moves to docs/typescript.md
 
 **`README.md`** (~170 lines), in this order:
 
@@ -169,7 +139,7 @@ The runtime "see the README" messages (`apps/web/src/lib/server/env.ts`, `packag
 in the root README. `production-sign-in.md` PR 2 names "the root README" for sign-in, which also
 stays there.
 
-## PR 3 — Worker detail moves out of docs/architecture.md
+## PR 2 — Worker detail moves out of docs/architecture.md
 
 **`docs/architecture.md` § Worker keeps the seams**, about 40 lines where there are 160:
 
@@ -209,7 +179,7 @@ corollaries and thrown-renewal cases (`failures.ts`), and the reaper's own-`work
 - § Worker queue says "workers wait `queuePollIntervalMs` after a poll that starts nothing"
   instead of "every 1–2 seconds". Heading unchanged.
 
-## PR 4 — The rest of docs/architecture.md keeps to cross-component facts
+## PR 3 — The rest of docs/architecture.md keeps to cross-component facts
 
 Each section whose subject is one package moves to that package's doc, leaving a line and a
 pointer; nothing in § Alerts, § Logs or § Hosting changes.
@@ -241,7 +211,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   § The model is the fuller copy.
 - **§ File links**: drop "we can add download metrics later".
 
-## PR 5 — docs/requirements.md matches the product
+## PR 4 — docs/requirements.md matches the product
 
 - § Processing: the server enqueues an attempt and a worker pulls it.
 - § File upload: a workbook may have many sheets; `apps/web/src/lib/reports/excel/sheets.ts`
@@ -262,7 +232,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 - The opening's spec-era instruction ("When implementing … replace these docs with a link")
   becomes the standing rule: a limit lives in code, and this file names its constant.
 
-## PR 6 — Package docs, and the code their errors pointed at
+## PR 5 — Package docs, and the code their errors pointed at
 
 - `python/lab/test_data/README.md`: rewrite to about 20 lines. What the dataset is and how it was
   anonymized, which lab step (by `python/lab/README.md`'s numbering) each file feeds, safe to
@@ -299,16 +269,15 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 ## Verification
 
 - **Links.** `scripts/ci/check_doc_links.py` passes after every PR. It covers comment citations
-  too, but not a doc named without `§`, so after PR 1 `git grep` for each old name
-  (`ARCHITECTURE.md`, `REQUIREMENTS.md`) finds only the frozen SQL comment.
-- **PR 1:** `git diff -M --stat main` shows both files as renames at 95% or more.
-  `python3 scripts/ci/check_filters.py` passes.
-- **PR 2:** with the test stack up, create a leftover by hand (`CREATE DATABASE fsi_test_manual`
+  too, but not a doc named without `§`, so a later move still wants a `git grep` for the old
+  name (`ARCHITECTURE.md` and `REQUIREMENTS.md` now appear only in frozen SQL and the check's
+  own tests).
+- **PR 1:** with the test stack up, create a leftover by hand (`CREATE DATABASE fsi_test_manual`
   as `supabase_admin` on port 65322); `pnpm test:db:clean` with no `TEST_DB` drops it, and so
   does `TEST_DB=1 pnpm test:db:clean` on a second one.
 - **Gates.** Every PR: `just lint`, since ruff formats Markdown repo-wide and it runs the doc
-  check. PRs that touch TypeScript or package scripts (1, 2, 3, 6): `pnpm lint && pnpm check &&
-  pnpm test`, in the background. PRs that touch Python (3, 6): `just lint && just check && just
-  test`, and for PR 6's marker removal, `--strict-markers` passing confirms nothing used them.
+  check. PRs that touch TypeScript or package scripts (1, 2, 5): `pnpm lint && pnpm check &&
+  pnpm test`, in the background. PRs that touch Python (2, 5): `just lint && just check && just
+  test`, and for PR 5's marker removal, `--strict-markers` passing confirms nothing used them.
 - **Read-through.** Each moved section reads correctly where it landed, with no dangling "above"
   or "below"; the root README renders on GitHub with the map visible without much scrolling.

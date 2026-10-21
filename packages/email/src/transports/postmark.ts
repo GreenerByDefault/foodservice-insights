@@ -1,4 +1,4 @@
-/** Postmark, the production provider (ARCHITECTURE.md § Email), through its HTTP API.
+/** Postmark, the production provider (docs/architecture.md § Email), through its HTTP API.
  *
  * Each choice below is set per request, so this is the file to edit to reverse one:
  *

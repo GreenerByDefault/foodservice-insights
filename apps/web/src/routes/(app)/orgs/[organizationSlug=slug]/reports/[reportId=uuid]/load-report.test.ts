@@ -102,7 +102,7 @@ describe('_loadReport', () => {
       await withRollback(database(), async (transaction) => {
         const { organization, report } = await anOrgAndReport(transaction);
         // Deleting a running report writes `cancel_requested_at` in the same transaction as
-        // `deleted_at` (REQUIREMENTS.md § Data deletion), so this is the shape a deleted report
+        // `deleted_at` (docs/requirements.md § Data deletion), so this is the shape a deleted report
         // usually arrives in — and it must be a 404, not the stopped screen.
         await insertAnalysisAttempt(transaction, {
           reportId: report.id,

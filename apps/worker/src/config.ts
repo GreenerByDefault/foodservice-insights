@@ -60,7 +60,7 @@ export type WorkerConfig = {
    * left to another worker's reaper instead of recording `shut_down`. So when
    * `createWorkerConfig` is given `PLATFORM_SHUTDOWN_GRACE_MS`, it derives this from it unless
    * overridden, and checks an override against it. See
-   * [`ARCHITECTURE.md`](../../../ARCHITECTURE.md#deployments). */
+   * [`docs/architecture.md`](../../../docs/architecture.md#deployments). */
   drainGraceMs: number;
 
   /** How long a lease may go unrenewed before the attempt is treated as abandoned.

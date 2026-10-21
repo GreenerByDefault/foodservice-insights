@@ -5,7 +5,7 @@
 Some operations happen by hand in a vendor's dashboard or from a maintainer's shell, and nothing
 in the code records how. Three such procedures sit in `.claude/plans/runbooks.md` today, with an
 **Open** on where runbooks belong and in what form. `better-stack.md` and `caches-to-supabase.md`
-promise entries into that file, `README.md:112` and `ARCHITECTURE.md:78` point at it, and the
+promise entries into that file, `README.md:112` and `docs/architecture.md:78` point at it, and the
 database's write guard names one entry by title in its error hint (`012_write_guard.ts:67`). The
 repo is public, maintained by a contractor through AI agents, and about to be run part-time by a
 technical staff member. The runbooks exist to save that person time on the procedures whose traps
@@ -18,7 +18,7 @@ PR 1 recovers the three existing entries with `git show origin/main:.claude/plan
 (`architecture.md`, `requirements.md`, `typescript.md`), adds a CI link checker
 (`scripts/ci/check_doc_links.py`), and leaves runbooks to this plan, saying `docs/` is where they
 fit. Either plan's PR 1 may land first: `docs/` with only `runbooks/` in it is fine, and the
-revamp's PR 2 rewrites every `ARCHITECTURE.md` reference it finds, so each PR here links whatever
+revamp's PR 2 rewrites every `docs/architecture.md` reference it finds, so each PR here links whatever
 name is on `main` the day it opens. The lines both plans touch, one each: the revamp's PR 3 adds a
 "Run it in production" row to the README map (PR 1 here adds `docs/runbooks/` to it), its PR 5
 rewrites the secrets **Open** in architecture (PR 3 here resolves it), and its PR 6 marks account
@@ -54,8 +54,8 @@ Facts from the tree (2026-10-20) that shape the design:
 - **`audit_actor_kind` has a `gbd_manual` value nothing writes** (`public-schema.sql:77-82`;
   `audit.ts` writes only `'user'`). The draft's by-hand example promotes a superadmin with no
   audit row.
-- **Open items this plan closes:** `runbooks.md`'s own **Open**; `ARCHITECTURE.md:510` (no
-  rotation process for suspected leaks); `REQUIREMENTS.md:248-251` (account recovery "TBD");
+- **Open items this plan closes:** `runbooks.md`'s own **Open**; `docs/architecture.md:510` (no
+  rotation process for suspected leaks); `docs/requirements.md:248-251` (account recovery "TBD");
   the draft token entry's "a fixed expiration rather than none"; `caches-to-supabase.md:69-70`.
 
 ## Decisions
@@ -157,7 +157,7 @@ since it is rotated the same way though it never touches the Environment.
 | `write-to-the-database-by-hand.md` | Named by the guard's error hint |
 | `review-cache-suggestions.md` | The three UI steps; the rules stay in `caches-to-supabase.md` and the guard |
 | `rotate-a-secret.md` | Every credential, where it is minted, what else moves |
-| `a-credential-leaked.md` | Closes `ARCHITECTURE.md:510` |
+| `a-credential-leaked.md` | Closes `docs/architecture.md:510` |
 | `offboard-a-person.md` | Crosses every vendor team and two rotations |
 | `restore-the-database.md` | Two sentences the vendor's docs cannot say |
 | `change-a-users-email.md` | Resolves the REQUIREMENTS TBD; why the dashboard and not SQL |
@@ -191,7 +191,7 @@ Branch off `main`. Recover the three entries first:
   the alert sentence above; § Where things are, one row per vendor (GitHub: the repo, the
   `production` Environment, Actions, the GHCR packages; DigitalOcean: the team, the two apps;
   Supabase: the project's database, Auth, Storage and Studio, with Auth settings only in its
-  dashboard per `ARCHITECTURE.md:86-89`; Grafana Cloud: the stack, our folder; Better Stack: the
+  dashboard per `docs/architecture.md:86-89`; Grafana Cloud: the stack, our folder; Better Stack: the
   source, views, monitor; Postmark: the server, two streams; OpenAI: the billing project; GBD's
   Squarespace DNS and Google Workspace), the ownership lines, and "plan tiers:
   `scripts/monthly_costs.py`"; § The runbooks, the three below; § Writing one, from Decisions.
@@ -206,7 +206,7 @@ Branch off `main`. Recover the three entries first:
   line naming the triggers; step 1 says a GBD staff login creates it, and why; step 3 says no
   expiration, with the *Rejected* line. The other sections are PR 3's.
 - **Links.** `README.md:112` and its map or § Documentation, whichever is on `main`;
-  `ARCHITECTURE.md:78-79` (link the file; "needs no runbook" becomes a link to
+  `docs/architecture.md:78-79` (link the file; "needs no runbook" becomes a link to
   `review-cache-suggestions.md`); `.do/README.md:16-17`. The guard's hint is unchanged.
 - **Other plans, one line each:** `better-stack.md:56,118` →
   `docs/runbooks/trace-a-problem-through-the-logs.md`; `caches-to-supabase.md:69-70`;
@@ -280,7 +280,7 @@ Branch off `main`. Recover the three entries first:
   guard, while the Users page goes through Supabase Auth, which the guard exempts
   (`012_write_guard.ts:11-13,48`). `app_user` holds no email, so nothing else changes. Two
   follow-ups: a pending invite to the old address no longer matches, so re-invite; record the
-  change per the audit line. `REQUIREMENTS.md:250-251`, or its **Open** if the revamp's PR 6
+  change per the audit line. `docs/requirements.md:250-251`, or its **Open** if the revamp's PR 6
   landed first, becomes a link.
 - **The audit line** in `write-to-the-database-by-hand.md`, per Decisions: `actor_kind =
   'gbd_manual'`, `action` naming what was done, `actor_user_id` null, `detail` saying who; check
@@ -296,7 +296,7 @@ Docs only, so the gates pass trivially. Per PR, by hand:
   until then, from the repo root:
 
   ```sh
-  for f in $(git ls-files 'docs/runbooks/*.md' README.md ARCHITECTURE.md .do/README.md REQUIREMENTS.md 2>/dev/null); do
+  for f in $(git ls-files 'docs/runbooks/*.md' README.md docs/architecture.md .do/README.md docs/requirements.md 2>/dev/null); do
     rg -o '\]\(([^)#]+)' -r '$1' "$f" | rg -v '^https?://' | while read -r p; do
       [ -e "$(dirname "$f")/$p" ] || echo "$f -> $p"
     done

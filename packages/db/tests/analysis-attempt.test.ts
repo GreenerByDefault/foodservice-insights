@@ -1,7 +1,7 @@
 /** The analysis attempt state machine.
  *
  * These constraints are the coordination point between the web app and the workers, and several
- * exist specifically to make the reaping race in `ARCHITECTURE.md` safe.
+ * exist specifically to make the reaping race in `docs/architecture.md` safe.
  *
  * Note the precedence: the insert trigger is BEFORE ROW, so it runs before any check constraint
  * is evaluated. A bad `attempt_number` on a fresh report is therefore reported by the trigger,
@@ -515,7 +515,7 @@ describe('analysis_attempt', () => {
     });
 
     test('refuses the second of two concurrent retries', async () => {
-      // REQUIREMENTS.md allows one retry at a time per report. The trigger's report lock serialises
+      // docs/requirements.md allows one retry at a time per report. The trigger's report lock serialises
       // the two, so beta re-reads the latest attempt after alpha commits and rejects on the status
       // rule — the unique indexes behind it are backstops nothing now reaches.
       await withCommittedFixture(
@@ -826,7 +826,7 @@ describe('analysis_attempt', () => {
           await reap(reaper.transaction, attempt);
 
           // The `WHERE status = 'processing' AND workerId = ...` guard is the pattern
-          // [Progress, leases, and reaping](../../ARCHITECTURE.md#progress-leases-and-reaping)
+          // [Progress, leases, and reaping](../../../docs/architecture.md#progress-leases-and-reaping)
           // prescribes for a worker finishing up after it may have been reaped.
           const blocked = await sendBlockingStatement(DATABASE, original, reaper, (transaction) =>
             transaction

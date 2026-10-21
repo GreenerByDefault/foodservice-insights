@@ -18,7 +18,7 @@ import { type Kysely, sql } from 'kysely';
 // Rejected:
 // - A daily rollup table: it keeps counts, not rows, so percentiles and per-organization slices
 //   are lost, and it is a job to run.
-// - Soft-deleting organizations: `REQUIREMENTS.md` has an organization's deletion remove its
+// - Soft-deleting organizations: `docs/requirements.md` has an organization's deletion remove its
 //   reports, and a customer who deletes one expects that.
 
 export async function up(database: Kysely<any>): Promise<void> {

@@ -24,7 +24,7 @@ import { aChecksum, DB_NOW } from './values.ts';
  * - `worker_id`/`claimed_at`/`lease_renewed_at` for `processing`, `succeeded`, and `failed` —
  *   reaching one of those means the worker claimed the attempt first. The CHECK constraints
  *   don't require this; the state machine does.
- * - `canceled` is the exception: `ARCHITECTURE.md` § Canceling allows canceling a `pending`
+ * - `canceled` is the exception: `docs/architecture.md` § Canceling allows canceling a `pending`
  *   attempt that was never claimed.
  *
  * See `analysis_attempt` in public-schema.sql for the constraints themselves.

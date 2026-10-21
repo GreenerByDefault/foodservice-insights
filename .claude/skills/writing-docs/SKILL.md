@@ -1,6 +1,6 @@
 ---
 name: writing-docs
-description: How documentation works in this repo — where a doc belongs, how long it should be, and what must never go in one. Load before writing or changing any Markdown file (README, ARCHITECTURE.md, REQUIREMENTS.md, a package doc), and when deciding whether something belongs in a doc, a code comment, or a test.
+description: How documentation works in this repo — where a doc belongs, how long it should be, and what must never go in one. Load before writing or changing any Markdown file (README, docs/architecture.md, docs/requirements.md, a package doc), and when deciding whether something belongs in a doc, a code comment, or a test.
 ---
 
 # Documentation
@@ -10,16 +10,16 @@ keep every document either accurate or obviously dead. [`AGENTS.md`](../../../AG
 Comments covers the same question for code comments.
 
 - **A doc lives at the highest point in the tree that contains all the code it describes.**
-  Something spanning more than one component goes in [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) —
-  a colocated doc cannot own a seam between two components. Something about one package
-  goes in that package. Product intent, owned by no code, goes in a root doc like
-  [`REQUIREMENTS.md`](../../../REQUIREMENTS.md). Once there is more than one such doc, that's the
-  signal to introduce a `docs/` folder — not before.
+  The root holds only `README.md` and `AGENTS.md`. [`docs/`](../../../docs/) holds what no single
+  directory contains: product intent ([`requirements.md`](../../../docs/requirements.md)), the
+  seams between components ([`architecture.md`](../../../docs/architecture.md), which cannot be
+  colocated because it owns no one component), and the TypeScript guide, whose code spans `apps/`,
+  `packages/` and `tests/`. Everything else lives with its code.
 - **But a decision that one file enacts is documented on that file**, in a comment, even when
   its consequences reach other components. Ask which single file someone would have to edit to
   reverse the decision, and put the reasoning there — on the line that enacts it, or in the
   file's header comment if it holds across the file. Only split it out when no one file owns
-  it. [`ARCHITECTURE.md`](../../../ARCHITECTURE.md) then gets a few lines at most — the consequences
+  it. [`docs/architecture.md`](../../../docs/architecture.md) then gets a few lines at most — the consequences
   other components must know, and where the reasoning lives.
 - **A README covers what a developer runs, not how the build is wired.** Everyone reads it,
   so keep config and build mechanics out of it unless an everyday command actually changed.

@@ -3,7 +3,7 @@
 The Postgres database: the Kysely client, the migrations, and the generated types. Used by both
 the web app and the worker parent.
 
-For how the database fits into the wider system, see [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
+For how the database fits into the wider system, see [`docs/architecture.md`](../../docs/architecture.md).
 
 ## Where the schema lives
 
@@ -80,7 +80,7 @@ Classify a failure with `isTransientDatabaseError` or `isPermanentDatabaseError`
   [`migrations/011_metrics_tombstones.ts`](migrations/011_metrics_tombstones.ts) is the pattern.
 - **New queries should be checked with `EXPLAIN ANALYZE`** before landing, per
   [Use The Index, Luke](https://use-the-index-luke.com) — this is what "queries are optimized" in
-  [`REQUIREMENTS.md`](../../REQUIREMENTS.md#performance) means in practice.
+  [`docs/requirements.md`](../../docs/requirements.md#performance) means in practice.
 
 ## Writing a migration
 
@@ -92,7 +92,7 @@ A migration reaches production before the code that needs it, and runs against a
   has applied, so [reset](../../README.md#reset-a-database) your local databases to see the edit.
 - **The schema must keep working for the code already deployed.** That is the web for a few minutes
   and the worker for as long as it goes undeployed — see
-  [`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker-deploys-only-on-demand). So expand, then
+  [`docs/architecture.md`](../../docs/architecture.md#worker-deploys-only-on-demand). So expand, then
   contract: add what new code needs in one PR, and drop or rename the old shape only in a later
   PR, once nothing deployed reads it.
 - **Every pending migration runs in one transaction**, so a failed deploy applies nothing. It also
@@ -110,7 +110,7 @@ A migration reaches production before the code that needs it, and runs against a
 
 `analysis_attempt.status` is the coordination point between the web app and the workers. Its
 constraints are what keep the reaping race in
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md#progress-leases-and-reaping) safe: a worker that hangs
+[`docs/architecture.md`](../../docs/architecture.md#progress-leases-and-reaping) safe: a worker that hangs
 must not be able to overwrite a verdict another worker already reached. Code that writes to an
 attempt follows three rules:
 
@@ -124,4 +124,4 @@ attempt follows three rules:
 
 The constraints behind these rules are tested in
 [`tests/analysis-attempt.test.ts`](tests/analysis-attempt.test.ts). How a cancel reaches this state
-machine is in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#canceling).
+machine is in [`docs/architecture.md`](../../docs/architecture.md#canceling).

@@ -2,8 +2,8 @@
 
 ## Context
 
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Failure modes promises alerts, and
-[`REQUIREMENTS.md`](../../REQUIREMENTS.md) § Observability asks for them. The vendors are chosen
+[`docs/architecture.md`](../../docs/architecture.md) § Failure modes promises alerts, and
+[`docs/requirements.md`](../../docs/requirements.md) § Observability asks for them. The vendors are chosen
 (§ Stack): DigitalOcean App Platform hosts, Grafana Cloud runs dashboards and data alerts, and Better
 Stack runs logs and uptime monitoring. The comparison behind those choices is in
 [the decision plan, as of the commit that recorded them](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md).
@@ -16,7 +16,7 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 - **The host layer is live.** CPU, memory and restart rules per component, p95 latency on the web,
   and failed deploys and domains per app are in [`.do/web.yaml`](../../.do/web.yaml) and
   [`.do/worker.yaml`](../../.do/worker.yaml), each threshold with a comment saying what firing
-  would mean. DigitalOcean emails the whole team. `ARCHITECTURE.md` § Observability → § Alerts
+  would mean. DigitalOcean emails the whole team. `docs/architecture.md` § Observability → § Alerts
   holds the three-layer table, with the Data and Outside rows marked **Open**, and the § Failure
   modes overload row already names the host alerts and drops disk.
 - **What § Failure modes still promises:**
@@ -51,7 +51,7 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 
 ### Each alert is evaluated where its data already is
 
-`ARCHITECTURE.md` § Alerts states the principle and rejects one system evaluating everything. The
+`docs/architecture.md` § Alerts states the principle and rejects one system evaluating everything. The
 two layers left to build:
 
 | Layer | Evaluated by | Rules | Defined in |
@@ -64,7 +64,7 @@ that sees what a user sees, so it fires when the host's edge, DNS or TLS is what
 
 ### Docs land with each PR
 
-Each PR fills in its layer's row of `ARCHITECTURE.md` § Alerts and rewrites the § Failure modes
+Each PR fills in its layer's row of `docs/architecture.md` § Alerts and rewrites the § Failure modes
 rows its alerts make true, so the docs never promise an alert that does not exist, nor lag one that
 does. Thresholds and what firing would mean live on the rules themselves, never in a doc.
 
@@ -99,7 +99,7 @@ point per vendor, if the team ends up working in a Slack channel.
     live worker's reaper would have converged it by then, so no reaper is running. The rule's
     comment names [`config.ts`](../../apps/worker/src/config.ts), whose value the rule must
     exceed.
-  - **Notifications gave up** and **stuck:** ARCHITECTURE.md's two queries. *Stuck* also
+  - **Notifications gave up** and **stuck:** docs/architecture.md's two queries. *Stuck* also
     requires that the attempt still have a requester, as the due predicate in
     [`notifications.ts`](../../apps/worker/src/sweeps/notifications.ts) does. Otherwise an attempt
     whose requester was deleted would fire forever. `metrics.attempt` carries
@@ -163,7 +163,7 @@ secret key, so it can be revoked on its own.
   `ALERT_EMAILS` to a placeholder address, since Mailpit accepts any.
 - The panel check reads the rule files too (§ Data rules).
 - `ALERT_EMAILS` joins the `production` Environment, and `deploy-web`'s Grafana step passes it.
-- `ARCHITECTURE.md`:
+- `docs/architecture.md`:
   - § Alerts: the Data row names the rule folder in place of its **Open**.
   - § Failure modes: the queue-wait, failures, email and connections rows say the data layer
     raises them, and the connections row gains its alert.

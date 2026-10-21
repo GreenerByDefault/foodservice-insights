@@ -31,11 +31,14 @@ from urllib.parse import unquote
 REPO_ROOT: Final = Path(__file__).resolve().parents[2]
 
 # Never checked as a source of references, though anything may be a target. Plans describe files
-# that do not exist yet, the Svelte skill is vendored from upstream, and this script's tests
-# break references on purpose.
+# that do not exist yet, the Svelte skill is vendored from upstream, this script's tests
+# break references on purpose, and a landed migration is never edited (so its SQL, and the
+# generated mirror of it, keep citing `ARCHITECTURE.md`).
 UNCHECKED_PREFIXES: Final = (
     ".claude/plans/",
     ".claude/skills/svelte-core-bestpractices/",
+    "packages/db/migrations/001_initial_schema.ts",
+    "packages/db/public-schema.sql",
     "scripts/ci/tests/",
 )
 

@@ -144,8 +144,8 @@ The repo configures Claude Code for you; there is nothing to set up.
 
 | Doc | What it covers |
 | --- | --- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | How the system fits together, and why |
-| [`REQUIREMENTS.md`](REQUIREMENTS.md) | What the product must do |
+| [`docs/architecture.md`](docs/architecture.md) | How the system fits together, and why |
+| [`docs/requirements.md`](docs/requirements.md) | What the product must do |
 | [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
 | [`apps/web/README.md`](apps/web/README.md) | The web app's design |
 | [`apps/web/e2e/README.md`](apps/web/e2e/README.md) | The web app's e2e and screenshot suites |

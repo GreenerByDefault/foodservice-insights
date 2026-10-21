@@ -3,7 +3,7 @@
 The blob store, reached through its S3 API. Used by both the web app and the worker parent.
 
 For how the blob store fits into the wider system, and why it is Supabase Storage over S3 rather
-than the Supabase JavaScript SDK, see [`ARCHITECTURE.md`](../../ARCHITECTURE.md).
+than the Supabase JavaScript SDK, see [`docs/architecture.md`](../../docs/architecture.md).
 
 ## Using it
 

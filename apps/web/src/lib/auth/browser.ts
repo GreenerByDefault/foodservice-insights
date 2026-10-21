@@ -7,7 +7,7 @@
  * whole client (`testing/fake.ts`).
  *
  * Supabase is a token service here and nothing else: no `locals.supabase`, no callback route, no
- * RLS. See `ARCHITECTURE.md` § Supabase: database, auth, and blob store.
+ * RLS. See `docs/architecture.md` § Supabase: database, auth, and blob store.
  */
 
 import { AUTH_COOKIE_NAME } from '@gbd/core';

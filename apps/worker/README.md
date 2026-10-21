@@ -3,7 +3,7 @@
 The worker parent process: claims analysis attempts off the queue, spawns Python children to run
 them, and writes results back to the database and blob store. For how it fits the wider system —
 the queue contract, the parent ↔ child run directory, deployments and draining — see
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md#worker).
+[`docs/architecture.md`](../../docs/architecture.md#worker).
 
 ## Running it
 

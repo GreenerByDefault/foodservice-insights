@@ -2,7 +2,7 @@
 
 ## Context
 
-Both apps forward their stdout to one Better Stack source (#659, `ARCHITECTURE.md` § Logs). What
+Both apps forward their stdout to one Better Stack source (#659, `docs/architecture.md` § Logs). What
 is left is everything the team reads that stream through, and the two alerts
 [`alerts.md`](alerts.md) gave to Better Stack: the uptime monitor and the `error`-line alert.
 
@@ -74,12 +74,12 @@ runbook entry names the field.
 ### A dashboard over the access lines
 
 Requests by status, and p95 `durationMs` by `routeId`. That is the per-route half of
-`REQUIREMENTS.md` § Observability's "request durations and error counts", which App Platform's
+`docs/requirements.md` § Observability's "request durations and error counts", which App Platform's
 Insights tab charts only per app. Made in the UI, if the free plan has dashboards.
 
 ### The monitor and the `error`-line alert
 
-Both made in the UI and named in `ARCHITECTURE.md` § Alerts, so they are not invisible.
+Both made in the UI and named in `docs/architecture.md` § Alerts, so they are not invisible.
 *Rejected: Better Stack's Terraform provider.* That is state to keep for a few settings made once.
 
 - **One monitor on the public `/health/ready`**, through the same DNS and edge a user goes
@@ -118,7 +118,7 @@ Production serves traffic, so nothing waits. Everything but the docs is by hand.
 - [`runbooks.md`](runbooks.md): an entry, *Trace a problem through the logs*. From a user's report,
   the `X-Request-Id` or the time and their `userId`. From a failed attempt, `failure_reason` on its
   row, then its `attemptId`. Lines older than three days are gone.
-- `ARCHITECTURE.md`:
+- `docs/architecture.md`:
   - § Logs: a line's app is `syslog.appname`.
   - § Alerts: the Outside row names the monitor and the log alert, made in Better Stack's UI, in
     place of its **Open**.

@@ -1,6 +1,6 @@
 /**
  * Advisory locks and windowed counts behind the abuse limits: reports per organization and user
- * (REQUIREMENTS.md#abuse-limits) and invites per inviting user.
+ * (docs/requirements.md#abuse-limits) and invites per inviting user.
  *
  * A windowed limit — "N per rolling period" — has no counter column a `CHECK` can cap: a row ages
  * out of the window without any write happening. So whatever counts rows in the window and
@@ -38,7 +38,7 @@ async function lockRateLimitKey(
 
 /**
  * Serializes report-rate-limit decisions (the hourly and weekly limits in
- * REQUIREMENTS.md#abuse-limits) for one (organization, user) pair against every other upload for
+ * docs/requirements.md#abuse-limits) for one (organization, user) pair against every other upload for
  * that same organization or that same user.
  *
  * Always locks the organization before the user. Every caller must too — two call sites taking

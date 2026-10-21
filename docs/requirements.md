@@ -1,7 +1,7 @@
 # Requirements
 
 What the product must do. For *how* it is built and why, see
-[`ARCHITECTURE.md`](ARCHITECTURE.md).
+[`docs/architecture.md`](architecture.md).
 
 This file is the source of truth for product rules, including the numeric limits. When
 implementing, each value should live in exactly one place in code and be referenced from there,
@@ -18,7 +18,7 @@ A user can upload a CSV or XLSX file matching a predefined column format.
   - date ordered: date
   - weight: number
 - The website provides clear instructions for the file format.
-- Max file size: [`apps/web/src/lib/reports/upload-limit.js`](apps/web/src/lib/reports/upload-limit.js).
+- Max file size: [`apps/web/src/lib/reports/upload-limit.js`](../apps/web/src/lib/reports/upload-limit.js).
 - The user provides additional metadata:
   - a name for the report to help users identify it
   - site name (optional)
@@ -110,9 +110,9 @@ The user receives an email when the analysis completes.
 - No email for a canceled attempt.
 - Sending is retried a bounded number of times and then gives up — the cap is
   `WORKER_DEFAULTS.maxNotificationAttempts` in
-  [`apps/worker/src/config.ts`](apps/worker/src/config.ts).
+  [`apps/worker/src/config.ts`](../apps/worker/src/config.ts).
 - Email typically sends within `EMAIL_LATENCY_TARGET_MS` in
-  [`apps/worker/src/config.ts`](apps/worker/src/config.ts), but is best effort. Delivery is not
+  [`apps/worker/src/config.ts`](../apps/worker/src/config.ts), but is best effort. Delivery is not
   guaranteed.
 
 ### Multiple reports
@@ -203,7 +203,7 @@ Email OTP (one-time passcode).
 - Only the person who controls the invited email address can accept. Forwarding the link does
   not grant access.
 - Invites expire after `INVITE_LIFETIME_DAYS` days
-  ([`packages/core/src/index.ts`](packages/core/src/index.ts)). An admin can revoke a pending
+  ([`packages/core/src/index.ts`](../packages/core/src/index.ts)). An admin can revoke a pending
   invite at any time.
 - An admin can re-invite an address that already has an invite outstanding. That sends a fresh
   email and restarts the invite's lifetime.
@@ -213,7 +213,7 @@ Email OTP (one-time passcode).
 
 After OTP verification, where the user lands (a live invite, an org, the org picker, or
 `/orgs/new`) is decided by
-[`_organizationsPageRedirect`](apps/web/src/routes/(app)/orgs/+page.server.ts). The invite
+[`_organizationsPageRedirect`](../apps/web/src/routes/(app)/orgs/+page.server.ts). The invite
 branch's own behavior — accept/decline, the one-time expiry notice — is the Invite flow section
 above.
 
@@ -287,13 +287,13 @@ Follow security best practices for web development.
   restrictive to users.
 - **Hourly and weekly reports:** valid reports per rolling hour and per rolling 7 days, enforced
   per organization *and* per user — see `HOURLY_REPORT_LIMIT` and `WEEKLY_REPORT_LIMIT` in
-  [`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts).
+  [`apps/web/src/lib/reports/limits.ts`](../apps/web/src/lib/reports/limits.ts).
 - **Report retries:** a report can be attempted up to `MAX_ANALYSIS_ATTEMPTS` times — see
-  [`packages/db/src/constraints.ts`](packages/db/src/constraints.ts). Retries exist for internal errors.
+  [`packages/db/src/constraints.ts`](../packages/db/src/constraints.ts). Retries exist for internal errors.
 - **Invites:** a user can invite `HOURLY_INVITE_LIMIT` people per hour — see
-  [`apps/web/src/lib/server/invites/limits.ts`](apps/web/src/lib/server/invites/limits.ts).
+  [`apps/web/src/lib/server/invites/limits.ts`](../apps/web/src/lib/server/invites/limits.ts).
 - DDoS protection, from the hosting platform's own edge rather than an edge vendor of ours
-  ([`ARCHITECTURE.md`](ARCHITECTURE.md#hosting) says why). Geo-restriction is not planned.
+  ([`docs/architecture.md`](architecture.md#hosting) says why). Geo-restriction is not planned.
 
 ### Performance
 
@@ -301,7 +301,7 @@ Follow security best practices for web development.
 - A single request without queue time usually takes about 5 minutes, ranging from 2–15 minutes.
   The slowness is almost entirely the AI tool. The waiting screen's "running slower than usual"
   warnings key off this range — see `QUEUE_WARNING_AFTER_MS` and `ANALYSIS_WARNING_AFTER_MS` in
-  [`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts).
+  [`apps/web/src/lib/reports/limits.ts`](../apps/web/src/lib/reports/limits.ts).
 - The web server is stateless, so horizontal scaling can be added later.
 - Workers can be scaled horizontally and vertically.
   - *Rejected for now: autoscaling.* It would have to key off queue depth rather than CPU
@@ -315,7 +315,7 @@ Follow security best practices for web development.
 - Use retries where appropriate.
 - Handle distributed-system risks such as zombie connections.
 
-See [`ARCHITECTURE.md`](ARCHITECTURE.md#failure-modes) for the failure-mode inventory.
+See [`docs/architecture.md`](architecture.md#failure-modes) for the failure-mode inventory.
 
 ### Metrics
 
@@ -349,7 +349,7 @@ have decided *not* to do for now.
 - **No batch upload.** Uploads are one file at a time.
 - **No staging environment.** A bad deploy is cheap because it is reverted like any other change,
   or rolled back from the host's dashboard when that can't wait
-  ([`ARCHITECTURE.md`](ARCHITECTURE.md#bad-deploys-are-fixed-forward)), an interrupted attempt is
+  ([`docs/architecture.md`](architecture.md#bad-deploys-are-fixed-forward)), an interrupted attempt is
   retried, and no data is lost. So, a second hosted environment is not worth its money and
   upkeep. Feel free to revisit later.
 - **No search for reports.**
