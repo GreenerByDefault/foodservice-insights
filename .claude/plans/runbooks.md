@@ -39,8 +39,8 @@ Facts from the tree (2026-10-20) that shape the design:
   the Grafana stack hostname out "of the repo, which is public", and `alerts.md` keeps alert
   addresses in an Environment variable for the same reason.
 - **Agents are denied the hosted CLIs**: `doctl`, `gcx`, `gh secret`, `gh workflow run`, hosted
-  Supabase (`.claude/settings.json`, widened by `agent-guardrails.md`). A runbook is run by a
-  person from their own shell or a vendor's dashboard.
+  Supabase (`.claude/settings.json`). A runbook is run by a person from their own shell or a
+  vendor's dashboard.
 - **House skills never run scripts, and rules are path-scoped pointers**: `db.md` points at
   `packages/db/README.md`; the revamp's PR 7 makes `web.md` point at `apps/web/README.md`. The one
   production-touching script (`temporary-go-live-cache-import/`) is TTY-only, prompts for the
@@ -254,6 +254,15 @@ Branch off `main`. Recover the three entries first:
     `ALTER ROLE cache_client PASSWORD` in the SQL editor, then re-hand it; until a holder updates,
     their `live` worker and the lab's step 1 refuse to start, by design. That plan's hand-out
     section becomes a pointer.
+  - The deploy tags SSH key, `DEPLOY_TAGS_SSH_KEY`: the private half of a write deploy key, which
+    the `deploy tags` tag ruleset lets alone move `deploy/*`, so it decides what the worker
+    deploys. Mint with `ssh-keygen -t ed25519 -N '' -C deploy-tags -f deploy-tags` in a scratch
+    directory; add the `.pub` under Settings → Deploy keys with write access, beside the old key so
+    a running deploy can still move its tag; set the secret from the file, since the key is
+    multi-line: `gh secret set DEPLOY_TAGS_SSH_KEY --env production < deploy-tags`; delete both
+    files. No app holds it, so nothing
+    redeploys: delete the old key once the next deploy's "Move the deploy/… tag" step succeeds.
+    The ruleset bypasses every deploy key, so no other deploy key gets write access.
   - Variables are not secrets; they change only when the resource they name does.
 - **`a-credential-leaked.md`.** Rotate it now, before confirming the leak; what else it could
   reach (the `postgres` password takes `cache_client` and `metrics_reader` with it); find where

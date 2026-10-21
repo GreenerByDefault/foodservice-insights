@@ -1,0 +1,41 @@
+name: Move a deploy tag
+description: Point deploy/<service> at the commit just deployed, pushing over SSH with the deploy key
+
+# A tag ruleset lets only deploy keys create, move or delete deploy/* tags, so that nothing but
+# this workflow can change which commit the worker deploys. The built-in token cannot bypass a
+# ruleset, so the push goes over SSH with DEPLOY_TAGS_SSH_KEY, a `production` Environment secret.
+#
+# StrictHostKeyChecking=yes trusts only the github.com host keys the runner image ships in
+# /etc/ssh/ssh_known_hosts, and fails the push rather than trusting a key on first use.
+inputs:
+  service:
+    description: web or worker
+    required: true
+  sha:
+    description: The commit just deployed
+    required: true
+  digest:
+    description: The image digest just deployed, recorded in the tag message
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        TAG: deploy/${{ inputs.service }}
+        SHA: ${{ inputs.sha }}
+        DIGEST: ${{ inputs.digest }}
+      run: |
+        if [ -z "$DEPLOY_TAGS_SSH_KEY" ]; then
+          echo "::error::DEPLOY_TAGS_SSH_KEY is not set. Pass the production Environment secret as this step's env."
+          exit 1
+        fi
+        key="$RUNNER_TEMP/deploy-tags-key"
+        (umask 077 && printf '%s\n' "$DEPLOY_TAGS_SSH_KEY" > "$key")
+        trap 'rm -f "$key"' EXIT
+
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -f -a "$TAG" "$SHA" -m "digest: $DIGEST"
+        GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+          git push -f "git@github.com:${GITHUB_REPOSITORY}.git" "refs/tags/$TAG"
