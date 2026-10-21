@@ -509,7 +509,15 @@ module may read config at the module-level while being imported.
 
 **Open:** no rotation process exists yet for suspected leaks.
 
-Extra care with production access is warranted because AI agents operate in this repo.
+### Agent guardrails
+
+Agents must not be able to do anything irreversible or account-level from a checkout. The real
+controls are GitHub rulesets and the credentials on the machine.
+[`.claude/settings.json`](.claude/settings.json) only catches the obvious catastrophic command; it
+is not a boundary, since Bash rules can't see inside `pnpm exec` or `bash -c`.
+
+Only block what requested work almost never needs. A rule that fires often trains people to
+approve prompts without reading, and agents to rephrase around refusals.
 
 ## Observability
 

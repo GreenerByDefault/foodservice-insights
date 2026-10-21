@@ -2,225 +2,222 @@
 
 ## Context
 
-The repo is maintained almost entirely through AI agents, so far by one engineer. Teammates with
-less engineering background will follow, and the recent database lockdown (#672, #675, #677) is the
-first half of making that safe. This plan is the second half: **an agent cannot do anything
-dangerous or irreversible from a checkout, in any permission mode.** Auto mode is the built-in
-starting mode from Claude Code v2.1.283, so permission prompts stop being a safety net: a
-classifier reviews actions instead of a person. Deny rules, hooks and server-side guards have to
-carry the weight on their own.
+The repo is maintained almost entirely through AI agents, so far by one engineer. GBD staff with
+less engineering background will follow. The database lockdown (#672, #675, #677) was the first
+half of making that safe. This plan is the second half: **an agent cannot do anything irreversible
+or account-level from a checkout, in any permission mode, even when the person driving it cannot
+judge a permission prompt.** Auto mode is the built-in starting mode from Claude Code v2.1.283, so
+in most sessions a classifier reviews each action, not a person.
 
-Two audits fed this plan (the danger surface, and the current docs at code.claude.com). What they
-established:
+Verified 2026-10-20 against GitHub and code.claude.com:
 
-- **The production boundary is already server-side and cannot be reached from a laptop.** The main
-  ruleset requires a PR, the `CI` check and the merge queue, with no bypass actors. Production
-  secrets exist only in the `production` GitHub Environment, which deploys from `main` only. The
-  database refuses writes and DDL from unmarked `postgres` sessions; `cache_client` can only
-  SELECT and insert suggestion rows. A checkout holds at most `CACHE_DB_CONNECTION_STRING` as
-  `cache_client`, and both stacks refuse other hosted connections.
-- **What a laptop can still do:** merge a PR (`gh pr merge`), which deploys web and runs
-  migrations in production; dispatch the worker deploy (`gh workflow run`); administer the repo and
-  the user's hosted accounts (`gh api -X`, `gh secret`, `doctl` and `gcx` are both installed and
-  configured on this machine); spend OpenAI/Gemini money; destroy local state (`pnpm truncate`,
-  `test:db:clean` across worktrees, `scripts/supabase stop --no-backup`, `just pull-caches`
-  overwriting the privately supplied CSVs, `git rm -f`); read `.env` through a sibling worktree,
-  `grep -r`, `xargs cat` or any interpreter. And `Bash(pnpm:*)`, `Bash(uv:*)`, `Bash(just:*)`
-  each allow an arbitrary command without a prompt (`pnpm exec …`, `uv run bash -c …`,
-  `just -c …`), which routes around every deny and ask rule, because Claude Code does not unwrap
-  runners when matching rules.
-- **The docs are explicit that Bash permission rules "aren't a security boundary around the
-  program"** (they match the invocation Claude usually produces, not `sh -c`, `/usr/bin/x`, or a
-  variable). The OS-level boundary is the Bash sandbox, which also makes `.claude/`, `.mcp.json`
-  and `.git/hooks` unwritable from shell commands. Writes to `.claude/` through the file tools are
-  already never auto-approved except in `bypassPermissions` mode.
-- **The `PostToolUse` hook matcher names `MultiEdit`**, which no longer exists.
+- **In place:** the main ruleset requires a PR, the `CI` check and the merge queue, with no bypass
+  actors and no required approvals. Production secrets live only in the `production` Environment,
+  which deploys from `main`, and there are no repo secrets. Push protection is on for provider
+  patterns. The database refuses writes from unmarked sessions, and a checkout can hold only
+  `cache_client`. `requirePermittedConnectionString` and `requireLocalEndpoint` refuse the rest in
+  code.
+- **Still possible from a checkout:**
+  - Merging a PR, which deploys web and migrates production. Dispatching the worker deploy.
+  - Changing the repo's rules, environments and secrets with an admin's token. GBD staff are
+    admins and stay admins.
+  - Moving or deleting `deploy/web`. When the worker deploy runs, it ships whatever commit that tag
+    names. No ruleset covers tags.
+  - Destroying local data: `pnpm truncate`, `test:db:clean`, `--no-backup`, `just pull-caches`.
+  - Committing client data to what is a public repo.
+- **Claude Code's limits:** the docs say Bash rules "aren't a security boundary": they don't look
+  inside `pnpm exec` or `bash -c`. Deny rules hold in every mode, and ask rules still prompt in auto
+  mode. By default, auto mode's classifier blocks production deploys and migrations, merging
+  unapproved PRs, force pushes, `git reset --hard`, `git clean -fd`, `git stash drop` and sending
+  secrets out. It allows pushing to any branch and opening PRs. In auto mode, edits to `.claude/`,
+  including these settings, also go to the classifier rather than to a prompt. A hook that crashes
+  does not block.
 
-Decisions already taken with Eric: leave the Bash sandbox out of this pass, forbid
-`bypassPermissions` mode in this repo, and include the guard hook.
+An earlier version of this plan proposed about ninety rules and a regex PreToolUse hook. To test
+it, we replayed the 18,077 Bash commands from the 492 agent sessions in this repo between
+2026-09-22 and 2026-10-20 against those rules. The rejections below give the numbers.
 
 ## Decisions
 
-- **Three layers, strongest first.** (1) Server-side: GitHub ruleset and Environment, the database
-  write guard, narrow roles. (2) Code guards that hold in every permission mode and through any
-  wrapper: `requirePermittedConnectionString`, the Python `cache_sync` check, and
-  `requireLocalEndpoint`, which refuses the blob store's truncate on a hosted endpoint. (3) Claude
-  Code configuration: deny/ask rules for the invocations an agent usually produces, and a PreToolUse hook for the forms prefix rules cannot express. Nothing in layer 3 is
-  relied on as a boundary; it exists so that the common case stops early with a message that says
-  "ask a person".
-- **Deny vs ask.** *Deny* anything that reaches a hosted or paid resource or administers an
-  account: a person does those from their own shell, never through an agent. *Ask* anything
-  irreversible locally or outward-facing (push, PR creation, CI and deploy config edits).
-  Content-scoped ask rules such as `Bash(git push *)` still prompt in auto mode and in the
-  sandbox's auto-allow mode, which is why they are written out even where the command would prompt
-  today merely for lack of an allow rule.
-- **The guard hook lives in `scripts/claude/`, not `.claude/hooks/`.** `just lint`, `just check`
-  (`ty check python scripts`) and the CI `python` job cover `scripts/**`; `.github/filters.yml`
-  excludes `.claude/hooks/**` from every job. It fails closed: if the interpreter is missing or the
-  script crashes, the command is blocked with the error, not allowed.
-- *Rejected for now: the Bash sandbox.* It is the only OS-level boundary the docs offer, but in
-  this repo the verification gate, the Supabase CLI, Docker, `pnpm dev`, `gh` (Go TLS under
-  Seatbelt) and git over the SSH remote would all have to be excluded, so the gate runs with full
-  access anyway; `pnpm install` and `uv sync` write to caches under `~` and would fail sandboxed
-  and silently rerun unsandboxed through the `pnpm:*`/`uv:*` allow rules; and on Linux a sandboxed
-  command cannot reach the local databases at all. The exclusion list would rot untested. Revisit
-  when a second developer's workflow can validate it; the policy can then be committed without
-  `enabled` (settings lists merge across scopes) and each developer opts in with `/sandbox`.
-- **Keep auto mode available.** Its classifier blocks production deploys, force pushes, secret
-  exfiltration and discarding uncommitted work on top of the rules here. Only bypass mode is
-  removed (`permissions.disableBypassPermissionsMode`).
-- **No CI or deploy workflow changes** (off limits). The GitHub-side controls that would help a
-  larger team are listed at the end as manual steps for Eric.
-- *Rejected: hardening `scripts/supabase` to refuse hosted flags.* The hook sees the bare CLI and
-  `pnpm exec supabase` as well as the wrapper; a wrapper-only check covers one of three forms.
-- *Rejected: a `Stop` hook that runs the verification gate.* AGENTS.md's instruction plus CI
-  already gate merges; the hook would cost minutes per turn.
+- **Each control goes where it holds no matter who runs what.** In order of strength: GitHub
+  rulesets, then the credentials on the machine, then `.claude/settings.json`. An agent cannot
+  rephrase its way past a refusal from GitHub, but it can get past a permission rule. The settings
+  exist so that the obvious way of running something catastrophic fails at once.
+- **A rule earns its place only if it almost never fires on work someone asked for.** This is the
+  long-term cost to watch:
+  - A prompt that gets approved by reflex forty times a week will be approved by reflex the one
+    time it matters, and a teammate who can't judge a prompt approves them all.
+  - A refusal that is usually wrong teaches agents to rephrase the command. That is the opposite
+    of README's "a refusal means stop and ask a person".
+  - A deny on a command nobody runs costs nothing.
+- **What gets which rule:**
+  - *Deny* whatever merges, deploys or administers and has no routine agent use.
+  - *Ask* for the few named commands that destroy local data, where a person can tell from the
+    command what will be lost.
+  - *No rule* for everything else. Default mode prompts for anything not allowed. Auto mode's
+    classifier can judge context that a static rule can't, such as whether there is uncommitted
+    work.
+- **Merging stays a person's job, but only the client side enforces it.** GitHub can't tell an
+  agent's merge from a person's, because both use the person's token. Short of required review,
+  the only checks are the `gh pr merge` denies and auto mode's classifier, which blocks merging unapproved
+  PRs. Together they cover `gh pr merge` and its API spellings.
+- **Keep auto mode, and remove bypass mode** (`permissions.disableBypassPermissionsMode`).
+- **The only deploy workflow change is PR 2,** which the tag ruleset needs. Otherwise CI and deploy
+  configuration stay off limits.
+- *Rejected: required review on PRs.* One engineer writes almost every PR, so a second reviewer
+  would mean friction on nearly every merge.
+- *Rejected: a separate `gh` token for agent sessions that cannot merge.* The person's own token
+  stays on the machine. So it stops only what the denies already stop, and every person would have
+  to create and rotate a token.
+- *Rejected: required reviewers on the `production` Environment.* 337 PRs merged in those four
+  weeks, so this would mean about twelve approval clicks a day.
+- *Rejected: a regex PreToolUse hook that scans each command.* It would have blocked 320 of the
+  replayed commands (1.8%).
+  - Most matched a pattern inside text: searches, heredocs, commit and PR bodies, and tests of the
+    code guards that use a fake `supabase.co` URL.
+  - Most of the rest were reads, such as `gcx --version`, the documented
+    `gcx --config apps/grafana/gcx.yaml resources validate`, and `gh api markdown`.
+  - The wrapped forms it was meant to catch never occurred, and a deliberately disguised command
+    gets past text matching anyway.
+- *Rejected: denying the runner escape hatches (`pnpm exec`, `pnpx`, `uv run bash`, `just -c`).*
+  It would have blocked 329 replayed commands, 166 of them `biome` and 102 `vitest`. It also
+  doesn't close the hole: under `Bash(pnpm:*)`, `pnpm <any binary>` falls back to `exec`.
+- *Rejected: ask rules on `git push`, `gh pr create`/`comment`/`review` and
+  `gh issue create`/`comment`.* They would have prompted on 159 replayed commands, nearly all of
+  them requested by the user. Push protection catches secrets, and review catches content.
+- *Rejected: ask rules on git discards (`reset --hard`, `checkout --`, `restore`, `clean`,
+  `stash drop`, `branch -D`).* They would have prompted 59 times. Default mode already prompts for
+  these, and auto mode's classifier blocks the ones that would lose uncommitted work.
+- *Rejected: ask rules on edits to `.github/**` and `.do/**`.* They would have prompted on 46
+  edits in 13 sessions, each one in a session where CI work was the task. A workflow on a branch
+  cannot reach production secrets, so any damage needs a merge.
+- *Rejected: denying every mutating `gh api` call.* The replayed ones were all POSTs:
+  `gh api markdown`, `-X GET search/code -f q=` and two `force-cancel`s. The denies cover only the verbs
+  and endpoints that merge, dispatch or administer, and none of those matched a replayed command.
+- *Rejected: denying `doctl`, `gcx` and the hosted Supabase subcommands.* `gcx` has a local
+  workflow in `apps/grafana`. The replayed `doctl` calls were reads. A `--db-url` deny would block
+  the local `db dump` that agents run. Only Eric's machine has any of these CLIs logged in.
+- *Rejected for now: the Bash sandbox.* It is the only OS-level boundary, but here it would have
+  to exclude:
+  - the verification gate, the Supabase CLI, Docker, `pnpm dev`, `gh` and git over SSH;
+  - `pnpm install` and `uv sync`, which write to caches under `~`;
+  - on Linux, everything that reaches the local databases.
 
-## PR 1: Permission rules and sandbox policy
+  An exclusion list that long would rot untested. Revisit it when a second developer's workflow
+  can test it.
+- *Rejected: a `Stop` hook that runs the verification gate.* AGENTS.md and CI already gate
+  merges, and the hook would add minutes to every turn.
 
-Only `.claude/settings.json` and one comment in `.env.example`. No code.
+## PR 1: Ignore data files by default
 
-**`permissions.deny`, add** (keep every existing entry):
+Agents here stage everything at once: 379 replayed commands were `git add -A`, `git add .` or
+`git commit -a`. Push protection doesn't read CSVs, and `.gitignore` names only the three cache
+CSVs. The repo is public, so pushing a branch with a client export in it publishes the export
+before anyone reviews it.
 
-- Hosted-account CLIs on a developer machine: `Bash(doctl:*)`, `Bash(gcx:*)`.
-- GitHub actions that deploy or administer: `Bash(gh pr merge:*)`, `Bash(gh workflow run:*)`,
-  `Bash(gh workflow enable:*)`, `Bash(gh workflow disable:*)`, `Bash(gh release:*)`,
-  `Bash(gh ruleset:*)`, `Bash(gh repo edit:*)`, `Bash(gh repo archive:*)`,
-  `Bash(gh repo rename:*)`, `Bash(gh repo transfer:*)`, `Bash(gh repo sync:*)`,
-  `Bash(gh auth login:*)`, `Bash(gh auth refresh:*)`, `Bash(gh auth setup-git:*)`,
-  `Bash(gh auth switch:*)`. Mutating `gh api` forms, both flag-first and flag-later:
-  `Bash(gh api -X:*)`, `Bash(gh api --method:*)`, `Bash(gh api -f:*)`, `Bash(gh api -F:*)`,
-  `Bash(gh api --field:*)`, `Bash(gh api --raw-field:*)`, `Bash(gh api --input:*)`, and the same
-  seven as `Bash(gh api * -X *)` etc. (`-f`/`-F`/`--input` imply POST). Plain `gh api <path>` stays
-  allowed by nothing and prompts, which the investigating-flakes skill relies on.
-- Runner escape hatches: `Bash(pnpm exec:*)`, `Bash(pnpm --filter * exec *)`,
-  `Bash(pnpm -F * exec *)`, `Bash(pnpm -r exec *)`, `Bash(pnpx:*)`, `Bash(uv run bash:*)`,
-  `Bash(uv run sh:*)`, `Bash(uv run zsh:*)`, `Bash(just -c:*)`, `Bash(just --command:*)`,
-  `Bash(just --shell:*)`.
-- Supabase CLI beyond the local stacks: `Bash(scripts/supabase -*)` (a global flag before the
-  subcommand dodges every subcommand rule, and `--help` is not worth the hole),
-  `Bash(scripts/supabase * --db-url *)`, `Bash(scripts/supabase * --linked*)`,
-  `Bash(scripts/supabase * --project-ref *)`, and the hosted-only subcommands:
-  `backups`, `storage`, `config push`, `functions`, `network-bans`, `network-restrictions`,
-  `ssl-enforcement`, `sso`, `domains`, `vanity-subdomains`, `encryption`, `orgs`, `snippets`,
-  `postgres-config`, `logout`, `unlink`, `db pull`, each as `Bash(scripts/supabase <sub>:*)`.
+In the root `.gitignore`:
 
-**`permissions.ask`, add:**
+- Ignore `*.csv`, `*.xlsx`, `*.xlsm`, `*.xls` and `*.pdf`, the formats client data arrives in
+  (`python/lab/README.md`).
+- Un-ignore the directories that hold tracked data files today: `apps/web/sample-reports/`,
+  `apps/web/src/lib/reports/excel/testing/fixtures/`, `python/insights/tests/data/`,
+  `python/lab/test_data/` and `python/lab/tests/fixtures/`. A tracked file stays tracked either
+  way, so the un-ignores are only there so that a new fixture can be added without `git add -f`.
+- Keep the private cache-CSV lines after the un-ignores, because a later rule wins.
+- Put one comment on the block: client data never belongs in this public repo, and a new fixture
+  directory is added to the un-ignore list.
 
-- `Bash(git push:*)`, `Bash(gh pr create:*)`, `Bash(gh pr close:*)`, `Bash(gh pr ready:*)`,
-  `Bash(gh pr review:*)`, `Bash(gh pr comment:*)`, `Bash(gh issue create:*)`,
-  `Bash(gh issue comment:*)` (the repo is public; comments are outward-facing).
-- Discarding work: `Bash(git reset --hard:*)`, `Bash(git checkout -- *)`, `Bash(git checkout .)`,
-  `Bash(git restore:*)`, `Bash(git clean:*)`, `Bash(git stash drop:*)`, `Bash(git stash clear:*)`,
-  `Bash(git branch -D:*)`.
-- Local data: replace the three truncate entries with `Bash(pnpm *truncate*)` (a `*` spans
-  spaces, so this also catches `--filter` and `run` forms and trailing flags), and add
-  `Bash(pnpm *db:clean*)` (force-drops every `fsi_test_*` database, including other worktrees'
-  live runs), `Bash(pnpm *temporary-go-live-cache-import*)`,
-  `Bash(scripts/supabase stop --no-backup*)`, `Bash(scripts/supabase * --no-backup*)`,
-  `Bash(just pull-caches:*)` (overwrites the gitignored CSVs GBD hands out privately).
-- CI and deploy configuration, which AGENTS.md puts off limits unless asked:
-  `Edit(.github/**)`, `Write(.github/**)`, `Edit(.do/**)`, `Write(.do/**)`.
+`python/lab/client_work/` already has its own `.gitignore`. This is a default, not a boundary:
+`git add -f` still adds anything.
 
-**`permissions.allow`, change:** remove `Bash(git rm *)` (`git rm -f` deletes uncommitted work;
-`git rm` is rare enough to prompt), and remove `Glob` and `Grep` (those tools are absent by default
-on macOS and Linux, so the entries are dead). Leave `Bash(pnpm:*)`, `Bash(uv:*)`, `Bash(just:*)`:
-with the exec/shell forms denied they cover the everyday commands, and auto mode drops
-package-manager allow rules on its own and routes those commands to the classifier.
+## PR 2: Only the deploy workflow moves the deploy tags
 
-**Other keys:** `"permissions": { "disableBypassPermissionsMode": "disable" }`. Hook matcher
-`Edit|Write|MultiEdit` → `Edit|Write`. Check rule syntax against
-<https://code.claude.com/docs/en/permissions> while implementing: `Bash(x:*)` and `Bash(x *)` are
-the same prefix form, a `*` matches across spaces, and a trailing `*` without a space also matches
-`xyz`.
+**What the tags are.** After each successful deploy, the deploy workflow moves a git tag:
+`deploy/web` to the commit production's web app runs, and `deploy/worker` to the worker's. When
+someone dispatches the worker deploy, it deploys exactly the commit that `deploy/web` names.
 
-**`.env.example` lines 7–8** still say the apps "can't tell a hosted database from a local one, so
-this comment is the only guard". Replace with one line pointing at
-`packages/db/src/connection-string.ts` for what is refused and why.
+**The risk.** The main ruleset protects branches, not tags. Anyone who can push can move or delete
+these tags with one `git push`, and so can an agent on their machine. If `deploy/web` moves, the
+next worker deploy ships a commit the web isn't running. That might be older code, or code that
+needs migrations the database doesn't have yet. Nothing looks wrong until the worker misbehaves in
+production.
 
-## PR 2: A tested PreToolUse guard for what prefix rules cannot say
+**The fix.** Add a tag ruleset so that only the deploy workflow can create, move or delete
+`deploy/*` tags.
 
-`scripts/claude/bash_guard.py`, stdlib only, run as `python3 -I` so it works before `just sync`.
-It reads the hook JSON on stdin, exits 0 unless `tool_name` is `Bash`, and scans
-`tool_input.command` as one string, so `pnpm exec doctl …`, `VAR=1 doctl …` and `/usr/bin/doctl`
-all match. On a match it prints one line to stderr naming the rule and what a person should do, and
-exits 2. Each pattern carries its reason:
+**The catch, and why this needs a PR.** Today the workflow moves the tags with its built-in token.
+GitHub doesn't let that token bypass a ruleset, but it does let a deploy key bypass one. So the
+workflow has to push the tags with a deploy key instead:
 
-| Refuses | Pattern sketch | Reason the agent sees |
-| --- | --- | --- |
-| `doctl`, `gcx` anywhere | `\b(doctl\|gcx)\b` | hosted DigitalOcean / Grafana Cloud credentials; a person runs these |
-| `gh pr merge`, `gh workflow run\|enable\|disable`, `gh release`, `gh ruleset`, `gh secret`, `gh variable`, `gh repo edit\|delete\|archive\|rename\|transfer\|sync`, `gh auth login\|logout\|refresh\|setup-git\|switch\|token`, `gh pr review … -a\|--approve`, `gh api` with `-X`/`--method` other than GET or with `-f`/`-F`/`--field`/`--raw-field`/`--input` | word-boundary regexes | merging deploys production; the rest administers the repository |
-| `supabase` with `--db-url`, `--linked`, `--project-ref`, `--password`/`-p`, or a hosted-only subcommand (the PR 1 list plus `login`, `link`, `projects`, `secrets`, `branches`, `db push`) | `\bsupabase\b` + flags/subcommand | the CLI here is for the local stacks; `scripts/supabase` points at them |
-| a non-local Postgres URL, a Supabase database host, the DigitalOcean API | `postgres(ql)?://[^\s'"]*@(?!(localhost\|127\.0\.0\.1\|host\.docker\.internal)[:/])`, `\.(supabase\.co\|pooler\.supabase\.com)\b`, `api\.digitalocean\.com` | hosted database or API in a command |
-| any path to a `.env` file other than `.env.example` / `.env.test` | `(^\|[\s"'=:/])\.env(?!\.(example\|test)\b)\b` | `.env` holds secrets; the apps read it themselves |
+- In `.github/workflows/deploy.yml`, change the two "Move the … tag" steps to push over SSH with
+  the key in the `production` Environment secret `DEPLOY_TAGS_SSH_KEY`.
+- Drop both deploy jobs' `contents: write` to `read`, since moving the tags was its only use. This
+  also means production's deploy jobs can no longer write to the repo through their own token.
+- **Open:** confirm that GitHub-hosted runners already trust github.com's SSH host key.
+- A push from a deploy key triggers workflows, unlike a push from the built-in token. No workflow
+  runs on tag pushes, so nothing new runs.
+- The deploy key can push branches too. The main ruleset has no bypass for it, so it can't touch
+  `main`, and only jobs deploying from `main` can read it.
 
-The `.env` rule closes the sibling-worktree hole (`cat ../foodservice-insights/.env`), `xargs cat`,
-`grep` and `uv run --env-file .env`. It also blocks `cp .env.example .env`; the message says that
-first-time step is the developer's.
+**Eric's steps, in this order** (the web deploy fails at its tag step if PR 2 lands before step 1):
 
-Register it in `.claude/settings.json`:
-
-```json
-"PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "timeout": 10,
-  "command": "python3 -I \"$CLAUDE_PROJECT_DIR/scripts/claude/bash_guard.py\" || exit 2" }] }]
-```
-
-`|| exit 2` is the fail-closed part: a missing `python3` or a crash blocks the command and shows
-the error, rather than letting it through as a non-blocking hook failure. Hooks from project
-settings also run inside subagents, so the svelte-file-editor is covered.
-
-**Tests:** `scripts/claude/tests/test_bash_guard.py`, black-box: run the script with
-`subprocess.run([sys.executable, "-I", path], input=json.dumps(hook_input))` and assert exit code
-and stderr. Parametrize roughly twenty refused commands (one per pattern form, including the
-wrapped forms: `pnpm exec gh pr merge 12`, `TEST_DB=1 scripts/supabase db query --db-url …`,
-`cat ../foodservice-insights/.env`, `gh api -X DELETE repos/x/y`, `gh api repos/x/y -f name=z`) and
-roughly fifteen allowed ones that sit right next to them: `gh pr view 12`, `gh pr list`,
-`gh api repos/x/y/actions/runs/1/artifacts`, `gh api --method GET repos/x/y`,
-`scripts/supabase start`, `TEST_DB=1 scripts/supabase status`, `pnpm migrate`,
-`cat .env.example`, `cp .env.example .env.test`, a local `postgresql://…@127.0.0.1:55322/…`,
-`curl https://supabase.com/docs`, `git push origin HEAD`, and a non-Bash `tool_name`. Also assert
-the exit-0 path writes nothing to stdout. Each case is one interpreter start, about 50 ms, so the
-file adds about 2 s serial and well under a second under `-n auto`, locally and in CI.
-
-Extend AGENTS.md § Off limits, whose guardrails line names only `.claude/settings.json` so far, to
-name `scripts/claude/` too.
-
-Wire it into the Python gate: `Justfile` `test` → `uv run pytest -n auto python/insights
-python/worker_child scripts`. `just check` already typechecks `scripts`; keep the script on 3.9
-syntax since it runs under the system `python3`, and ty's 3.14 target does not mind. The CI
-`python` filter already includes `scripts/**` (only `scripts/supabase` is excluded).
-
-Where this stops: a command assembled from variables or `sh -c` passes. That is the documented limit
-of text matching; the sandbox and the server-side guards are the boundary beyond it.
+1. **Check whether the key is needed at all.** Go to Settings → Rules → Rulesets → New ruleset →
+   New tag ruleset → Add bypass.
+   - If the list offers *GitHub Actions*, use that in step 4, and skip the key and PR 2.
+   - If it offers neither *GitHub Actions* nor *Deploy keys*, stop here: PR 2 would need a GitHub
+     App instead.
+2. **Make the key.** In a scratch directory, run
+   `ssh-keygen -t ed25519 -N '' -C deploy-tags -f deploy-tags`.
+   - Under Settings → Deploy keys → Add deploy key, title it `deploy tags`, paste in
+     `deploy-tags.pub` and tick *Allow write access*.
+   - Under Settings → Environments → `production` → Add environment secret, name it
+     `DEPLOY_TAGS_SSH_KEY` and paste in the contents of `deploy-tags`.
+   - Delete both files.
+3. **Merge PR 2.** In the deploy that the merge triggers, check that the "Move the deploy/web tag"
+   step succeeded.
+4. **Create the ruleset.** Settings → Rules → Rulesets → New ruleset → New tag ruleset:
+   - Name `deploy tags`, with Enforcement status *Active*.
+   - Under Bypass list → Add bypass, choose *Deploy keys* with *Always allow*.
+   - Under Target tags → Add target → Include by pattern, enter `deploy/*`.
+   - Tick *Restrict creations*, *Restrict updates*, *Restrict deletions* and *Block force pushes*,
+     then Create.
+5. **Check that it holds.** Run
+   `git tag deploy/ruleset-check && git push origin deploy/ruleset-check`. GitHub should refuse
+   it. Then run `git tag -d deploy/ruleset-check`. The next worker deploy you dispatch should move
+   `deploy/worker`.
 
 ## Verification
 
-- **PR 1:** in a session in this repo, `/permissions` lists the new rules. Ask Claude to run
-  `gh pr merge --help`, `pnpm exec echo hi`, `scripts/supabase --help`: all denied. Ask it to run
-  `pnpm truncate --filter=@gbd/db`, `git push origin HEAD`, `pnpm test:db:clean`: all prompt. Edit
-  a file under `.github/`: prompts. `claude --dangerously-skip-permissions` refuses to start in this
-  directory. Then the everyday commands still run unprompted: `pnpm lint && pnpm check`,
-  `pnpm migrate`, `pnpm --filter @gbd/core test:unit`, `just lint && just check && just test`,
-  `scripts/supabase status`, `gh pr view`.
-- **PR 2:** `just lint && just check && just test` (the new tests run). In a session, ask Claude to
-  run `doctl account get` and `gh pr view`: the first is blocked with the hook's reason, the second
-  runs. Temporarily rename `python3` off `PATH` in a scratch shell to confirm the `|| exit 2` path
-  blocks with the "command not found" message.
-- A PR that touches only `.claude/**` and Markdown runs no CI job beyond `changes`; that is the
-  filters working, not a failure.
+**PR 1:**
 
-## Manual steps for Eric, outside the repo
+- `git ls-files -ci --exclude-standard` prints nothing, which means no tracked file is now
+  ignored.
+- `git check-ignore -v x.csv python/lab/x.xlsx` shows the new rules.
+- `git check-ignore -v apps/web/sample-reports/x.csv` prints nothing.
+- `git check-ignore -v python/insights/gbd_foodservice_insights/data_files/previously_categorized_items.csv`
+  still shows the private-CSV rule.
 
-Not PRs, and not required by the PRs above. Listed because they are the controls that matter most
-once there is a second developer:
+**PR 2:** Eric's steps 3 and 5 above.
 
-1. **`production` Environment → Required reviewers (1).** A person approves each production
-   deploy. Today web deploys and migrates on every merge with no human step; this is the single
-   strongest guard against an agent-merged PR. Cost: one click per merge.
-2. **Main ruleset → 1 required approving review and "require approval of the most recent push"**
-   as soon as there are two maintainers (an author cannot approve their own PR, so it would block a
-   solo developer today).
-3. **A tag ruleset for `deploy/*`** with GitHub Actions as the only bypass actor; the worker deploy
-   reads its commit from `deploy/web`, which anyone with push can currently move.
-4. **Local `doctl` and `gcx` tokens:** scope them to read, or remove them when not deploying by
-   hand. Both are configured on this machine; PR 1 and PR 2 stop the usual invocation only.
+## Manual step for Eric: catch connection strings in commits
+
+Push protection already refuses provider secrets such as OpenAI keys. It doesn't look for
+"generic" patterns, which include Postgres connection strings. Here the likeliest secret to end up
+in a commit is a `CACHE_DB_CONNECTION_STRING`.
+
+1. On the repo, go to Settings, then *Advanced Security* in the sidebar's "Security and quality"
+   section. Under *Secret Protection*, click *Enable* next to *Generic patterns*.
+2. If a push protection option for generic patterns appears, turn that on too. Without it, a
+   connection string in a pushed commit raises an alert instead of being refused. On a public repo,
+   an alert means you rotate the password with `ALTER ROLE`.
+3. If there's no *Enable* button, this repo's plan doesn't include the feature, and you can drop
+   this step.
+4. To check, run
+   `gh api repos/GreenerByDefault/foodservice-insights --jq .security_and_analysis.secret_scanning_non_provider_patterns.status`.
+   It should print `enabled`.
+
+## Not covered
+
+- **Open: prompt injection.** On a public repo, issues, PR comments and fetched pages are untrusted
+  input. Only the classifier checks a command that an injected instruction has disguised. The
+  sandbox's network allowlist is the real boundary, so this waits on revisiting the sandbox.
