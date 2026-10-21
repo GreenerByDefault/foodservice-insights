@@ -29,6 +29,7 @@ docs_and_agent_files: &docs_and_agent_files
   - '!LICENSE'
   - '!.claude/**'
   - '!*.md'
+  - '!docs/**'
   - '!**/README.md'
 
 # Paths that exist only for the TS workspace; Python has no use for them. `packages/` is

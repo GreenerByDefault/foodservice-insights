@@ -1,6 +1,6 @@
 /** An Excel workbook into the CSV bytes `csv/normalize.ts` already reads.
  *
- * Runs in the browser only, before anything is uploaded — ARCHITECTURE.md § Input file upload
+ * Runs in the browser only, before anything is uploaded — docs/architecture.md § Input file upload
  * and validation. The server never decompresses or parses a workbook, so every zip and XML risk
  * stays in the uploader's own tab.
  *

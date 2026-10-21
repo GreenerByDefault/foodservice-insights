@@ -2,7 +2,7 @@
 
 Each file here is one DigitalOcean App Platform app, described in full: `web.yaml` and
 `worker.yaml`. They are separate apps because a deploy restarts every component of an app, and the
-worker deploys only on demand (`ARCHITECTURE.md` § Worker deploys only on demand).
+worker deploys only on demand (`docs/architecture.md` § Worker deploys only on demand).
 
 - **The file is the app.** A deploy submits the whole spec, and App Platform replaces the app's
   spec with it, so a setting changed in the dashboard lasts only until the next deploy. Change it

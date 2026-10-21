@@ -107,7 +107,7 @@ export const HOURLY_REPORT_LIMIT = 5;
 export const WEEKLY_REPORT_LIMIT = 20;
 
 /** How long the waiting screen lets a report sit before telling the user it's running slower
- * than usual — see REQUIREMENTS.md § Performance. Distinct from `apps/worker/src/config.ts`'s
+ * than usual — see docs/requirements.md § Performance. Distinct from `apps/worker/src/config.ts`'s
  * kill thresholds, which decide when to fail an attempt rather than what to tell the user about
  * it; not imported from the worker. */
 export const QUEUE_WARNING_AFTER_MS = 2 * MINUTE_MS;

@@ -1,7 +1,7 @@
 /** The write shared by every route that can leave an organization with no admin, and the 409
  * both answer with when it would.
  *
- * `organization_member_at_least_one_admin` (REQUIREMENTS.md § Roles: an organization always has
+ * `organization_member_at_least_one_admin` (docs/requirements.md § Roles: an organization always has
  * one admin) checks at end-of-statement, so `attemptMemberWrite` can catch it here without any
  * extra step, inside a test's `withRollback` as much as in production.
  */

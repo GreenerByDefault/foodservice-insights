@@ -2,7 +2,7 @@
 
 > **Status:** a spec. GBD chose Postmark on 2026-10-14
 > ([the evaluation](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/email-provider.md)),
-> and [`ARCHITECTURE.md`](../../ARCHITECTURE.md) § Email records the choice. The transport is
+> and [`docs/architecture.md`](../../docs/architecture.md) § Email records the choice. The transport is
 > written; what remains is the account and DNS work in § Before PR 1, which says which steps are
 > GBD's, then one PR that points production at it. That PR deletes this file, and
 > [`production-sign-in.md`](production-sign-in.md) takes over; its § Order of operations places
@@ -275,7 +275,7 @@ GitHub Environment before merging: an unset `${NAME}` fails the deploy
   goes unused while local confirmation is off, but this way the repo names every template
   production uses. Beside the template stanzas, add one comment: production's copies are pasted
   into the Supabase dashboard, so a change here must be pasted there too.
-- **`ARCHITECTURE.md` § Email, a few lines:**
+- **`docs/architecture.md` § Email, a few lines:**
   - our mail goes on `outbound` and Supabase's on `auth`, and why;
   - "I never got it" is answered from Postmark's activity for that stream;
   - a spam complaint suppresses an address until Postmark's support lifts it.

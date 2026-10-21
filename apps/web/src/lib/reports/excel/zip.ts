@@ -1,5 +1,5 @@
 /** A workbook's zip central directory, read for the one number that decides whether we may unzip
- * it at all — the zip-bomb guard REQUIREMENTS.md § Security asks for.
+ * it at all — the zip-bomb guard docs/requirements.md § Security asks for.
  *
  * `read-excel-file` inflates every `.xml` and `.xml.rels` entry with no size check of its own, so
  * a 20KB archive whose single sheet declares 4GB of XML would be decompressed before anything

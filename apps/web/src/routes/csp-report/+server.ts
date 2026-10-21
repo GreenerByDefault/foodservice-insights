@@ -9,7 +9,7 @@ const MAX_BODY_BYTES = 64 * 1024;
  * `report-to` in `kit.csp`. Unauthenticated, as every browser sends it.
  *
  * *Rejected: rate-limiting it.* Every unauthenticated URL already costs an access line, and a
- * report at most doubles that; the host's edge is the layer for floods (REQUIREMENTS.md §
+ * report at most doubles that; the host's edge is the layer for floods (docs/requirements.md §
  * Abuse limits).
  * *Rejected: a hosted collector such as report-uri.com,* a new vendor for what a log line does. */
 export async function _reportViolations(request: Request): Promise<Response> {

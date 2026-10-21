@@ -1,7 +1,7 @@
 import { type Kysely, sql } from 'kysely';
 import { writeGuardTrigger } from './_shared.ts';
 
-// Which country each account is in, roughly, for `REQUIREMENTS.md` § Metrics. The web app maps the
+// Which country each account is in, roughly, for `docs/requirements.md` § Metrics. The web app maps the
 // browser's time zone to a country (`apps/web/src/lib/server/country.ts`), so no address is read
 // for it.
 //

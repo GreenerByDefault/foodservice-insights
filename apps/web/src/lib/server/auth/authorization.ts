@@ -22,7 +22,7 @@ export async function loadAuthorization(
   if (!user) return null;
 
   // `auth.users.email` is nullable because Supabase supports providers that do not require one.
-  // Ours is email OTP, and REQUIREMENTS.md rejects social sign-on and passkeys, so every user we
+  // Ours is email OTP, and docs/requirements.md rejects social sign-on and passkeys, so every user we
   // will ever have has an email. Narrowed once, here, rather than pushed onto every consumer.
   if (!user.email) {
     throw new Error(

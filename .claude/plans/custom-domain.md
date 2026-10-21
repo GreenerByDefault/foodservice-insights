@@ -2,7 +2,7 @@
 
 > **Status:** a spec. Today the web app is served from its App Platform starter domain
 > (`<app>.ondigitalocean.app`). This plan puts it on `insights.greenerbydefault.com`, served by
-> App Platform directly, with no edge of our own in front (`ARCHITECTURE.md` § Hosting). The PR
+> App Platform directly, with no edge of our own in front (`docs/architecture.md` § Hosting). The PR
 > below deletes this file. [`production-sign-in.md`](production-sign-in.md) § Order of
 > operations says where this sits among the other go-live plans.
 
@@ -35,7 +35,7 @@ Vendor facts, read from App Platform's docs on 2026-10-18:
 ### A subdomain of GBD's domain, served by App Platform directly
 
 This plan's predecessor registered a dedicated domain, because Cloudflare's free plan runs DNS for
-a whole zone and GBD's zone was not going to move. With Cloudflare rejected (`ARCHITECTURE.md`
+a whole zone and GBD's zone was not going to move. With Cloudflare rejected (`docs/architecture.md`
 § Hosting), nothing constrains the name. A subdomain costs nothing, reads as GBD's, and needs one
 DNS record from them.
 
@@ -77,7 +77,7 @@ months, and a rename is still conceivable.
   everything else does: a domain added in the dashboard lasts until the next deploy.
 - **`security-headers.ts`:** `max-age=31536000; includeSubDomains`, and its comment now says why
   `preload` stays out.
-- **`ARCHITECTURE.md` § Hosting**, two or three lines: users reach the web app at
+- **`docs/architecture.md` § Hosting**, two or three lines: users reach the web app at
   `insights.greenerbydefault.com`, a CNAME in GBD's Squarespace DNS to the app's starter domain,
   which redirects to it; App Platform terminates TLS; the domain is in the spec.
 - Delete this plan.

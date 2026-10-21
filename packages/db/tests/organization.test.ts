@@ -468,7 +468,7 @@ describe('organization_member', () => {
 
     test('blocks deleting a user who is an organization’s only admin', async () => {
       // A consequence of the cascade chain auth.users -> app_user -> organization_member, and
-      // the reason REQUIREMENTS.md makes an admin promote a successor before deleting their
+      // the reason docs/requirements.md makes an admin promote a successor before deleting their
       // account.
       const remove = withRollback(DATABASE, async (transaction) => {
         const { organization, admin } = await insertOrganization(transaction);

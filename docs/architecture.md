@@ -1,8 +1,8 @@
 # Architecture
 
 How the system fits together, and why. For *what* the product must do, see
-[`REQUIREMENTS.md`](REQUIREMENTS.md). For how to run and build it, see
-[`README.md`](README.md).
+[`docs/requirements.md`](requirements.md). For how to run and build it, see
+[`README.md`](../README.md).
 
 **tl;dr:** A SvelteKit web app (frontend and backend together) accepts a CSV upload, writes it to
 a blob store, and enqueues an analysis attempt in Postgres. A long-running worker claims attempts
@@ -64,10 +64,10 @@ is Supabase Auth, which the client talks to directly.
 lock-in. We can switch blob store providers if cost becomes an issue.
 
 **Every process connects to the database directly**, not through Supabase's pooler, over TLS
-verified against the committed [`supabase-ca.crt`](supabase-ca.crt). The hosted project has the
+verified against the committed [`supabase-ca.crt`](../supabase-ca.crt). The hosted project has the
 IPv4 add-on, without which the direct host is unreachable from IPv4-only clients like GitHub's
 runners. Every client's share of `max_connections`, Supabase's own included, is budgeted in
-[`budget.ts`](packages/db/src/budget.ts), which owns the reasoning and the numbers.
+[`budget.ts`](../packages/db/src/budget.ts), which owns the reasoning and the numbers.
 
 **Production is read-only outside the apps.** The apps, the Supabase dashboard and anyone holding the production connection string
 all log in as the same role, `postgres`. So the apps mark themselves: `initializeDatabase` tags
@@ -79,9 +79,9 @@ from a `postgres` session without that tag. As a result:
   Reviewing the caches in the Table Editor is the one exception, and needs no runbook.
 
 The reasoning and the rejected alternatives are in
-[`012_write_guard.ts`](packages/db/migrations/012_write_guard.ts). Separately, a local checkout
+[`012_write_guard.ts`](../packages/db/migrations/012_write_guard.ts). Separately, a local checkout
 refuses to connect to a hosted database as anyone but `cache_client`
-([`connection-string.ts`](packages/db/src/connection-string.ts)).
+([`connection-string.ts`](../packages/db/src/connection-string.ts)).
 
 Neither safeguard covers what the dashboard does through Supabase's API rather than through SQL:
 changing project or Auth settings, deleting users or stored files, pausing the project. Only the
@@ -103,12 +103,12 @@ database. Kysely also handles migrations.
 
 How routes are structured within `apps/web` — including why they call `+server.ts` handlers with
 plain `fetch()` rather than form actions or remote functions — is in
-[`apps/web/README.md`](apps/web/README.md#routes).
+[`apps/web/README.md`](../apps/web/README.md#routes).
 
 ## Auth
 
 Auth is entirely within `apps/web` — Supabase Auth on the client, a `handle()` hook that resolves
-the JWT into `locals` on the server. See [`apps/web/README.md`](apps/web/README.md#auth) for the
+the JWT into `locals` on the server. See [`apps/web/README.md`](../apps/web/README.md#auth) for the
 design.
 
 **A Content Security Policy is what stands between an XSS and a stolen session**, because the
@@ -124,7 +124,7 @@ noticing a deleted user before their token expires.
 ## Client ↔ server
 
 The client polls the server on the interval set by `BASE_POLL_INTERVAL_MS` in
-[`apps/web/src/lib/polling/schedule.ts`](apps/web/src/lib/polling/schedule.ts).
+[`apps/web/src/lib/polling/schedule.ts`](../apps/web/src/lib/polling/schedule.ts).
 
 - *Rejected: WebSockets or Server-Sent Events.* Both are dramatically more complex, and both
   require holding a connection open for the entire processing lifecycle. Keeping connections
@@ -154,7 +154,7 @@ database.
 The queue is Postgres. A worker claims the oldest pending attempt with a single guarded
 `UPDATE ... FOR UPDATE SKIP LOCKED`, giving the semantics we need: roughly FIFO,
 concurrency-safe, and atomic. The statement lives in
-[`claimNextAttempt`](apps/worker/src/attempt/queue.ts), which this section is the contract for.
+[`claimNextAttempt`](../apps/worker/src/attempt/queue.ts), which this section is the contract for.
 
 - *Rejected: a dedicated queue service such as Celery or Redis.* Postgres keeps the
   infrastructure smaller by having fewer components. The risk is that Postgres is not built for
@@ -186,7 +186,7 @@ Parent lifecycle:
 1. Pull an analysis attempt from the queue, if current attempts < 3.
 2. Fetch the input file from the blob store.
 3. Spawn a child process to run `gbd_foodservice_insights`, setting up a folder with the required inputs.
-  - The inputs include the human-verified product categorizations, read fresh on every claim; [`attempt/lifecycle.ts`](apps/worker/src/attempt/lifecycle.ts) says why.
+  - The inputs include the human-verified product categorizations, read fresh on every claim; [`attempt/lifecycle.ts`](../apps/worker/src/attempt/lifecycle.ts) says why.
 4. The child runs, writes its results into that folder, and exits.
   - Exit 0 plus a result file the parent can parse is success; exit 1 means the child wrote a failure instead; any other exit means it reached no verdict at all.
   - Throughout, the child keeps `telemetry.json` current: its LLM usage and each finished stage's counts and time.
@@ -196,10 +196,10 @@ Parent lifecycle:
 
 Whenever a child fails in any way — including being killed by its parent — the parent marks the
 analysis attempt failed. Either way, the parent does not send the email itself — a separate,
-derived sweep does, in [`sweeps/notifications.ts`](apps/worker/src/sweeps/notifications.ts); see
+derived sweep does, in [`sweeps/notifications.ts`](../apps/worker/src/sweeps/notifications.ts); see
 § Email below. A `canceled` row gets no email at all.
 
-Refer to [`contract/`](contract/) for the worker ↔ child contract.
+Refer to [`contract/`](../contract/) for the worker ↔ child contract.
 
 ### Progress, leases, and reaping
 
@@ -234,7 +234,7 @@ That rule has a corollary: a parent that cannot evaluate its child's health must
 renewing**, so the reaper converges the attempt. This is the same shape as "only a zero-row update
 means lost" below: *the write fails ⇒ still run the checks; the checks cannot be evaluated ⇒ skip the
 write.* The two rules this adds on top — no check, no renewal; and fencing once a lease has expired — are
-decided in [`apps/worker/src/failures.ts`](apps/worker/src/failures.ts), which names them.
+decided in [`apps/worker/src/failures.ts`](../apps/worker/src/failures.ts), which names them.
 
 Four layered defenses, because a hung analysis has to be caught even if the process that should
 notice it is itself hung:
@@ -242,29 +242,29 @@ notice it is itself hung:
 1. **The child reports progress** by updating a file every time it makes progress, such as
    finishing an API call. The parent checks that file roughly every 30 seconds. If the child has
    not progressed in `killAfterNoProgressMs`, the parent kills it as hung. The threshold must exceed
-   the longest valid API call including backoff — see [`config.ts`](apps/worker/src/config.ts).
+   the longest valid API call including backoff — see [`config.ts`](../apps/worker/src/config.ts).
 2. **The parent hard-kills** a child after `killAfterTotalRuntimeMs` no matter what, as a safety net
-   for hung attempts — see [`config.ts`](apps/worker/src/config.ts).
+   for hung attempts — see [`config.ts`](../apps/worker/src/config.ts).
 3. **A claim held too long is reaped, regardless of what its lease says.** `claimedCeilingMs` catches a
    parent that keeps renewing a lease forever but never actually finishes the attempt — a failure
    the other two defenses cannot, since both watch the *child*, and this parent's child may look
    perfectly healthy. It is the second, independent predicate of the same sweep as defense 4, since
    the parent this catches is by definition not going to catch itself. See
-   [`config.ts`](apps/worker/src/config.ts).
-4. **Other workers reap**, in [`converge.ts`](apps/worker/src/sweeps/converge.ts). The reaper exists for the
+   [`config.ts`](../apps/worker/src/config.ts).
+4. **Other workers reap**, in [`converge.ts`](../apps/worker/src/sweeps/converge.ts). The reaper exists for the
    *row*, not the processes: the parent is PID 1 in its container, so killing it tears down the PID
    namespace and takes every child with it, and the PaaS restarts the container — there is no
    orphan class of process to worry about. What can happen is a container dying (e.g. OOM) and
    leaving its claimed attempts stuck `processing`, with nobody left to reach a verdict and nothing
    else to ever converge them. So, every worker proactively looks for `processing` attempts whose
    lease has expired and marks them `failed('abandoned')` — see
-   [`converge.ts`](apps/worker/src/sweeps/converge.ts). The notification sweep sends the email, on its
+   [`converge.ts`](../apps/worker/src/sweeps/converge.ts). The notification sweep sends the email, on its
    own schedule, once the row is terminal.
 
 Reaping introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
 tolerate this** — see the terminal-state and status invariants in
-[`packages/db/README.md`](packages/db/README.md#the-analysis-attempt-state-machine).
+[`packages/db/README.md`](../packages/db/README.md#the-analysis-attempt-state-machine).
 
 When the parent's own database calls fail, **only a zero-row guarded update means we lost the
 attempt**; an error means only that we still do not know.
@@ -278,7 +278,7 @@ runtime.
 
 A parent that gives up on recording a verdict stops renewing the lease first, so reaping can
 still converge the attempt. Reasoning in
-[`apps/worker/src/failures.ts`](apps/worker/src/failures.ts).
+[`apps/worker/src/failures.ts`](../apps/worker/src/failures.ts).
 
 *Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
 onto one medium: a parent whose database is down stops being able to answer "should I kill this
@@ -288,7 +288,7 @@ child?", and a parent whose clock is skewed poisons every other worker's livenes
 own children locally, so the only case where the reap's own filter would matter is a parent that is
 alive but no longer directing — exactly when the reap should fire. Reaping one of our own costs
 nothing: the next lease renewal returns "lost" and the direct loop kills the child. See
-[`converge.ts`](apps/worker/src/sweeps/converge.ts).
+[`converge.ts`](../apps/worker/src/sweeps/converge.ts).
 
 ### Canceling
 
@@ -302,7 +302,7 @@ renewal, or the queue's cancel sweep if nobody has claimed it.
 - **A cancel request does not guarantee a `canceled` row.** The owning parent enforces a cancel by
   killing its child, and only notices the request on its next lease renewal. A child that finishes
   before that tick records `succeeded` or `failed`, and that verdict stands — see `markIfStillOwned`
-  in [`queue.ts`](apps/worker/src/attempt/queue.ts). So a terminal attempt can carry a
+  in [`queue.ts`](../apps/worker/src/attempt/queue.ts). So a terminal attempt can carry a
   `cancel_requested_at`, and a reader has to trust `status` over the request.
 - **No email is ever sent for a canceled attempt.**
 
@@ -312,7 +312,7 @@ Three independent levers:
 
 | Lever | Effect |
 | --- | --- |
-| `ThreadPoolExecutor` inside `gbd_foodservice_insights` (`LLM_CONCURRENCY` in [`categorization/llm.py`](python/insights/gbd_foodservice_insights/categorization/llm.py)) | Speeds up an *individual* attempt |
+| `ThreadPoolExecutor` inside `gbd_foodservice_insights` (`LLM_CONCURRENCY` in [`categorization/llm.py`](../python/insights/gbd_foodservice_insights/categorization/llm.py)) | Speeds up an *individual* attempt |
 | More child processes per worker (vertical) | More concurrent attempts; limited by CPU and memory contention |
 | More workers (horizontal) | More concurrent attempts |
 
@@ -332,15 +332,15 @@ Web and worker are separate services, each shipped as a Docker image and deploye
 
 ### Images
 
-Web and worker each build from [`apps/web/Dockerfile`](apps/web/Dockerfile) and
-[`apps/worker/Dockerfile`](apps/worker/Dockerfile) — Docker rather than the hosting platform's
+Web and worker each build from [`apps/web/Dockerfile`](../apps/web/Dockerfile) and
+[`apps/worker/Dockerfile`](../apps/worker/Dockerfile) — Docker rather than the hosting platform's
 build packs, because our deployments are complex enough to need it (the worker alone is
 polyglot). **Both build on Red Hat's UBI minimal images**, not Debian/Alpine bases like
 `node:*-slim`: UBI is free to redistribute without a Red Hat subscription, gets CVE patches on a
 predictable cadence, and the `-minimal` variant uses `microdnf` to stay small while still being a
 full RPM-based system if we ever need a package the slim bases lack.
 
-[`workflows/deploy.yml`](.github/workflows/deploy.yml) builds both images on every push to `main`
+[`workflows/deploy.yml`](../.github/workflows/deploy.yml) builds both images on every push to `main`
 and pushes each to the GitHub Container Registry, tagged with the commit SHA — one pair of images per
 commit, whether or not that commit ever deploys. **A deploy is a promotion of an existing image,
 never a rebuild:** it resolves the commit SHA it's deploying to that image's digest and hands the
@@ -356,7 +356,7 @@ Web deploys automatically on every push to `main`, database migrations included,
 that owns the schema. **`deploy.yml` runs the database migrations itself, before it deploys to the
 hosting provider.** There is no way to unapply a database migration; a bad one is fixed forward.
 So every migration runs against the code already deployed, and
-[`packages/db/README.md`](packages/db/README.md#writing-a-migration) says what that rules out.
+[`packages/db/README.md`](../packages/db/README.md#writing-a-migration) says what that rules out.
 
 ### Worker deploys only on demand
 
@@ -371,10 +371,10 @@ kills the old container outright. Two mitigations, both required:
   worker ahead.
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
-  [`config.ts`](apps/worker/src/config.ts) for the grace values and why they're sized the way they
+  [`config.ts`](../apps/worker/src/config.ts) for the grace values and why they're sized the way they
   are. An analysis attempt still running when the grace expires gets `failed('shut_down')`. The
   drain is derived from the platform's own shutdown grace, which
-  [`.do/worker.yaml`](.do/worker.yaml) sets.
+  [`.do/worker.yaml`](../.do/worker.yaml) sets.
 
 ### Bad deploys are fixed forward
 
@@ -394,12 +394,12 @@ everything this pipeline depends on: deploying a digest-pinned GHCR image from C
 code, a shutdown grace long enough to drain the worker, and CPU and memory alerts
 ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/hosting-provider.md)).
 We explicitly do not care about autoscaling. Each service is its own app, configured entirely by
-its spec in [`.do/`](.do/README.md).
+its spec in [`.do/`](../.do/README.md).
 
 **No edge of our own sits in front of App Platform.** Its edge is Cloudflare's network, so
 volumetric DDoS protection comes with the host. It passes none of Cloudflare's headers to the app,
 so nothing here learns a visitor's country from the network; the users-by-country panel reads the
-browser's time zone instead ([`country.ts`](apps/web/src/lib/server/country.ts)).
+browser's time zone instead ([`country.ts`](../apps/web/src/lib/server/country.ts)).
 *Rejected: a Cloudflare zone of our own.* The free plan runs DNS for a whole zone, so it meant
 moving GBD's website DNS to Cloudflare or registering a second domain, plus a Worker to rewrite
 `Host` the way App Platform's proxy guidance requires, to buy a WAF, geo-restriction and country
@@ -411,12 +411,12 @@ grace; Render caps its grace at five minutes and has no native CPU or memory ale
 
 ## Blob store
 
-Refer to [`packages/storage/README.md`](packages/storage/README.md) for the private bucket's layout and code.
+Refer to [`packages/storage/README.md`](../packages/storage/README.md) for the private bucket's layout and code.
 
 ## Email
 
 We send email as HTTP requests to a provider, using emails generated in
-[`packages/email`](packages/email) rather than a template stored with the provider. That keeps
+[`packages/email`](../packages/email) rather than a template stored with the provider. That keeps
 templates in version control and swappable across local mail catchers and providers alike.
 
 Locally, mail goes to [Mailpit](https://mailpit.axllent.org), a fake SMTP server with a web
@@ -436,7 +436,7 @@ Sign-in codes and email-change confirmations go through Supabase Auth, not us.
 ### Result notifications
 
 Sending the result email is not part of settling an attempt. A separate, derived sweep,
-[`sweeps/notifications.ts`](apps/worker/src/sweeps/notifications.ts), computes which rows are
+[`sweeps/notifications.ts`](../apps/worker/src/sweeps/notifications.ts), computes which rows are
 "due" straight from `analysis_attempt` — terminal, not canceled, unsent, still has a requester,
 attempts remaining — rather than pushing a job onto a queue when an attempt finishes.
 
@@ -444,7 +444,7 @@ A sweep claims due rows with a short-lived claim, which is what gives mutual exc
 workers, then sends. `notification_attempts`, incremented by the claim, both caps the spend and
 turns the claim's own expiry into the backoff: bounded exponential, doubling from
 `notificationRetryBaseMs` each try. Its total window, and its floor against `@gbd/email`'s
-`SEND_TIMEOUT_MS`, are both checked in [`config.ts`](apps/worker/src/config.ts).
+`SEND_TIMEOUT_MS`, are both checked in [`config.ts`](../apps/worker/src/config.ts).
 
 This is deliberately at-least-once, not at-most-once: a response lost after the provider accepted
 the email looks identical to a send that never went out, so an occasional duplicate is the
@@ -452,7 +452,7 @@ tradeoff for never silently dropping one.
 
 ## File links
 
-Per [`REQUIREMENTS.md`](REQUIREMENTS.md), file links are public and non-expiring: anyone with the link can access the
+Per [`docs/requirements.md`](requirements.md), file links are public and non-expiring: anyone with the link can access the
 file. But a deleted report's links must stop working, while the file itself stays in the blob
 store for debugging. Supabase Storage buckets are public or private as a whole, so a direct link
 into a public bucket cannot express this.
@@ -467,14 +467,14 @@ Routing downloads through our server also means we can add server-side download 
 
 **The web server accepts only CSV**; the client converts XLSX to CSV before uploading with
 `read-excel-file`, taking care with Excel dates.
-[`apps/web/src/lib/reports/excel/`](apps/web/src/lib/reports/excel/) owns that conversion, which
+[`apps/web/src/lib/reports/excel/`](../apps/web/src/lib/reports/excel/) owns that conversion, which
 tab of a workbook is read, and the reasoning behind both.
 
 **The original workbook travels as a second field and is stored without ever being opened** —
 sized, sniffed for `PK`, hashed, stored. Decompressing or parsing it server-side would move every
 zip- and XML-bomb risk out of the uploader's own tab and onto us, so the guard against those runs
 in the browser, in `excel/zip.ts`, against a cap in
-[`apps/web/src/lib/reports/limits.ts`](apps/web/src/lib/reports/limits.ts). The upload's download
+[`apps/web/src/lib/reports/limits.ts`](../apps/web/src/lib/reports/limits.ts). The upload's download
 link then hands back the file the user actually chose rather than a CSV they never saw.
 
 **A workbook the browser refuses is never sent**, so no workbook-specific rejection reaches
@@ -486,7 +486,7 @@ avoids the risk of a presigned URL accepting arbitrary bytes.
 
 **The web server fully validates before uploading to the blob store**, including security scans,
 so the worker does not need to re-validate exhaustively.
-[`apps/web/src/lib/reports/submission.ts`](apps/web/src/lib/reports/submission.ts) decides what is
+[`apps/web/src/lib/reports/submission.ts`](../apps/web/src/lib/reports/submission.ts) decides what is
 accepted, and is imported by the browser as well, so the two cannot disagree.
 
 `gbd_foodservice_insights` is already written to reduce prompt injection risk — for example, all output
@@ -498,8 +498,8 @@ Secrets load as environment variables. Locally they all live in one gitignored f
 templated by `.env.example`. `.env.test` is committed because every value in it is safe in version control and needed for tests.
 
 GitHub Actions holds every production secret, for the migrate step and the push to Grafana Cloud
-in [`deploy.yml`](.github/workflows/deploy.yml), and for the running apps, which receive theirs at
-deploy ([`.do/README.md`](.do/README.md)) — only in the `production` Environment, which only
+in [`deploy.yml`](../.github/workflows/deploy.yml), and for the running apps, which receive theirs at
+deploy ([`.do/README.md`](../.do/README.md)) — only in the `production` Environment, which only
 `main` can deploy from, never as repo secrets.
 
 **Server config is read at runtime, not inlined at build time** — every variable in
@@ -513,7 +513,7 @@ module may read config at the module-level while being imported.
 
 Agents must not be able to do anything irreversible or account-level from a checkout. The real
 controls are GitHub rulesets and the credentials on the machine.
-[`.claude/settings.json`](.claude/settings.json) only catches the obvious catastrophic command; it
+[`.claude/settings.json`](../.claude/settings.json) only catches the obvious catastrophic command; it
 is not a boundary, since Bash rules can't see inside `pnpm exec` or `bash -c`.
 
 Only block what requested work almost never needs. A rule that fires often trains people to
@@ -528,7 +528,7 @@ when another's inputs fail.
 
 | Layer | Evaluated by | Sees | Rules live in |
 | --- | --- | --- | --- |
-| Host | DigitalOcean | Each container's resources and restarts, and failed deploys | Each app's spec in [`.do/`](.do/README.md) |
+| Host | DigitalOcean | Each container's resources and restarts, and failed deploys | Each app's spec in [`.do/`](../.do/README.md) |
 | Data | Grafana Cloud | The queue and notifications, as the database's rows record them | **Open:** not built yet |
 | Outside | Better Stack | What a user sees, through DNS and the host's edge | **Open:** not built yet |
 
@@ -537,7 +537,7 @@ each copy is one more thing that can break silently.
 
 ### Logs
 
-Both processes write JSON lines to stdout ([`@gbd/core/log`](packages/core/src/log.ts)), and they
+Both processes write JSON lines to stdout ([`@gbd/core/log`](../packages/core/src/log.ts)), and they
 leave the host only through App Platform's log forwarding, set in each app's spec. Both apps
 forward to one Better Stack source, so an incident that crosses them reads in time order. The
 free plan keeps three days. A request is found by `requestId`, which the response returns as
@@ -551,9 +551,9 @@ lines with it, and those are the lines that matter.
 Product metrics are views in the database's `metrics` schema, one row per event, read only by the
 `metrics_reader` role, which can read nothing else. Dashboards and alerts query those views rather
 than the base tables, so each metric has one tested definition. The reasoning is in
-[`packages/db/migrations/009_metrics.ts`](packages/db/migrations/009_metrics.ts).
+[`packages/db/migrations/009_metrics.ts`](../packages/db/migrations/009_metrics.ts).
 
-Dashboards are files in [`apps/grafana`](apps/grafana/README.md). `deploy-web` pushes them to
+Dashboards are files in [`apps/grafana`](../apps/grafana/README.md). `deploy-web` pushes them to
 Grafana Cloud after it migrates, so a panel never arrives before its view, and overwrites any edit
 made in Grafana Cloud's UI.
 
@@ -591,5 +591,5 @@ analysis attempt state machine, and the audit trail all live there. A `report` i
 upload; it has exactly one `input_file` and one or more `analysis_attempt` rows, each of which
 produces `result_file` rows.
 
-The model is in [`packages/db/README.md`](packages/db/README.md), which also names which file
+The model is in [`packages/db/README.md`](../packages/db/README.md), which also names which file
 answers which question about the schema, including why it is shaped the way it is.

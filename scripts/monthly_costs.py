@@ -109,13 +109,13 @@ Bill = tuple[LineItem, ...]
 # Pro's compute credit applies to any size, so Small costs its difference over Micro. Small is set
 # by connections, not load: packages/db/src/budget.ts sums every pool against `max_connections`,
 # and Micro's 60 cannot hold it. The IPv4 add-on is what lets DigitalOcean, which has no outbound
-# IPv6, reach the direct host (ARCHITECTURE.md § Supabase: database, auth, and blob store).
+# IPv6, reach the direct host (docs/architecture.md § Supabase: database, auth, and blob store).
 #
 # No usage lines, because Pro's quotas sit far above our usage. Storage only grows, since deleting
-# a report keeps its files (REQUIREMENTS.md § Data deletion), but at a few MB a report the planned
-# volume takes years to fill 100 GB, and past it storage is $0.0213/GB. The database holds rows
-# and ~3 MB of categorization cache against 8 GB of disk; egress is a few GB against 250 GB; and
-# users are in the hundreds against 100,000 monthly active.
+# a report keeps its files (docs/requirements.md § Data deletion), but at a few MB a report the
+# planned volume takes years to fill 100 GB, and past it storage is $0.0213/GB. The database
+# holds rows and ~3 MB of categorization cache against 8 GB of disk; egress is a few GB against
+# 250 GB; and users are in the hundreds against 100,000 monthly active.
 SUPABASE_PRO: Final = 25.0
 SUPABASE_SMALL_COMPUTE: Final = 15.0
 SUPABASE_COMPUTE_CREDIT: Final = 10.0
@@ -207,7 +207,7 @@ POSTMARK_BASIC: Final = 15.0
 POSTMARK_BASIC_EMAILS: Final = 10_000
 POSTMARK_OVERAGE_PER_1K: Final = 1.80
 
-# Every sign-in sends a one-time passcode (REQUIREMENTS.md § Authentication mechanism), which
+# Every sign-in sends a one-time passcode (docs/requirements.md § Authentication mechanism), which
 # Supabase Auth sends through Postmark's SMTP, so an active user costs email even in a month they
 # never run a report. Sessions outlive a single visit, so this is sessions started, not visits.
 LOGINS_PER_USER_PER_MONTH: Final = 4.0
@@ -217,15 +217,15 @@ LOGINS_PER_USER_PER_MONTH: Final = 4.0
 EXTRA_CODE_RATE: Final = 0.2
 
 # One result email per report that reaches a terminal state. Canceled attempts get none
-# (REQUIREMENTS.md § User email).
+# (docs/requirements.md § User email).
 NOTIFICATIONS_PER_REPORT: Final = 1.0
 
 # An invite, plus the occasional re-invite when the first is missed or expires.
 EMAILS_PER_INVITE: Final = 1.3
 
 # Organization created, organization deleted, user deleted, all to the one GBD address
-# (REQUIREMENTS.md § GBD email notifications). Scaled off new organizations, since creation is the
-# common one and deletions trail it.
+# (docs/requirements.md § GBD email notifications). Scaled off new organizations, since creation is
+# the common one and deletions trail it.
 GBD_NOTICES_PER_NEW_ORG: Final = 1.5
 
 

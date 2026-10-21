@@ -147,7 +147,7 @@ Merges when the strings are ready to hand out. Rehearse it beforehand against th
 - Docs:
   - `python/lab/README.md` § Working on a client: step 1 suggests its new answers, someone verifies them in Studio, and
     the next pull brings the verified rows down.
-  - `REQUIREMENTS.md` § Product categorization cache names the lab's two caches under the same
+  - `docs/requirements.md` § Product categorization cache names the lab's two caches under the same
     rule.
 - If PR 2 has landed, this PR deletes this plan.
 

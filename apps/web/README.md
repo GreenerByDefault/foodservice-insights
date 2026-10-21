@@ -1,7 +1,7 @@
 # @gbd/web
 
 The SvelteKit app: frontend and backend together. For how it fits into the wider system, see
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md).
+[`docs/architecture.md`](../../docs/architecture.md).
 
 ## Routes
 
@@ -56,8 +56,8 @@ The blockers:
   shifts timing enough to fail existing component tests.
 - **A failed `query` refresh rejects the `await`.** The docs' recommended `await getX()` form turns
   one dropped poll into the error page, breaking "a failed poll is not a failed analysis"
-  (`ARCHITECTURE.md` § Client ↔ server). Only `e2e/reports/reconnect.e2e.ts` catches it.
-- **No timeout or abort signal**, against `REQUIREMENTS.md`'s "set timeouts for all requests."
+  (`docs/architecture.md` § Client ↔ server). Only `e2e/reports/reconnect.e2e.ts` catches it.
+- **No timeout or abort signal**, against `docs/requirements.md`'s "set timeouts for all requests."
 - **Component tests must mock every `.remote.ts` module**: SvelteKit's client runtime does not
   load under vitest-browser.
 
@@ -202,7 +202,7 @@ already signed in to sign in again. `classifyAuthResult` in `identify.ts` maps e
 `getUser()` answer.
 
 **The session cookie is not `HttpOnly`**, because the browser client has to read it; see
-[`ARCHITECTURE.md` § Auth](../../ARCHITECTURE.md#auth) for the CSP that compensates.
+[`docs/architecture.md` § Auth](../../docs/architecture.md#auth) for the CSP that compensates.
 
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.
@@ -215,6 +215,6 @@ rather than a variant of membership-table logic.
 
 A write that changes something worth a record does one or two more things: every one of them
 records an audit event in the same transaction as the change (`#lib/server/audit.ts`); the subset
-`REQUIREMENTS.md` § GBD email notifications names also notifies GBD (`notifyGbd` in
+`docs/requirements.md` § GBD email notifications names also notifies GBD (`notifyGbd` in
 `#lib/server/email.ts`) once that transaction commits — never before, so a notification never
 outlives a change that got rolled back.

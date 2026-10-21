@@ -20,7 +20,7 @@ export const DELETE: RequestHandler = async (event) => {
   return await _deleteReport(database(), { organizationId, reportId, actor });
 };
 
-/** Delete `reportId` — REQUIREMENTS.md § Data deletion.
+/** Delete `reportId` — docs/requirements.md § Data deletion.
  *
  * Never writes `analysis_attempt.status`; only a worker does.
  *

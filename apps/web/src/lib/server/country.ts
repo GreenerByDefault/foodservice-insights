@@ -13,7 +13,7 @@
  *
  * Rejected:
  * - GeoIP on the visitor's address: a database to refresh, or a third party to send it to, for a
- *   number nobody needs precisely. The host passes no country header (`ARCHITECTURE.md` § Hosting).
+ *   number nobody needs precisely. The host passes no country header (`docs/architecture.md` § Hosting).
  * - `navigator.language`: its region is `en-US` for most of the world's English speakers.
  * - A table generated from tzdata: data Node already carries, and a regeneration chore.
  */

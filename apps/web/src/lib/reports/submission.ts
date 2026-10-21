@@ -105,7 +105,7 @@ export async function validateSubmission(raw: RawSubmission): Promise<ValidatedS
   // The server only sizes, sniffs, hashes and stores the workbook — it never opens it. Every zip
   // and XML risk stays in the uploader's own browser tab, which is what actually converted this
   // workbook to the CSV in `raw.csvFile`. Doing anything more with these bytes here is a security
-  // regression; see ARCHITECTURE.md § Input file upload and validation.
+  // regression; see docs/architecture.md § Input file upload and validation.
   let workbookBytes: Uint8Array | undefined;
   if (raw.workbook) {
     if (raw.workbook.size > MAX_UPLOAD_FIELD_BYTES) {
