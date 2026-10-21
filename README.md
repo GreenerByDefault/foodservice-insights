@@ -108,8 +108,8 @@ By default, sign-in is the site password, and makes you the placeholder user. To
 instead, set `PUBLIC_AUTH_MODE=supabase` in `.env` and restart the web app. Sign in with any
 address; the code arrives at <http://localhost:55324>, and an address that is new creates an
 account. To make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio's SQL
-editor (<http://localhost:55323>), as
-[Write to the database by hand](.claude/plans/runbooks.md#write-to-the-database-by-hand) describes.
+editor (<http://localhost:55323>), as the runbook "Write to the database by hand" describes once
+[it lands](.claude/plans/runbooks.md).
 
 ## Developing
 

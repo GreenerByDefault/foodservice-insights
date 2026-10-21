@@ -1,8 +1,8 @@
 /** An Excel workbook into the CSV bytes `csv/normalize.ts` already reads.
  *
- * Runs in the browser only, before anything is uploaded — ARCHITECTURE.md § Input file upload.
- * The server never decompresses or parses a workbook, so every zip and XML risk stays in the
- * uploader's own tab.
+ * Runs in the browser only, before anything is uploaded — ARCHITECTURE.md § Input file upload
+ * and validation. The server never decompresses or parses a workbook, so every zip and XML risk
+ * stays in the uploader's own tab.
  *
  * What comes out has to be exactly the CSV the user could have saved from that sheet themselves;
  * that is what makes everything in `csv/` apply to a workbook unchanged.

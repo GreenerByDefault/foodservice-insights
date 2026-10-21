@@ -83,7 +83,8 @@ catalog:
   pino-pretty: ^13.2.0
 
   # --- Auth -------------------------------------------------------------------
-  # Supabase is a token service and nothing more — see ARCHITECTURE.md § Supabase.
+  # Supabase is a token service and nothing more — see ARCHITECTURE.md § Supabase: database,
+  # auth, and blob store.
   '@supabase/ssr': ^0.12.7
   '@supabase/supabase-js': ^2.118.0
 

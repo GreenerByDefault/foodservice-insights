@@ -16,6 +16,7 @@ lint:
     uv run ruff check .
     uv run ruff format --check .
     git ls-files -z '*.ipynb' | xargs -0 -r uv run nbstripout --verify
+    python3 scripts/ci/check_doc_links.py
 
 # Format, and apply every fix ruff can make.
 fmt:
@@ -29,7 +30,7 @@ check:
 
 # Test everything we ship.
 test:
-    uv run pytest -n auto python/insights python/worker_child
+    uv run pytest -n auto python/insights python/worker_child scripts
 
 # Test the lab, which ships nothing.
 test-lab:

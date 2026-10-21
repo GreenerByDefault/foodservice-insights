@@ -91,7 +91,8 @@ If not, write it. If so, the comment is a second copy of something that will dri
 - **Do not narrate the design of a function whose signature already shows it.** The shape to
   avoid is a summary line, a blank `*`, then a paragraph of rationale. Keep the summary; drop
   the paragraph.
-- **Cite a doc as the source of a fact, not as a substitute for one.**
+- **Cite a doc as the source of a fact, not as a substitute for one.** Write `path.md § Heading`
+  with the heading in full, so `scripts/ci/check_doc_links.py` can tell when it breaks.
 - **Do not restate the test name above the test**, and skip prose that only reassures the
   reader.
 

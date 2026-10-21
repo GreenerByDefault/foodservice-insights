@@ -4,8 +4,9 @@ Where GBD's data scientists run client analyses by hand: the runscripts they cop
 and the extraction, unit-cleaning and pilot-analysis helpers those runscripts call.
 
 The lab ships nothing and carries none of the product's guarantees. The worker never installs
-it, and nothing we ship may import it — [`python.md` § The lab boundary](../../.claude/rules/python.md)
-has the rule. Code moves into `gbd_foodservice_insights` when the product needs it.
+it, and nothing we ship may import it —
+[`python.md` § The lab boundary](../../.claude/rules/python.md#the-lab-boundary) has the
+rule. Code moves into `gbd_foodservice_insights` when the product needs it.
 
 ## The pipeline
 

@@ -31,8 +31,6 @@ the structure no longer fits:
 - **Small rot elsewhere**: `python/lab/test_data/README.md` (345 lines) describes notebooks and
   step numbers that no longer exist; `python/README.md` sends readers to a "repo layout" the root
   README does not have; a few code comments cite doc sections that moved or never existed.
-- **Nothing checks links.** The audits found every Markdown link resolving today, but this plan
-  moves enough that a CI check pays for itself on its first PR.
 
 Goal: docs a human or agent can find their way through, each fact in the one place the
 `writing-docs` skill says it belongs, and a root README that is a front door with a map. Where
@@ -52,11 +50,18 @@ a doc is wrong because the code is awkward, fix the code.
   ARCHITECTURE.md § Worker queue", and a landed migration's code is never edited
   (`packages/db/README.md` § Writing a migration). So **the heading "Worker queue" keeps its
   name**, and the filename is found by a case-insensitive search.
+- **`scripts/ci/check_doc_links.py` checks every move**, in `just lint` and CI's `changes` job:
+  Markdown links and `#anchors`, and outside Markdown, `path.md § Heading` citations, whose text
+  must begin with the heading in full. A doc named without `§` is not checked, so a move still
+  wants a `git grep` for the old name. Nor is a rename of a heading that begins with another
+  heading in full: "§ Worker queue" still begins "Worker". A file the check must not read, such as
+  a frozen migration, goes in its `UNCHECKED_PREFIXES`.
 - **Code that cites a doc moves with it.** Error messages, log lines and the tests asserting them
   (`cache_sync.py`'s `_SETUP_DOC`, the "see the README" messages) are updated in the same PR as
   the section they name, like any other reference.
 - **Runbooks are out of scope.** Another session owns `.claude/plans/runbooks.md` and where its
-  entries land. The README's link into it, `012_write_guard.ts`'s hint naming "Write to the
+  entries land. The README's link into it (to the plan itself, "once it lands", since #693 dropped
+  the section it used to anchor on), `012_write_guard.ts`'s hint naming "Write to the
   database by hand", and ARCHITECTURE's "needs no runbook" line are left for that session. If it
   chooses `docs/runbooks.md`, that fits the rule above.
 - **Leave the go-live gaps to the go-live plans.** ARCHITECTURE § Stack says Supabase Auth and
@@ -64,33 +69,16 @@ a doc is wrong because the code is awkward, fix the code.
   `production-sign-in.md` and `email-provider.md` make that true within days, and `.do/README.md`
   already says so. Likewise § Alerts, § Logs and § Hosting, which `alerts.md`, `better-stack.md`
   and `custom-domain.md` rewrite: their headings stay, and this plan does not restructure them.
-- **Order.** PR 1 first, so CI checks every move after it. Then PR 2, since every later PR edits
-  the moved files. After that, PR 3, PRs 4–5, and PR 6 are independent; PR 4 precedes PR 5 (both
-  edit `docs/architecture.md`), and PR 7 goes last (it edits `apps/worker/README.md` after PRs 3
-  and 4). PR 2 touches the in-flight plans by one line each, a trivial conflict for whichever
-  session lands second.
+- **Order.** PR 1 first, since every later PR edits the moved files. After that, PR 2, PRs 3–4,
+  and PR 5 are independent; PR 3 precedes PR 4 (both edit `docs/architecture.md`), and PR 6 goes
+  last (it edits `apps/worker/README.md` after PRs 2 and 3). PR 1 touches the in-flight plans by
+  one line each, a trivial conflict for whichever session lands second.
 - *Rejected: `docs/python.md` beside `docs/typescript.md`.* Symmetric, but it moves the Python
   guide out of the only directory that holds Python.
 - *Rejected: keeping ARCHITECTURE.md and REQUIREMENTS.md at the root.* Updating references is
   mechanical, and with them in `docs/` the folder has an obvious charter.
 
-## PR 1 — A link check in CI
-
-**Needs Eric's OK on one line of CI, which AGENTS.md puts off limits.** If declined, this PR is
-dropped, and Verification runs the same script uncommitted from the scratchpad.
-
-- `scripts/ci/check_doc_links.py`, stdlib only, beside `check_filters.py` and in its style: for
-  every tracked `*.md`, every relative link resolves to a tracked file or directory, and every
-  `#anchor` matches a heading's GitHub slug in the target (including `-1` suffixes for repeated
-  headings). External URLs are not fetched. Prints `path:line` per break, exits 1 on any.
-- `.github/workflows/ci.yml`: run it in the `changes` job, beside `check_filters.py`, so it runs
-  on every PR whatever the filters say.
-- Tests for the pure parts (slugging, link extraction, ignoring links inside code fences) in
-  `scripts/ci/tests/`. `just test` does not reach `scripts/` today; add it to the recipe if
-  `agent-guardrails.md` PR 2 has not already.
-- It must pass on `main` as it stands, which the audits say it will.
-
-## PR 2 — Move ARCHITECTURE.md and REQUIREMENTS.md into docs/
+## PR 1 — Move ARCHITECTURE.md and REQUIREMENTS.md into docs/
 
 A pure move, so review is a rename plus reference updates and later PRs edit the new paths.
 
@@ -99,11 +87,11 @@ A pure move, so review is a rename plus reference updates and later PRs edit the
   `git diff -M` shows near-100% renames.
 - Rewrite every reference: `git grep -n 'ARCHITECTURE\.md\|REQUIREMENTS\.md'` finds about 45 in
   code comments, config and CI comments, 5 in skills, 20 in plans, 25 in other docs. Prose
-  becomes `docs/architecture.md § X`; Markdown links get the right relative depth. While on each
-  line, spell abbreviated sections in full ("§ Supabase" → "§ Supabase: database, auth, and blob
-  store", "§ Input file upload" → "§ Input file upload and validation") and fix the one broken
-  path, `packages/db/tests/analysis-attempt.test.ts:829` (`../../` → `../../../`). Skip the
-  frozen SQL body and its generated mirror.
+  becomes `docs/architecture.md § X`; Markdown links get the right relative depth. Fix the one
+  broken path, `packages/db/tests/analysis-attempt.test.ts:829` (`../../` → `../../../`). Skip the
+  frozen SQL body and its generated mirror, and add `001_initial_schema.ts` and
+  `public-schema.sql` to `check_doc_links.py`'s `UNCHECKED_PREFIXES`, since both cite
+  `ARCHITECTURE.md`.
 - `AGENTS.md`: the two lines naming them. `CLAUDE.md` is untouched (`@AGENTS.md`).
 - `.claude/skills/writing-docs/SKILL.md`: its description and links, and the `docs/` bullet
   rewritten to the rule in Decisions: root holds README and AGENTS; `docs/` holds what no single
@@ -119,7 +107,7 @@ A pure move, so review is a rename plus reference updates and later PRs edit the
 
 Other sessions' branches that edit ARCHITECTURE.md rebase onto the rename; git follows it.
 
-## PR 3 — The root README becomes a front door; the TypeScript guide moves to docs/typescript.md
+## PR 2 — The root README becomes a front door; the TypeScript guide moves to docs/typescript.md
 
 **`README.md`** (~170 lines), in this order:
 
@@ -181,7 +169,7 @@ The runtime "see the README" messages (`apps/web/src/lib/server/env.ts`, `packag
 in the root README. `production-sign-in.md` PR 2 names "the root README" for sign-in, which also
 stays there.
 
-## PR 4 — Worker detail moves out of docs/architecture.md
+## PR 3 — Worker detail moves out of docs/architecture.md
 
 **`docs/architecture.md` § Worker keeps the seams**, about 40 lines where there are 160:
 
@@ -221,7 +209,7 @@ corollaries and thrown-renewal cases (`failures.ts`), and the reaper's own-`work
 - § Worker queue says "workers wait `queuePollIntervalMs` after a poll that starts nothing"
   instead of "every 1–2 seconds". Heading unchanged.
 
-## PR 5 — The rest of docs/architecture.md keeps to cross-component facts
+## PR 4 — The rest of docs/architecture.md keeps to cross-component facts
 
 Each section whose subject is one package moves to that package's doc, leaving a line and a
 pointer; nothing in § Alerts, § Logs or § Hosting changes.
@@ -253,7 +241,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   § The model is the fuller copy.
 - **§ File links**: drop "we can add download metrics later".
 
-## PR 6 — docs/requirements.md matches the product
+## PR 5 — docs/requirements.md matches the product
 
 - § Processing: the server enqueues an attempt and a worker pulls it.
 - § File upload: a workbook may have many sheets; `apps/web/src/lib/reports/excel/sheets.ts`
@@ -274,7 +262,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 - The opening's spec-era instruction ("When implementing … replace these docs with a link")
   becomes the standing rule: a limit lives in code, and this file names its constant.
 
-## PR 7 — Package docs, and the code their errors pointed at
+## PR 6 — Package docs, and the code their errors pointed at
 
 - `python/lab/test_data/README.md`: rewrite to about 20 lines. What the dataset is and how it was
   anonymized, which lab step (by `python/lab/README.md`'s numbering) each file feeds, safe to
@@ -310,17 +298,17 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 
 ## Verification
 
-- **Links.** `scripts/ci/check_doc_links.py` (PR 1, or the same script from the scratchpad if PR 1
-  is declined) passes after every PR. `git grep` for each old name (`ARCHITECTURE.md`,
-  `REQUIREMENTS.md`, moved README anchors) finds only the frozen SQL comment after PR 2.
-- **PR 2:** `git diff -M --stat main` shows both files as renames at 95% or more.
+- **Links.** `scripts/ci/check_doc_links.py` passes after every PR. It covers comment citations
+  too, but not a doc named without `§`, so after PR 1 `git grep` for each old name
+  (`ARCHITECTURE.md`, `REQUIREMENTS.md`) finds only the frozen SQL comment.
+- **PR 1:** `git diff -M --stat main` shows both files as renames at 95% or more.
   `python3 scripts/ci/check_filters.py` passes.
-- **PR 3:** with the test stack up, create a leftover by hand (`CREATE DATABASE fsi_test_manual`
+- **PR 2:** with the test stack up, create a leftover by hand (`CREATE DATABASE fsi_test_manual`
   as `supabase_admin` on port 65322); `pnpm test:db:clean` with no `TEST_DB` drops it, and so
   does `TEST_DB=1 pnpm test:db:clean` on a second one.
-- **Gates.** Every PR: `just lint`, since ruff formats Markdown repo-wide. PRs that touch
-  TypeScript or package scripts (2, 3, 4, 7): `pnpm lint && pnpm check && pnpm test`, in the
-  background. PRs that touch Python (1, 4, 7): `just lint && just check && just test`, and for
-  PR 7's marker removal, `--strict-markers` passing confirms nothing used them.
+- **Gates.** Every PR: `just lint`, since ruff formats Markdown repo-wide and it runs the doc
+  check. PRs that touch TypeScript or package scripts (1, 2, 3, 6): `pnpm lint && pnpm check &&
+  pnpm test`, in the background. PRs that touch Python (3, 6): `just lint && just check && just
+  test`, and for PR 6's marker removal, `--strict-markers` passing confirms nothing used them.
 - **Read-through.** Each moved section reads correctly where it landed, with no dangling "above"
   or "below"; the root README renders on GitHub with the map visible without much scrolling.
