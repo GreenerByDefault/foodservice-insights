@@ -84,12 +84,10 @@ jobs:
     concurrency:
       group: deploy-web
       cancel-in-progress: false
-    permissions:
-      contents: write # to move the deploy/web tag on success
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # for the supersession check below, and to move the tag
+          fetch-depth: 0 # for the supersession check below
 
       # Build time varies, so runs can finish out of push order: push A (a slow base-layer change)
       # can finish after push B (a fast cache hit) has already deployed, which would roll prod
@@ -162,11 +160,13 @@ jobs:
       # deploy-worker deploys the commit this tag names.
       - name: Move the deploy/web tag
         if: env.superseded != 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f -a deploy/web "${{ github.sha }}" -m "digest: ${{ steps.deploy.outputs.digest }}"
-          git push -f origin deploy/web
+        uses: ./.github/actions/move-deploy-tag
+        with:
+          service: web
+          sha: ${{ github.sha }}
+          digest: ${{ steps.deploy.outputs.digest }}
+        env:
+          DEPLOY_TAGS_SSH_KEY: ${{ secrets.DEPLOY_TAGS_SSH_KEY }}
 
       # The dashboards go last. After the migrate step, so no panel reaches Grafana Cloud before the
       # view it reads; and after the deploy and its tag, so a Grafana outage can fail this run but
@@ -193,8 +193,6 @@ jobs:
     concurrency:
       group: deploy-worker
       cancel-in-progress: false
-    permissions:
-      contents: write # to move the deploy/worker tag on success
     steps:
       # The deploy tooling is the dispatched branch's copy. The Environment's branch rule already
       # refuses this job before any step runs; this says why in the log, and still catches the
@@ -250,8 +248,10 @@ jobs:
           SITE_URL: ${{ vars.SITE_URL }}
 
       - name: Move the deploy/worker tag
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -f -a deploy/worker "${{ steps.target.outputs.sha }}" -m "digest: ${{ steps.deploy.outputs.digest }}"
-          git push -f origin deploy/worker
+        uses: ./.github/actions/move-deploy-tag
+        with:
+          service: worker
+          sha: ${{ steps.target.outputs.sha }}
+          digest: ${{ steps.deploy.outputs.digest }}
+        env:
+          DEPLOY_TAGS_SSH_KEY: ${{ secrets.DEPLOY_TAGS_SSH_KEY }}
