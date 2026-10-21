@@ -38,10 +38,48 @@ __pycache__/
 .ty_cache/
 *.egg-info/
 
-# Handed out privately; see the data_files READMEs. Never committed.
+# Client data never belongs in this public repo, and agents stage with `git add -A`. So data files
+# are ignored by default; a new fixture directory is added to the un-ignore list below. This is a
+# default, not a boundary: `git add -f` still adds anything. Order matters, a later rule wins.
+*.csv
+*.xlsx
+*.xlsm
+*.xls
+*.pdf
+
+# Directories that hold fixtures.
+!apps/web/sample-reports/**/*.csv
+!apps/web/sample-reports/**/*.xlsx
+!apps/web/sample-reports/**/*.xlsm
+!apps/web/sample-reports/**/*.xls
+!apps/web/sample-reports/**/*.pdf
+!apps/web/src/lib/reports/excel/testing/fixtures/**/*.csv
+!apps/web/src/lib/reports/excel/testing/fixtures/**/*.xlsx
+!apps/web/src/lib/reports/excel/testing/fixtures/**/*.xlsm
+!apps/web/src/lib/reports/excel/testing/fixtures/**/*.xls
+!apps/web/src/lib/reports/excel/testing/fixtures/**/*.pdf
+!python/insights/tests/data/**/*.csv
+!python/insights/tests/data/**/*.xlsx
+!python/insights/tests/data/**/*.xlsm
+!python/insights/tests/data/**/*.xls
+!python/insights/tests/data/**/*.pdf
+!python/lab/test_data/**/*.csv
+!python/lab/test_data/**/*.xlsx
+!python/lab/test_data/**/*.xlsm
+!python/lab/test_data/**/*.xls
+!python/lab/test_data/**/*.pdf
+!python/lab/tests/fixtures/**/*.csv
+!python/lab/tests/fixtures/**/*.xlsx
+!python/lab/tests/fixtures/**/*.xlsm
+!python/lab/tests/fixtures/**/*.xls
+!python/lab/tests/fixtures/**/*.pdf
+
+# Handed out privately; see the data_files READMEs. Never committed. After the un-ignores above.
 python/**/data_files/previously_categorized_items.csv
 python/**/data_files/previously_classified_entrees.csv
 python/**/data_files/previously_classified_weights.csv
+
+# Jupyter
 .ipynb_checkpoints/
 
 # Local agent state
