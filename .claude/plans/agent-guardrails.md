@@ -59,10 +59,10 @@ it, we replayed the 18,077 Bash commands from the 492 agent sessions in this rep
     work.
 - **Merging stays a person's job, but only the client side enforces it.** GitHub can't tell an
   agent's merge from a person's, because both use the person's token. Short of required review,
-  the only checks are PR 1's denies and auto mode's classifier, which blocks merging unapproved
+  the only checks are the `gh pr merge` denies and auto mode's classifier, which blocks merging unapproved
   PRs. Together they cover `gh pr merge` and its API spellings.
 - **Keep auto mode, and remove bypass mode** (`permissions.disableBypassPermissionsMode`).
-- **The only deploy workflow change is PR 3,** which the tag ruleset needs. Otherwise CI and deploy
+- **The only deploy workflow change is PR 2,** which the tag ruleset needs. Otherwise CI and deploy
   configuration stay off limits.
 - *Rejected: required review on PRs.* One engineer writes almost every PR, so a second reviewer
   would mean friction on nearly every merge.
@@ -92,7 +92,7 @@ it, we replayed the 18,077 Bash commands from the 492 agent sessions in this rep
   edits in 13 sessions, each one in a session where CI work was the task. A workflow on a branch
   cannot reach production secrets, so any damage needs a merge.
 - *Rejected: denying every mutating `gh api` call.* The replayed ones were all POSTs:
-  `gh api markdown`, `-X GET search/code -f q=` and two `force-cancel`s. PR 1 denies only the verbs
+  `gh api markdown`, `-X GET search/code -f q=` and two `force-cancel`s. The denies cover only the verbs
   and endpoints that merge, dispatch or administer, and none of those matched a replayed command.
 - *Rejected: denying `doctl`, `gcx` and the hosted Supabase subcommands.* `gcx` has a local
   workflow in `apps/grafana`. The replayed `doctl` calls were reads. A `--db-url` deny would block
@@ -108,62 +108,7 @@ it, we replayed the 18,077 Bash commands from the 492 agent sessions in this rep
 - *Rejected: a `Stop` hook that runs the verification gate.* AGENTS.md and CI already gate
   merges, and the hook would add minutes to every turn.
 
-## PR 1: Permission rules
-
-This touches `.claude/settings.json`, one comment in `.env.example` and one paragraph in
-ARCHITECTURE.md.
-
-**`permissions.deny`, add** (keep every existing entry). Of all the replayed commands, these
-matched only one: the single time an agent merged a PR (`gh pr merge 541 --auto --squash`).
-
-- Merging:
-  - `Bash(gh pr merge:*)`.
-  - The API spellings: `Bash(gh api *pulls/*/merge*)`, `Bash(gh api *mergePullRequest*)`,
-    `Bash(gh api *enablePullRequestAutoMerge*)` and `Bash(gh api *enqueuePullRequest*)`. A GraphQL
-    query is part of the command text, so `*` reaches it.
-- Deploying the worker:
-  - `Bash(gh workflow run:*)`, `Bash(gh workflow enable:*)` and `Bash(gh workflow disable:*)`.
-  - `Bash(gh api *dispatches*)`, which is the API form of dispatching.
-- Administering, because GBD staff's admin tokens can change rulesets, environments, secrets and
-  refs:
-  - `Bash(gh repo edit:*)`, `Bash(gh repo archive:*)`, `Bash(gh repo rename:*)` and
-    `Bash(gh repo transfer:*)`.
-  - Writes through the API: `Bash(gh api *-X*PUT*)`, `Bash(gh api *-X*PATCH*)`,
-    `Bash(gh api *-X*DELETE*)`, and the same three as `--method`.
-- `Bash(gh auth login:*)`, `Bash(gh auth refresh:*)` and `Bash(gh auth switch:*)`, the commands
-  that give a token new scopes or a new identity.
-- Replace `Read(./.env)` with `Read(//**/.env)`. Read deny rules also apply to `cat`, `head`,
-  `tail` and `sed`, so this covers a sibling worktree's `.env` too.
-
-**`permissions.ask`:** replace the three truncate entries with `Bash(pnpm *truncate*)`. Then add:
-
-- `Bash(pnpm *db:clean*)`, which drops other worktrees' test databases even while they are in use.
-- `Bash(pnpm *temporary-go-live-cache-import*)`.
-- `Bash(scripts/supabase * --no-backup*)`.
-- `Bash(just pull-caches*)`, which overwrites the CSVs that GBD hands out privately.
-
-Ask rules match past a leading variable assignment, so the `TEST_DB=1` forms prompt too. All five
-rules together matched 23 replayed commands.
-
-**Other changes:**
-
-- Add `"disableBypassPermissionsMode": "disable"` under `permissions`.
-- Remove `Glob` and `Grep` from `allow`. Those tools don't exist on macOS or Linux.
-- Change the hook matcher from `Edit|Write|MultiEdit` to `Edit|Write`.
-- In `.env.example`, lines 7–8 say "this comment is the only guard". Replace that with a pointer
-  to `packages/db/src/connection-string.ts`.
-- In ARCHITECTURE.md § Secrets management, replace the closing line about AI agents with a short
-  paragraph covering:
-  - the three layers, and that the settings are not the boundary;
-  - the test for whether a rule earns its place;
-  - the hook and `pnpm exec` rejections, as one-liners.
-
-  This plan is deleted once its PRs land, and those two rejections are the ones a future agent is
-  most likely to propose again.
-
-Check the rule syntax against <https://code.claude.com/docs/en/permissions> while implementing.
-
-## PR 2: Ignore data files by default
+## PR 1: Ignore data files by default
 
 Agents here stage everything at once: 379 replayed commands were `git add -A`, `git add .` or
 `git commit -a`. Push protection doesn't read CSVs, and `.gitignore` names only the three cache
@@ -185,7 +130,7 @@ In the root `.gitignore`:
 `python/lab/client_work/` already has its own `.gitignore`. This is a default, not a boundary:
 `git add -f` still adds anything.
 
-## PR 3: Only the deploy workflow moves the deploy tags
+## PR 2: Only the deploy workflow moves the deploy tags
 
 **What the tags are.** After each successful deploy, the deploy workflow moves a git tag:
 `deploy/web` to the commit production's web app runs, and `deploy/worker` to the worker's. When
@@ -214,12 +159,12 @@ workflow has to push the tags with a deploy key instead:
 - The deploy key can push branches too. The main ruleset has no bypass for it, so it can't touch
   `main`, and only jobs deploying from `main` can read it.
 
-**Eric's steps, in this order** (the web deploy fails at its tag step if PR 3 lands before step 1):
+**Eric's steps, in this order** (the web deploy fails at its tag step if PR 2 lands before step 1):
 
 1. **Check whether the key is needed at all.** Go to Settings → Rules → Rulesets → New ruleset →
    New tag ruleset → Add bypass.
-   - If the list offers *GitHub Actions*, use that in step 4, and skip the key and PR 3.
-   - If it offers neither *GitHub Actions* nor *Deploy keys*, stop here: PR 3 would need a GitHub
+   - If the list offers *GitHub Actions*, use that in step 4, and skip the key and PR 2.
+   - If it offers neither *GitHub Actions* nor *Deploy keys*, stop here: PR 2 would need a GitHub
      App instead.
 2. **Make the key.** In a scratch directory, run
    `ssh-keygen -t ed25519 -N '' -C deploy-tags -f deploy-tags`.
@@ -228,7 +173,7 @@ workflow has to push the tags with a deploy key instead:
    - Under Settings → Environments → `production` → Add environment secret, name it
      `DEPLOY_TAGS_SSH_KEY` and paste in the contents of `deploy-tags`.
    - Delete both files.
-3. **Merge PR 3.** In the deploy that the merge triggers, check that the "Move the deploy/web tag"
+3. **Merge PR 2.** In the deploy that the merge triggers, check that the "Move the deploy/web tag"
    step succeeded.
 4. **Create the ruleset.** Settings → Rules → Rulesets → New ruleset → New tag ruleset:
    - Name `deploy tags`, with Enforcement status *Active*.
@@ -243,23 +188,7 @@ workflow has to push the tags with a deploy key instead:
 
 ## Verification
 
-**PR 1**, in a new session in this repo:
-
-- `/permissions` lists the new rules.
-- These are refused: `gh pr merge --help`,
-  `gh api graphql -f query='mutation { mergePullRequest }'`, `gh workflow run --help`,
-  `gh api -X PATCH repos/{owner}/{repo} --help` and `head -c 0 ../foodservice-insights/.env`.
-- Run `grep -c . ../foodservice-insights/.env`. It prints a count, not the contents, and shows
-  whether the Read deny covers `grep`, which the docs don't say. Note the result in the PR.
-- These prompt (decline each one): `pnpm truncate --filter=@gbd/db`, `pnpm test:db:clean` and
-  `just pull-caches`.
-- `claude --dangerously-skip-permissions` refuses to start.
-- These run without a prompt in default mode: `pnpm lint && pnpm check`, `pnpm exec biome check .`,
-  `pnpm --filter @gbd/core exec vitest run`, `just lint && just check && just test`,
-  `scripts/supabase status` and `gh pr list --limit 1`.
-- `gh api markdown -f text=hi` is not refused. It still prompts in default mode, as it does today.
-
-**PR 2:**
+**PR 1:**
 
 - `git ls-files -ci --exclude-standard` prints nothing, which means no tracked file is now
   ignored.
@@ -268,7 +197,7 @@ workflow has to push the tags with a deploy key instead:
 - `git check-ignore -v python/insights/gbd_foodservice_insights/data_files/previously_categorized_items.csv`
   still shows the private-CSV rule.
 
-**PR 3:** Eric's steps 3 and 5 above.
+**PR 2:** Eric's steps 3 and 5 above.
 
 ## Manual step for Eric: catch connection strings in commits
 

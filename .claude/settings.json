@@ -1,7 +1,9 @@
 {
   "permissions": {
+    "disableBypassPermissionsMode": "disable",
+
     "deny": [
-      "Read(./.env)",
+      "Read(//**/.env)",
       "Bash(supabase:*)",
       "Bash(scripts/supabase login:*)",
       "Bash(scripts/supabase link:*)",
@@ -18,7 +20,32 @@
       "Bash(gh secret:*)",
       "Bash(gh variable:*)",
       "Bash(gh auth token:*)",
-      "Bash(gh auth logout:*)"
+      "Bash(gh auth logout:*)",
+      "Bash(gh auth login:*)",
+      "Bash(gh auth refresh:*)",
+      "Bash(gh auth switch:*)",
+
+      "Bash(gh pr merge:*)",
+      "Bash(gh api *pulls/*/merge*)",
+      "Bash(gh api *mergePullRequest*)",
+      "Bash(gh api *enablePullRequestAutoMerge*)",
+      "Bash(gh api *enqueuePullRequest*)",
+
+      "Bash(gh workflow run:*)",
+      "Bash(gh workflow enable:*)",
+      "Bash(gh workflow disable:*)",
+      "Bash(gh api *dispatches*)",
+
+      "Bash(gh repo edit:*)",
+      "Bash(gh repo archive:*)",
+      "Bash(gh repo rename:*)",
+      "Bash(gh repo transfer:*)",
+      "Bash(gh api *-X*PUT*)",
+      "Bash(gh api *-X*PATCH*)",
+      "Bash(gh api *-X*DELETE*)",
+      "Bash(gh api *--method*PUT*)",
+      "Bash(gh api *--method*PATCH*)",
+      "Bash(gh api *--method*DELETE*)"
     ],
 
     "ask": [
@@ -26,9 +53,11 @@
 
       "Bash(scripts/supabase db reset:*)",
 
-      "Bash(pnpm truncate)",
-      "Bash(pnpm * truncate)",
-      "Bash(pnpm * truncate *)",
+      "Bash(pnpm *truncate*)",
+      "Bash(pnpm *db:clean*)",
+      "Bash(pnpm *temporary-go-live-cache-import*)",
+      "Bash(scripts/supabase * --no-backup*)",
+      "Bash(just pull-caches*)",
 
       "Bash(pnpm dlx:*)",
       "Bash(uvx:*)",
@@ -122,8 +151,6 @@
       "Bash(just --version)",
 
       "Read",
-      "Glob",
-      "Grep",
 
       "WebSearch",
 
@@ -154,7 +181,7 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Edit|Write|MultiEdit",
+        "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
