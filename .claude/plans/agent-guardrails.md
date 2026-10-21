@@ -62,7 +62,7 @@ it, we replayed the 18,077 Bash commands from the 492 agent sessions in this rep
   the only checks are the `gh pr merge` denies and auto mode's classifier, which blocks merging unapproved
   PRs. Together they cover `gh pr merge` and its API spellings.
 - **Keep auto mode, and remove bypass mode** (`permissions.disableBypassPermissionsMode`).
-- **The only deploy workflow change is PR 2,** which the tag ruleset needs. Otherwise CI and deploy
+- **The only deploy workflow change is PR 1,** which the tag ruleset needs. Otherwise CI and deploy
   configuration stay off limits.
 - *Rejected: required review on PRs.* One engineer writes almost every PR, so a second reviewer
   would mean friction on nearly every merge.
@@ -108,29 +108,7 @@ it, we replayed the 18,077 Bash commands from the 492 agent sessions in this rep
 - *Rejected: a `Stop` hook that runs the verification gate.* AGENTS.md and CI already gate
   merges, and the hook would add minutes to every turn.
 
-## PR 1: Ignore data files by default
-
-Agents here stage everything at once: 379 replayed commands were `git add -A`, `git add .` or
-`git commit -a`. Push protection doesn't read CSVs, and `.gitignore` names only the three cache
-CSVs. The repo is public, so pushing a branch with a client export in it publishes the export
-before anyone reviews it.
-
-In the root `.gitignore`:
-
-- Ignore `*.csv`, `*.xlsx`, `*.xlsm`, `*.xls` and `*.pdf`, the formats client data arrives in
-  (`python/lab/README.md`).
-- Un-ignore the directories that hold tracked data files today: `apps/web/sample-reports/`,
-  `apps/web/src/lib/reports/excel/testing/fixtures/`, `python/insights/tests/data/`,
-  `python/lab/test_data/` and `python/lab/tests/fixtures/`. A tracked file stays tracked either
-  way, so the un-ignores are only there so that a new fixture can be added without `git add -f`.
-- Keep the private cache-CSV lines after the un-ignores, because a later rule wins.
-- Put one comment on the block: client data never belongs in this public repo, and a new fixture
-  directory is added to the un-ignore list.
-
-`python/lab/client_work/` already has its own `.gitignore`. This is a default, not a boundary:
-`git add -f` still adds anything.
-
-## PR 2: Only the deploy workflow moves the deploy tags
+## PR 1: Only the deploy workflow moves the deploy tags
 
 **What the tags are.** After each successful deploy, the deploy workflow moves a git tag:
 `deploy/web` to the commit production's web app runs, and `deploy/worker` to the worker's. When
@@ -159,12 +137,12 @@ workflow has to push the tags with a deploy key instead:
 - The deploy key can push branches too. The main ruleset has no bypass for it, so it can't touch
   `main`, and only jobs deploying from `main` can read it.
 
-**Eric's steps, in this order** (the web deploy fails at its tag step if PR 2 lands before step 1):
+**Eric's steps, in this order** (the web deploy fails at its tag step if PR 1 lands before step 1):
 
 1. **Check whether the key is needed at all.** Go to Settings → Rules → Rulesets → New ruleset →
    New tag ruleset → Add bypass.
-   - If the list offers *GitHub Actions*, use that in step 4, and skip the key and PR 2.
-   - If it offers neither *GitHub Actions* nor *Deploy keys*, stop here: PR 2 would need a GitHub
+   - If the list offers *GitHub Actions*, use that in step 4, and skip the key and PR 1.
+   - If it offers neither *GitHub Actions* nor *Deploy keys*, stop here: PR 1 would need a GitHub
      App instead.
 2. **Make the key.** In a scratch directory, run
    `ssh-keygen -t ed25519 -N '' -C deploy-tags -f deploy-tags`.
@@ -173,7 +151,7 @@ workflow has to push the tags with a deploy key instead:
    - Under Settings → Environments → `production` → Add environment secret, name it
      `DEPLOY_TAGS_SSH_KEY` and paste in the contents of `deploy-tags`.
    - Delete both files.
-3. **Merge PR 2.** In the deploy that the merge triggers, check that the "Move the deploy/web tag"
+3. **Merge PR 1.** In the deploy that the merge triggers, check that the "Move the deploy/web tag"
    step succeeded.
 4. **Create the ruleset.** Settings → Rules → Rulesets → New ruleset → New tag ruleset:
    - Name `deploy tags`, with Enforcement status *Active*.
@@ -188,16 +166,7 @@ workflow has to push the tags with a deploy key instead:
 
 ## Verification
 
-**PR 1:**
-
-- `git ls-files -ci --exclude-standard` prints nothing, which means no tracked file is now
-  ignored.
-- `git check-ignore -v x.csv python/lab/x.xlsx` shows the new rules.
-- `git check-ignore -v apps/web/sample-reports/x.csv` prints nothing.
-- `git check-ignore -v python/insights/gbd_foodservice_insights/data_files/previously_categorized_items.csv`
-  still shows the private-CSV rule.
-
-**PR 2:** Eric's steps 3 and 5 above.
+**PR 1:** Eric's steps 3 and 5 above.
 
 ## Manual step for Eric: catch connection strings in commits
 
