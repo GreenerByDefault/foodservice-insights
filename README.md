@@ -79,6 +79,9 @@ page checks for a result.
 By default, sign-in is the site password, and makes you the placeholder user. To use Supabase Auth
 instead, set `PUBLIC_AUTH_MODE=supabase` in `.env` and restart the web app. Sign in with any
 address; the code arrives in the local mailbox, and an address that is new creates an account.
+To make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio's SQL editor
+(<http://localhost:55323>), as the runbook
+[Write to the database by hand](docs/runbooks/write-to-the-database-by-hand.md) describes.
 
 ## Developing
 
@@ -171,6 +174,7 @@ The repo configures Claude Code for you; there is nothing to set up.
 
 | Doc | What it covers |
 | --- | --- |
+| [`docs/runbooks/`](docs/runbooks/README.md) | What we have at each vendor, and the procedures done by hand |
 | [`.do/README.md`](.do/README.md) | Hosting, deploys, and secrets |
 | [`apps/grafana/README.md`](apps/grafana/README.md) | The product dashboards, and adding a metric |
 
