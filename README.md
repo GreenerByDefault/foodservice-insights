@@ -78,12 +78,20 @@ page checks for a result.
 
 By default, sign-in is the site password, and makes you the placeholder user. To use Supabase Auth
 instead, set `PUBLIC_AUTH_MODE=supabase` in `.env` and restart the web app. Sign in with any
-address; the code arrives in the local mailbox, and an address that is new creates an account. To
-make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio's SQL editor
-(<http://localhost:55323>), as the runbook "Write to the database by hand" describes once
-[it lands](.claude/plans/runbooks.md).
+address; the code arrives in the local mailbox, and an address that is new creates an account.
 
-## The two databases
+## Developing
+
+Two stacks live here, and they share no toolchain. Pick yours:
+
+| Working on | Start here |
+| --- | --- |
+| **TypeScript** — the web app, the worker parent, `packages/*` | [`docs/typescript.md`](docs/typescript.md) |
+| **Python** — the analysis library, the worker child, the lab | [`python/README.md`](python/README.md) |
+
+[`AGENTS.md`](AGENTS.md) covers how code is written here and how a change is verified, for both.
+
+### The two databases
 
 Two independent Supabase stacks run locally: one for development, and one that the TypeScript and
 Python tests share. Start only the one you need. Running both at once works, but they compete for
@@ -96,31 +104,13 @@ the same memory and CPU, especially across concurrent sessions.
 
 `TEST_DB=1` is the single switch that picks the test stack — for the CLI, for the database
 scripts, and for the tests. Always go through the [`scripts/supabase`](scripts/supabase)
-wrapper, never a bare `supabase`, or the CLI will not find either stack.
+wrapper, never a bare `supabase`, or the CLI will not find either stack. As with the dev stack,
+stop the test stack once you're done with it, to free the memory:
 
 ```sh
-scripts/supabase start
 TEST_DB=1 scripts/supabase start
-```
-
-Containers stop when your machine restarts, but stop a stack yourself once you're done with
-it to free up memory:
-
-```sh
-scripts/supabase stop
 TEST_DB=1 scripts/supabase stop
 ```
-
-## Developing
-
-Two stacks live here, and they share no toolchain. Pick yours:
-
-| Working on | Start here |
-| --- | --- |
-| **TypeScript** — the web app, the worker parent, `packages/*` | [`docs/typescript.md`](docs/typescript.md) |
-| **Python** — the analysis library, the worker child, the lab | [`python/README.md`](python/README.md) |
-
-[`AGENTS.md`](AGENTS.md) covers how code is written here and how a change is verified, for both.
 
 ### Working with Claude Code
 

@@ -42,13 +42,6 @@ To scope a task to one package, use `pnpm turbo run <task> --filter=<pkg>`, whic
 packages it imports first. `pnpm --filter <pkg> <task>` skips that build, so it can run against
 stale code. Not every package implements every task.
 
-## Uploading reports by hand
-
-[`apps/web/sample-reports/`](../apps/web/sample-reports/) has CSVs to upload: one that is
-accepted, and a few that are rejected for different reasons. `.env.example` turns off the report
-limits with `REPORT_RATE_LIMIT=off`, since you hit them quickly when walking the
-[`stubbed`](../README.md#analysis-modes) scenarios by hand.
-
 ## Testing
 
 | Tier | Location | Runner | Naming |
@@ -125,26 +118,6 @@ Which to run when:
 - For tests, nothing: the suites that need seeded rows clone a database for the run and seed it
   themselves.
 
-### Add a database migration
-
-1. Add the next numbered file to `packages/db/migrations/`, following
-   [Writing a migration](../packages/db/README.md#writing-a-migration) and the schema
-   [conventions](../packages/db/README.md#conventions).
-2. `pnpm migrate`
-3. `pnpm db:gen-types`, and commit the regenerated files alongside the migration.
-
-Running the tests applies the migration to the test database, which every checkout on this machine
-shares. Until it lands, any other checkout's tests fail on the migration they lack;
-[reset](#reset-a-database) the test database from that checkout to go on working there.
-
-To leave the other checkouts alone instead, test the migration against a private database in the
-same cluster. As `supabase_admin` (password `postgres`), `CREATE DATABASE wt_<name> TEMPLATE
-template0 OWNER postgres`, restore [`packages/db/auth-schema.sql`](../packages/db/auth-schema.sql)
-into it, and run the tests with
-`DB_CONNECTION_STRING=postgresql://postgres:postgres@127.0.0.1:65322/wt_<name>`, which beats
-`.env.test`. Only the `sweepStaleGoTrueUsers` test fails, since it always targets `postgres`.
-Run `DROP DATABASE wt_<name> WITH (FORCE)` once you are done with it.
-
 ### Reset a database
 
 Clear the dev data, keeping the schema and the bucket. The app needs the placeholder identity
@@ -172,13 +145,25 @@ TEST_DB=1 pnpm migrate
 TEST_DB=1 pnpm seed:identity
 ```
 
-### Read local email
+### Add a database migration
 
-While developing locally, all emails get sent to a mock email provider. Read them at
-<http://localhost:55324> for the dev stack, or <http://localhost:65324> for the test stack.
+1. Add the next numbered file to `packages/db/migrations/`, following
+   [Writing a migration](../packages/db/README.md#writing-a-migration) and the schema
+   [conventions](../packages/db/README.md#conventions).
+2. `pnpm migrate`
+3. `pnpm db:gen-types`, and commit the regenerated files alongside the migration.
 
-`pnpm --filter @gbd/email preview` renders one of every message to disk, for reviewing
-copy changes without sending anything.
+Running the tests applies the migration to the test database, which every checkout on this machine
+shares. Until it lands, any other checkout's tests fail on the migration they lack;
+[reset](#reset-a-database) the test database from that checkout to go on working there.
+
+To leave the other checkouts alone instead, test the migration against a private database in the
+same cluster. As `supabase_admin` (password `postgres`), `CREATE DATABASE wt_<name> TEMPLATE
+template0 OWNER postgres`, restore [`packages/db/auth-schema.sql`](../packages/db/auth-schema.sql)
+into it, and run the tests with
+`DB_CONNECTION_STRING=postgresql://postgres:postgres@127.0.0.1:65322/wt_<name>`, which beats
+`.env.test`. Only the `sweepStaleGoTrueUsers` test fails, since it always targets `postgres`.
+Run `DROP DATABASE wt_<name> WITH (FORCE)` once you are done with it.
 
 ### Debug the database
 
@@ -194,6 +179,21 @@ To see a query plan, per [`packages/db/README.md`](../packages/db/README.md#conv
 ```typescript
 console.error(JSON.stringify(await query.explain('json', sql`analyze`), null, 2));
 ```
+
+### Read local email
+
+While developing locally, all emails get sent to a mock email provider. Read them at
+<http://localhost:55324> for the dev stack, or <http://localhost:65324> for the test stack.
+
+`pnpm --filter @gbd/email preview` renders one of every message to disk, for reviewing
+copy changes without sending anything.
+
+### Upload reports by hand
+
+[`apps/web/sample-reports/`](../apps/web/sample-reports/) has CSVs to upload: one that is
+accepted, and a few that are rejected for different reasons. `.env.example` turns off the report
+limits with `REPORT_RATE_LIMIT=off`, since you hit them quickly when walking the
+[`stubbed`](../README.md#analysis-modes) scenarios by hand.
 
 ### Add a shadcn-svelte component
 
