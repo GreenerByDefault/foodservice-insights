@@ -59,11 +59,9 @@ a doc is wrong because the code is awkward, fix the code.
 - **Code that cites a doc moves with it.** Error messages, log lines and the tests asserting them
   (`cache_sync.py`'s `_SETUP_DOC`, the "see the README" messages) are updated in the same PR as
   the section they name, like any other reference.
-- **Runbooks are out of scope.** Another session owns `.claude/plans/runbooks.md` and where its
-  entries land. The README's link into it (to the plan itself, "once it lands", since #693 dropped
-  the section it used to anchor on), `012_write_guard.ts`'s hint naming "Write to the
-  database by hand", and the architecture doc's "needs no runbook" line are left for that session. If it
-  chooses `docs/runbooks.md`, that fits the rule above.
+- **Runbooks are out of scope.** They live in [`docs/runbooks/`](../../docs/runbooks/README.md),
+  which the runbooks plan owns, along with their links from the README, architecture and
+  `.do/README.md`.
 - **Leave the go-live gaps to the go-live plans.** docs/architecture.md § Stack says Supabase Auth and
   Postmark while production still runs placeholder sign-in and the dropping email stub;
   `production-sign-in.md` and `email-provider.md` make that true within days, and `.do/README.md`
@@ -93,7 +91,7 @@ a doc is wrong because the code is awkward, fix the code.
    - *Understand it*: `docs/requirements.md`, `docs/architecture.md`.
    - *Work on it*: `docs/typescript.md`, `python/README.md`, `AGENTS.md`.
    - *Each component*: one row per package or app README, as today.
-   - *Run it in production*: `.do/README.md`, `apps/grafana/README.md`.
+   - *Run it in production*: `docs/runbooks/`, `.do/README.md`, `apps/grafana/README.md`.
 6. **What CI runs**: that a PR runs only the jobs its changes can affect, per
    `.github/filters.yml`, and the merge queue. Drop "a TypeScript-only change skips every Python
    job, and vice versa", which is not true (migrations run `python_lab`; Python runs `system`).

@@ -275,10 +275,12 @@ GitHub Environment before merging: an unset `${NAME}` fails the deploy
   goes unused while local confirmation is off, but this way the repo names every template
   production uses. Beside the template stanzas, add one comment: production's copies are pasted
   into the Supabase dashboard, so a change here must be pasted there too.
-- **`docs/architecture.md` § Email, a few lines:**
-  - our mail goes on `outbound` and Supabase's on `auth`, and why;
-  - "I never got it" is answered from Postmark's activity for that stream;
-  - a spam complaint suppresses an address until Postmark's support lifts it.
+- **`docs/architecture.md` § Email, one line:** our mail goes on `outbound` and Supabase's on
+  `auth`, and why.
+- **`docs/runbooks/a-user-did-not-get-an-email.md`:** "I never got it" is answered from Postmark's
+  activity for that stream; a spam complaint suppresses an address until Postmark's support lifts
+  it. Also add Postmark to `docs/runbooks/README.md` (§ Where things are: the server, its two
+  streams; § The runbooks) and a section for its token to `docs/runbooks/rotate-a-secret.md`.
 - **Delete this plan.**
 
 ## Verification

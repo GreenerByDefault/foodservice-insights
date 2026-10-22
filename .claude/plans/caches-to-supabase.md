@@ -66,8 +66,8 @@ which a pull overwrites:
 - **The final import deletes every row first.** It runs the temporary import with `--mirror`,
   so harvests, lab pushes and Studio edits made before it are gone. GBD's final CSVs are a week
   or two away, as of 2026-10-18.
-- **Studio review** is an entry in [`runbooks.md`](runbooks.md), until that plan settles where
-  runbooks live.
+- **Studio review** is [`docs/runbooks/review-cache-suggestions.md`](../../docs/runbooks/review-cache-suggestions.md);
+  this plan's last PR moves § Decisions' review rules there when it deletes itself.
 
 ## Decisions
 

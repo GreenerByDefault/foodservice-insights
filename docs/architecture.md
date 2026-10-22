@@ -75,8 +75,10 @@ every connection it opens with `gbd.writer`, and the database refuses any write 
 from a `postgres` session without that tag. As a result:
 
 - Every process that writes must connect through `initializeDatabase`.
-- A person who needs to write by hand follows the runbook "Write to the database by hand".
-  Reviewing the caches in the Table Editor is the one exception, and needs no runbook.
+- A person who needs to write by hand follows the runbook
+  [Write to the database by hand](runbooks/write-to-the-database-by-hand.md).
+  [Reviewing the caches](runbooks/review-cache-suggestions.md) in the Table Editor is the one
+  exception.
 
 The reasoning and the rejected alternatives are in
 [`012_write_guard.ts`](../packages/db/migrations/012_write_guard.ts). Separately, a local checkout
