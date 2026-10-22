@@ -20,7 +20,7 @@
     "seed:history": "node scripts/seed-history.ts",
     "truncate": "node scripts/truncate.ts",
     "temporary-go-live-cache-import": "node scripts/temporary-go-live-cache-import/main.ts",
-    "db:clean": "node scripts/clean.ts",
+    "db:clean": "TEST_DB=1 node scripts/clean.ts",
     "gen-types": "kanel && biome check --write src/generated && node scripts/dump-schema.ts"
   },
   "dependencies": {

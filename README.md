@@ -57,7 +57,7 @@ Alternatively, `pnpm dev` runs both in one terminal, with their logs interleaved
 
 Open <http://localhost:5173> and upload a CSV. Enter the `SITE_PASSWORD` from `.env`, which defaults to `local-password`.
 You can use [`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) for an example CSV. The report page
-updates on its own once the analysis finishes. Emails the app sends arrive at
+updates on its own once the analysis finishes. Emails the app sends arrive in the local mailbox,
 <http://localhost:55324>. When you're done, run `scripts/supabase stop` to free the memory the
 databases use.
 
@@ -70,46 +70,46 @@ page checks for a result.
 | `WORKER_MODE` | What you get | Use it for |
 | --- | --- | --- |
 | `mock-llm` (default) | The real analysis, with a real PDF and workbook. A keyword list categorizes products instead of OpenAI, so products it does not recognize are left uncategorized. No API key needed. | Demos with the sample data, and most development |
-| `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. Point it at [production's cache](#the-categorization-cache). | Real procurement data |
+| `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. Point it at [production's cache](apps/worker/README.md#the-categorization-cache). | Real procurement data |
 | `stubbed` | A fake analysis that finishes in seconds. Its PDF and workbook are placeholders that will not open. The report name drives failure scenarios such as `!slow` and `!fail:<reason>`; see [`testing.py`](python/worker_child/worker_child/testing.py) for the full list. | Working on the report lifecycle and its error states |
 | `off` | No worker, so reports stay queued. | UI work that doesn't need a result |
-
-### The categorization cache
-
-The worker looks each product up in a cache of categorizations that a person has verified, and
-sends only the rest to the LLM. Yours is in your local database, and starts empty. With
-`WORKER_MODE=live` (the real analysis, categorized by OpenAI), point it at production's instead, so your runs start from Greener by Default's answers:
-
-1. Ask Greener by Default for the `cache_client` connection string, and treat it like
-   `OPENAI_API_KEY`. It can only read the cache and suggest rows to it.
-2. Put it in `.env` as `CACHE_DB_CONNECTION_STRING`, beside `WORKER_MODE=live`, in the form
-   `.env.example` shows: its `sslrootcert` is the absolute path to this repo's `supabase-ca.crt`.
-3. Restart the worker. Its `Worker started` line names the cache database as
-   `cache_client@db.<project-ref>.supabase.co:5432/postgres`, not `worker`.
-
-Each product your runs send to the LLM then lands in production's cache as a suggestion, which a
-person verifies in Supabase Studio before any run uses it.
-
-- **Comment the line out while changing the categorization prompt or model.** Otherwise the
-  experiment's answers become the first suggestion for every product it sees, and block the real
-  model's.
-- **Never put this string in `DB_CONNECTION_STRING`.** Your worker would claim production's
-  reports.
-- `WORKER_MODE=mock-llm` and `stubbed` ignore it with a warning, so their keyword and fake
-  answers never reach the shared cache, and use your local one.
-- The lab reads the same variable; see [`python/lab/README.md`](python/lab/README.md#working-on-a-client).
-
-Without the string, you can load a CSV copy of the cache into your local database with the
-[temporary go-live import](packages/db/scripts/temporary-go-live-cache-import/README.md).
 
 ### Signing in for real
 
 By default, sign-in is the site password, and makes you the placeholder user. To use Supabase Auth
 instead, set `PUBLIC_AUTH_MODE=supabase` in `.env` and restart the web app. Sign in with any
-address; the code arrives at <http://localhost:55324>, and an address that is new creates an
-account. To make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio's SQL
-editor (<http://localhost:55323>), as the runbook "Write to the database by hand" describes once
+address; the code arrives in the local mailbox, and an address that is new creates an account. To
+make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio's SQL editor
+(<http://localhost:55323>), as the runbook "Write to the database by hand" describes once
 [it lands](.claude/plans/runbooks.md).
+
+## The two databases
+
+Two independent Supabase stacks run locally: one for development, and one that the TypeScript and
+Python tests share. Start only the one you need. Running both at once works, but they compete for
+the same memory and CPU, especially across concurrent sessions.
+
+| Stack | For | Ports | Yours to modify? |
+| --- | --- | --- | --- |
+| [`supabase-dev/`](supabase-dev/) | Local development | `553xx` | Yes — seed it, hand-edit rows, break it |
+| [`supabase-test/`](supabase-test/) | Automated tests | `653xx` | No. The test suites own it, and migrate it whenever they run |
+
+`TEST_DB=1` is the single switch that picks the test stack — for the CLI, for the database
+scripts, and for the tests. Always go through the [`scripts/supabase`](scripts/supabase)
+wrapper, never a bare `supabase`, or the CLI will not find either stack.
+
+```sh
+scripts/supabase start
+TEST_DB=1 scripts/supabase start
+```
+
+Containers stop when your machine restarts, but stop a stack yourself once you're done with
+it to free up memory:
+
+```sh
+scripts/supabase stop
+TEST_DB=1 scripts/supabase stop
+```
 
 ## Developing
 
@@ -117,10 +117,10 @@ Two stacks live here, and they share no toolchain. Pick yours:
 
 | Working on | Start here |
 | --- | --- |
-| **TypeScript** — the web app, the worker parent, `packages/*` | [TypeScript](#typescript), below |
+| **TypeScript** — the web app, the worker parent, `packages/*` | [`docs/typescript.md`](docs/typescript.md) |
 | **Python** — the analysis library, the worker child, the lab | [`python/README.md`](python/README.md) |
 
-Everything above the TypeScript heading applies to both.
+[`AGENTS.md`](AGENTS.md) covers how code is written here and how a change is verified, for both.
 
 ### Working with Claude Code
 
@@ -140,19 +140,33 @@ The repo configures Claude Code for you; there is nothing to set up.
 - **After changing the rules or skills,** run `/doctor prompt-audit` (Claude Code 2.1.283 or
   later) to catch stale or conflicting instructions.
 
-## Documentation
+
+## Where to find things
+
+**Understand it**
 
 | Doc | What it covers |
 | --- | --- |
-| [`docs/architecture.md`](docs/architecture.md) | How the system fits together, and why |
 | [`docs/requirements.md`](docs/requirements.md) | What the product must do |
+| [`docs/architecture.md`](docs/architecture.md) | How the system fits together, and why |
+
+**Work on it**
+
+| Doc | What it covers |
+| --- | --- |
+| [`docs/typescript.md`](docs/typescript.md) | Commands, tests, and database tasks for the TypeScript stack |
+| [`python/README.md`](python/README.md) | Running and testing the Python stack |
 | [`AGENTS.md`](AGENTS.md) | How we write code here, and where each stack's rules live |
+
+**Each component**
+
+| Doc | What it covers |
+| --- | --- |
 | [`apps/web/README.md`](apps/web/README.md) | The web app's design |
 | [`apps/web/e2e/README.md`](apps/web/e2e/README.md) | The web app's e2e and screenshot suites |
 | [`apps/web/sample-reports/README.md`](apps/web/sample-reports/README.md) | CSVs to upload by hand |
 | [`apps/web/src/lib/reports/csv/README.md`](apps/web/src/lib/reports/csv/README.md) | How an uploaded CSV is validated |
 | [`apps/worker/README.md`](apps/worker/README.md) | Running the worker parent, and where its pieces live |
-| [`apps/grafana/README.md`](apps/grafana/README.md) | The product dashboards, and adding a metric |
 | [`packages/browser-testing/README.md`](packages/browser-testing/README.md) | Playwright helpers both e2e suites share |
 | [`packages/core/README.md`](packages/core/README.md) | Values and helpers the web app and worker share |
 | [`packages/db/README.md`](packages/db/README.md) | The database model, and where to read the schema |
@@ -160,254 +174,20 @@ The repo configures Claude Code for you; there is nothing to set up.
 | [`packages/email/README.md`](packages/email/README.md) | The emails we send, and reading them locally |
 | [`tests/e2e/README.md`](tests/e2e/README.md) | Whole-system e2e, against both services' real images |
 | [`contract/README.md`](contract/README.md) | The worker parent ↔ child contract |
-| [`python/README.md`](python/README.md) | Running and testing the Python stack |
 | [`python/insights/README.md`](python/insights/README.md) | The analysis library, and where a report change goes |
 | [`python/lab/README.md`](python/lab/README.md) | Data-science experiments; ships nothing |
 
+**Run it in production**
+
+| Doc | What it covers |
+| --- | --- |
+| [`.do/README.md`](.do/README.md) | Hosting, deploys, and secrets |
+| [`apps/grafana/README.md`](apps/grafana/README.md) | The product dashboards, and adding a metric |
+
 ## What CI runs
 
-A pull request runs only the jobs its changes can affect: a TypeScript-only change skips every
-Python job, and vice versa. See [`.github/filters.yml`](.github/filters.yml) for the rules.
+A pull request runs only the jobs its changes can affect, per
+[`.github/filters.yml`](.github/filters.yml).
 
 PRs merge through a merge queue, which runs everything on the exact commit that will land on
 `main`, so a PR can be green alone and still be ejected for clashing with one ahead of it.
-
-## TypeScript
-
-Everything from here down is the TypeScript stack: pnpm, Turborepo, Supabase, vitest, and
-Playwright. For the Python equivalents, see [`python/README.md`](python/README.md).
-
-### Setup
-
-Beyond [Run the app locally](#run-the-app-locally):
-
-- Install the browser the tests use: `pnpm --filter @gbd/web exec playwright install chromium`
-- `pnpm test:system` needs your machine to resolve `host.docker.internal` to itself. Add the
-  entry once per machine:
-
-  ```sh
-  sudo sh -c 'echo "127.0.0.1 host.docker.internal" >> /etc/hosts'
-  ```
-
-### The two databases
-
-There are two independent Supabase stacks. Start only the one you need. Running both at once
-works, but they compete for the same memory and CPU, especially across concurrent sessions.
-
-| Stack | For | Ports | Yours to modify? |
-| --- | --- | --- | --- |
-| [`supabase-dev/`](supabase-dev/) | Local development | `553xx` | Yes — seed it, hand-edit rows, break it |
-| [`supabase-test/`](supabase-test/) | Automated tests | `653xx` | No. The test suites own it; Playwright clones its own databases from it |
-
-`TEST_DB=1` is the single switch that picks the test stack — for the CLI, for the `db:*`
-scripts, and for vitest. Always go through the [`scripts/supabase`](scripts/supabase)
-wrapper, never a bare `supabase`, or the CLI will not find either stack.
-
-```sh
-scripts/supabase start
-TEST_DB=1 scripts/supabase start
-```
-
-Containers stop when your machine restarts, but stop a stack yourself once you're done with
-it to free up memory:
-
-```sh
-scripts/supabase stop
-TEST_DB=1 scripts/supabase stop
-```
-
-The test stack migrates itself whenever you run the tests. Only Playwright seeds, into a database
-cloned for that run.
-
-### Everyday commands
-
-Run these from the repo root. Each one fans out across the TypeScript workspace through
-Turborepo.
-
-| Command | What it does |
-| --- | --- |
-| `pnpm dev:web` | Dev server at <http://localhost:5173>, and a `tsc --watch` per package it imports |
-| `pnpm dev:worker` | The worker, in [`WORKER_MODE`](#analysis-modes) |
-| `pnpm dev` | Both of the above, in one terminal |
-| `pnpm check` | `svelte-check` on the web app, `tsc --noEmit` on packages |
-| `pnpm lint` | Biome: formatting, lint rules, and import sorting |
-| `pnpm fmt` | Biome, applying fixes |
-| `pnpm test:unit` | Unit and component tests (vitest) |
-| `pnpm test:e2e` | End-to-end tests only (Playwright) |
-| `pnpm test:screenshots` | Pixel snapshots only, needs Docker (Playwright) |
-| `pnpm test:playwright` | `test:e2e` and `test:screenshots` together, one app boot |
-| `pnpm test:system` | Whole-system e2e, against both services' real Docker images — see [`tests/e2e/`](tests/e2e/) |
-| `pnpm grafana` | A local Grafana with the product dashboards, against the dev database — see [`apps/grafana/`](apps/grafana/README.md) |
-| `pnpm test` | Everything: `test:unit`, then `test:playwright` |
-| `pnpm build` | Production build of every package |
-
-To scope a command to one package, use pnpm's filter: `pnpm --filter @gbd/web dev`. However, not all packages implement every command.
-
-### Uploading reports by hand
-
-[`apps/web/sample-reports/`](apps/web/sample-reports/) has CSVs to upload: one that is
-accepted, and a few that are rejected for different reasons. `REPORT_RATE_LIMIT=off` in `.env`
-turns off the report limits, which you hit quickly when walking the
-[`stubbed`](#analysis-modes) scenarios by hand.
-
-### Testing
-
-| Tier | Location | Runner | Naming |
-| --- | --- | --- | --- |
-| Unit | Colocated with the code | vitest, node | `*.test.ts` |
-| Component | Colocated with the component | vitest, real Chromium | `*.svelte.test.ts` |
-| Database invariants | [`packages/db/tests/`](packages/db/tests/) | vitest, node | `*.test.ts` |
-| Web e2e | `apps/web/e2e/` | Playwright | `*.e2e.ts` |
-| Screenshots | `apps/web/e2e/` | Playwright, containerized Chromium | `*.screenshot.ts` |
-| System e2e | [`tests/e2e/`](tests/e2e/) | Playwright | `*.e2e.ts` |
-
-**Component tests** render a single component in a real browser via
-`vitest-browser-svelte` and Playwright's Chromium. They are fast, so prefer them over
-e2e tests for anything that is really about one component's behaviour.
-
-**Web e2e tests** build the app and run it with Playwright. Debug with:
-
-```sh
-pnpm turbo run test:e2e --filter=@gbd/web -- --ui
-```
-
-CI uploads a Playwright report as a build artifact on failure. Download it and open the
-trace with `pnpm exec playwright show-trace <path-to-zip>`.
-
-**Screenshots** compare the app against PNGs committed under `apps/web/e2e/__screenshots__/`,
-which double as a gallery of the UI. After an intentional visual change, regenerate and commit
-them:
-
-```sh
-pnpm turbo run screenshots:update --filter=@gbd/web
-```
-
-They are captured through a browser in Docker, so the images match between macOS and CI. See
-[`apps/web/e2e/README.md`](apps/web/e2e/README.md), including `pnpm test:browser:stop` for
-freeing the memory it holds.
-
-#### Tests and the database
-
-**The test stack must be running** for any vitest Node test by running `TEST_DB=1 scripts/supabase start`.
-A fair number of tests query Postgres or the blob store. The test scripts apply migrations and create
-the bucket before tests run.
-
-**Every test that touches the database must wrap its queries in `withRollback`**, from
-`@gbd/db/testing` — see [`packages/db/README.md`](packages/db/README.md#using-it) for the one
-exception.
-
-**Every test that touches the blob store must wrap its keys in `withTemporaryPrefix`**, from
-`@gbd/storage/testing` — see [`packages/storage/README.md`](packages/storage/README.md) for when
-to use its sibling `withTemporaryOrganization` instead.
-
-**A test that needs to prove an email was sent should use `recordingEmailer()`**, from
-`@gbd/email/testing` — see [`packages/email/README.md`](packages/email/README.md#testing) for the
-exceptions that send through Mailpit for real.
-
-**E2E tests commit transactions and leave objects in the blob store, unlike the rest of the
-suite** — but Playwright gives each run its own database, cloned from a migrated template, and its own
-bucket, and deletes both afterwards, so runs do not see each other's rows. Generate IDs with `crypto.randomUUID()` to
-avoid clashes between tests. If the test database gets into a strange state,
-[reset it](#reset-a-database).
-
-### Occasional tasks
-
-#### Database and blob store commands
-
-| Command | What it does |
-| --- | --- |
-| `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
-| `pnpm seed:identity` | Create the placeholder user, organization, and membership that `PUBLIC_AUTH_MODE=placeholder` runs as |
-| `pnpm seed:history` | Replace the synthetic history of organizations, users, reports and attempts that dashboards draw locally |
-| `pnpm truncate` | Delete every row, object, and local email, keeping the schema and the bucket |
-| `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](packages/db/src/generated/), [`packages/db/public-schema.sql`](packages/db/public-schema.sql), [`packages/db/metrics-schema.sql`](packages/db/metrics-schema.sql), and [`packages/db/auth-schema.sql`](packages/db/auth-schema.sql) from the live database |
-| `pnpm test:db:clean` | Drop every leftover per-run test database and cached template (`fsi_test_%`) |
-
-`migrate` acts on the database and blob store; `truncate` acts on those plus the local mailbox.
-Use a pnpm filter to reach just one: `pnpm --filter @gbd/storage run migrate`.
-
-Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
-
-#### Seeding
-
-Which to run when:
-
-- After a fresh clone, a `db reset`, or a `truncate` — `pnpm migrate`, then `pnpm seed:identity`.
-- Before working on a dashboard, or to move the history's dates up to today — `pnpm seed:history`.
-  Re-running it replaces the history rather than adding to it, and leaves rows you made alone.
-- For tests, `test:e2e` and `test:screenshots` clone a fresh, migrated database per run and seed it
-  themselves. The vitest tiers migrate the shared test database and never truncate it.
-
-#### Add a database migration
-
-1. Add the next numbered file to `packages/db/migrations/`, following
-   [Writing a migration](packages/db/README.md#writing-a-migration) and the schema
-   [conventions](packages/db/README.md#conventions).
-2. `pnpm migrate`
-3. `pnpm db:gen-types`, and commit the regenerated files alongside the migration.
-
-Running the tests applies the migration to the test database, which every checkout on this machine
-shares. Until it lands, any other checkout's tests fail on the migration they lack;
-[reset](#reset-a-database) the test database from that checkout to go on working there.
-
-To leave the other checkouts alone instead, test the migration against a private database in the
-same cluster. As `supabase_admin` (password `postgres`), `CREATE DATABASE wt_<name> TEMPLATE
-template0 OWNER postgres`, restore [`packages/db/auth-schema.sql`](packages/db/auth-schema.sql)
-into it, and run the tests with
-`DB_CONNECTION_STRING=postgresql://postgres:postgres@127.0.0.1:65322/wt_<name>`, which beats
-`.env.test`. Only the `sweepStaleGoTrueUsers` test fails, since it always targets `postgres`.
-Run `DROP DATABASE wt_<name> WITH (FORCE)` once you are done with it.
-
-#### Reset a database
-
-Clear the dev data, keeping the schema and the bucket. The app needs the placeholder identity
-back before it will run, so re-seed it:
-
-```sh
-pnpm truncate
-pnpm seed:identity
-```
-
-Rebuild the dev database from nothing, when the schema itself is wrong. A reset takes the blob
-store's bucket with it, which `pnpm migrate` puts back:
-
-```sh
-scripts/supabase db reset
-pnpm migrate
-pnpm seed:identity
-```
-
-Same for the test database, when it gets into a strange state:
-
-```sh
-TEST_DB=1 scripts/supabase db reset
-TEST_DB=1 pnpm migrate
-TEST_DB=1 pnpm seed:identity
-```
-
-#### Read local email
-
-While developing locally, all emails get sent to a mock email provider. Read them at
-<http://localhost:55324> for the dev stack, or <http://localhost:65324> for the test stack.
-
-`pnpm --filter @gbd/email preview` renders one of every message to disk, for reviewing
-copy changes without sending anything.
-
-#### Debug the database
-
-Supabase Studio for the dev stack is at <http://localhost:55323>. For logs:
-
-```sh
-docker logs -f supabase_db_fsi-dev
-```
-
-To see a query plan, per [`packages/db/README.md`](packages/db/README.md#conventions)'s
-`EXPLAIN ANALYZE` convention:
-
-```typescript
-console.error(JSON.stringify(await query.explain('json', sql`analyze`), null, 2));
-```
-
-#### Add a shadcn-svelte component
-
-See [`apps/web/README.md`](apps/web/README.md#ui-components).

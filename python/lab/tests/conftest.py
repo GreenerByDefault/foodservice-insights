@@ -69,7 +69,7 @@ def mock_whisper_client():
 @pytest.fixture
 def test_database() -> Iterator[psycopg.Connection]:
     """`postgres` on the migrated test stack, inside a transaction that always rolls back: the
-    counterpart of `withRollback` (root README.md § Tests and the database)."""
+    counterpart of `withRollback` (docs/typescript.md § Tests and the database)."""
     if not os.environ.get("TEST_DB"):
         pytest.skip("Needs the running, migrated test stack and TEST_DB=1; see python/README.md.")
     # From `.env.test` alone, never the environment: there, `CACHE_DB_CONNECTION_STRING` may point

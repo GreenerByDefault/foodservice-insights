@@ -89,7 +89,7 @@ A migration reaches production before the code that needs it, and runs against a
 - **A landed migration's code is never edited, reordered, or deleted** — only its `//` comments
   may change. The hosted database has already run it, so change the schema with a new migration
   instead. One that has not landed yet you can edit freely, but Kysely never re-runs a migration it
-  has applied, so [reset](../../README.md#reset-a-database) your local databases to see the edit.
+  has applied, so [reset](../../docs/typescript.md#reset-a-database) your local databases to see the edit.
 - **The schema must keep working for the code already deployed.** That is the web for a few minutes
   and the worker for as long as it goes undeployed — see
   [`docs/architecture.md`](../../docs/architecture.md#worker-deploys-only-on-demand). So expand, then

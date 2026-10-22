@@ -1,8 +1,9 @@
 # Python
 
 The AI analysis library, the worker's child process, and the data-science lab. This file is
-the Python counterpart to the root [`README.md`](../README.md). Go there for the repo layout, the
-documentation index, and what CI runs. [`.claude/rules/python.md`](../.claude/rules/python.md) has how we write Python.
+the Python counterpart to [`docs/typescript.md`](../docs/typescript.md). The root
+[`README.md`](../README.md) has running the app, the local databases, and the docs map, and
+[`.claude/rules/python.md`](../.claude/rules/python.md) has how we write Python.
 
 ## Getting started
 

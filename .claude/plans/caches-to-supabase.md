@@ -7,7 +7,7 @@ The product side is done and live. `packages/db/migrations/002_caches.ts` create
 The worker reads the verified product rows on every claim and inserts what its LLM categorized
 as unverified suggestions. Production runs `live` on the interim copy of GBD's caches, loaded by
 the temporary import. A developer's `live` worker reads and suggests to the hosted cache through
-`CACHE_DB_CONNECTION_STRING` (root `README.md` § The categorization cache).
+`CACHE_DB_CONNECTION_STRING` (`apps/worker/README.md` § The categorization cache).
 
 The lab pulls. `gbd_foodservice_insights_lab/cache_sync.py` overwrites the lab's three cache
 files with the verified rows whenever step 1 starts with `CACHE_DB_CONNECTION_STRING` set, and on
@@ -177,7 +177,7 @@ When GBD's final CSVs arrive, follow the import's
 ## PR 2 — delete the import
 
 - Deletes `packages/db/scripts/temporary-go-live-cache-import/`, `@gbd/db`'s
-  `temporary-go-live-cache-import` script, and the root `README.md`'s link to it at the end of
+  `temporary-go-live-cache-import` script, and `apps/worker/README.md`'s link to it at the end of
   § The categorization cache.
 - If PR 1 has landed, it deletes this plan. Otherwise it removes this PR and § The final
   import.
