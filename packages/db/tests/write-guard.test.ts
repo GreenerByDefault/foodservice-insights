@@ -8,11 +8,7 @@ import { POSTGRES_CODE_INSUFFICIENT_PRIVILEGE } from '../src/postgres-codes.ts';
 import type { Database } from '../src/schema.ts';
 import { withRollback } from '../src/testing/transactions.ts';
 
-const CACHE_TABLES = [
-  'public.entree_classification',
-  'public.product_categorization',
-  'public.unit_weight',
-];
+const CACHE_TABLES = ['public.entree_classification', 'public.product_categorization'];
 
 // `pg_trigger.tgtype` bits: BEFORE (2), INSERT (4), DELETE (8), UPDATE (16), TRUNCATE (32), and
 // ROW (1) unset, so once per statement.

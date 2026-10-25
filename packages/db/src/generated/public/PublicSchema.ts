@@ -14,7 +14,6 @@ import type { default as ProductCategorizationTable } from './ProductCategorizat
 import type { default as RejectedUploadTable } from './RejectedUpload.js';
 import type { default as ReportTable } from './Report.js';
 import type { default as ResultFileTable } from './ResultFile.js';
-import type { default as UnitWeightTable } from './UnitWeight.js';
 
 export default interface PublicSchema {
   auditEvent: AuditEventTable;
@@ -28,8 +27,6 @@ export default interface PublicSchema {
   report: ReportTable;
 
   analysisAttempt: AnalysisAttemptTable;
-
-  unitWeight: UnitWeightTable;
 
   organizationMember: OrganizationMemberTable;
 

@@ -19,8 +19,8 @@ export const MAX_DISPLAY_NAME_LENGTH = 100;
 export const MAX_ORGANIZATION_SLUG_LENGTH = 48;
 
 /** How long a cache table's key may be, in bytes: `product` in `product_categorization` and
- * `entree_classification`, `original_unit` in `unit_weight`. Each table's `*_length` CHECK
- * keeps the key's unique index entry inside the b-tree's limit. */
+ * `entree_classification`. Each table's `*_length` CHECK keeps the key's unique index entry
+ * inside the b-tree's limit. */
 export const MAX_CACHE_KEY_BYTES = 2000;
 
 /** What an organization's slug may look like, `organization_slug_format`: lowercase alphanumerics,

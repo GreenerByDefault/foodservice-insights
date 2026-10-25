@@ -1,7 +1,7 @@
 # Temporary go-live cache import
 
-Loads GBD's three cache CSVs into `product_categorization`, `entree_classification` and
-`unit_weight` as verified rows, when the caches move to Supabase
+Loads GBD's cache CSVs into `product_categorization` and `entree_classification` as verified
+rows, when the caches move to Supabase
 ([`.claude/plans/caches-to-supabase.md`](../../../../.claude/plans/caches-to-supabase.md) § The final import):
 first an interim copy, then GBD's final one, which replaces it. It is also how a developer
 without the hosted cache loads a CSV into their local database.
@@ -39,7 +39,7 @@ shares the dev database, so once per machine is enough.
 
 ```sh
 pnpm --filter @gbd/db temporary-go-live-cache-import --mirror --write \
-  --products <csv> --entrees <csv> --units <csv>      # pass any of the three
+  --products <csv> --entrees <csv>      # pass either or both
 ```
 
 `--mirror` makes each table exactly the file's usable rows, as reading the CSV did: it deletes
@@ -65,10 +65,10 @@ first.
 
    ```sh
    pnpm --filter @gbd/db temporary-go-live-cache-import --production --mirror \
-     --products <csv> --entrees <csv> --units <csv>
+     --products <csv> --entrees <csv>
    ```
 
-   `--mirror` deletes every row of the three tables first, harvested suggestions and Studio
+   `--mirror` deletes every row of both tables first, harvested suggestions and Studio
    edits included, so production holds exactly the files. That is right only until the final
    import, while nobody reviews production's rows. In production it still stops on a refused
    row.

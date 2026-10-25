@@ -1371,53 +1371,6 @@ CREATE TABLE IF NOT EXISTS "public"."result_file" (
 ALTER TABLE "public"."result_file" OWNER TO "postgres";
 
 --
--- Name: unit_weight; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE IF NOT EXISTS "public"."unit_weight" (
-    "id" "uuid" DEFAULT "public"."uuidv7"() NOT NULL,
-    "original_unit" "text" NOT NULL,
-    "cleaned_unit" "text" NOT NULL,
-    "extracted_weight" double precision,
-    "example_products" "text",
-    "is_verified" boolean DEFAULT false NOT NULL,
-    "verified_at" timestamp with time zone,
-    "suggested_by" "text" DEFAULT 'manual'::"text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    CONSTRAINT "unit_weight_cleaned_unit_not_blank" CHECK (("cleaned_unit" ~ '[^[:space:]]'::"text")),
-    CONSTRAINT "unit_weight_example_products_not_blank" CHECK ((("example_products" IS NULL) OR ("example_products" ~ '[^[:space:]]'::"text"))),
-    CONSTRAINT "unit_weight_extracted_weight_positive_finite" CHECK ((("extracted_weight" IS NULL) OR (("extracted_weight" > (0)::double precision) AND ("extracted_weight" < 'Infinity'::double precision)))),
-    CONSTRAINT "unit_weight_original_unit_length" CHECK (("octet_length"("original_unit") <= 2000)),
-    CONSTRAINT "unit_weight_original_unit_not_blank" CHECK (("original_unit" ~ '[^[:space:]]'::"text")),
-    CONSTRAINT "unit_weight_suggested_by_not_blank" CHECK (("suggested_by" ~ '[^[:space:]]'::"text"))
-);
-
-
-ALTER TABLE "public"."unit_weight" OWNER TO "postgres";
-
---
--- Name: TABLE "unit_weight"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON TABLE "public"."unit_weight" IS 'Only verified rows are ever used. The app and the lab insert suggestions unverified; a human corrects the value here if needed and ticks is_verified.';
-
-
---
--- Name: COLUMN "unit_weight"."verified_at"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN "public"."unit_weight"."verified_at" IS 'Maintained by a trigger from is_verified. A value typed here is ignored.';
-
-
---
--- Name: COLUMN "unit_weight"."suggested_by"; Type: COMMENT; Schema: public; Owner: postgres
---
-
-COMMENT ON COLUMN "public"."unit_weight"."suggested_by" IS 'Where the row came from: attempt:<id> from a worker run, lab:<user>, import:<file>, or manual.';
-
-
---
 -- Name: analysis_attempt_finding analysis_attempt_finding_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -1615,22 +1568,6 @@ ALTER TABLE ONLY "public"."result_file"
 
 ALTER TABLE ONLY "public"."result_file"
     ADD CONSTRAINT "result_file_storage_key_key" UNIQUE ("storage_key");
-
-
---
--- Name: unit_weight unit_weight_original_unit_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY "public"."unit_weight"
-    ADD CONSTRAINT "unit_weight_original_unit_key" UNIQUE ("original_unit");
-
-
---
--- Name: unit_weight unit_weight_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY "public"."unit_weight"
-    ADD CONSTRAINT "unit_weight_pkey" PRIMARY KEY ("id");
 
 
 --
@@ -2005,13 +1942,6 @@ CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE INSERT OR DELETE OR UPD
 
 
 --
--- Name: unit_weight forbid_unmarked_write; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE TRIGGER "forbid_unmarked_write" BEFORE TRUNCATE ON "public"."unit_weight" FOR EACH STATEMENT EXECUTE FUNCTION "public"."forbid_unmarked_write"();
-
-
---
 -- Name: analysis_attempt metrics_tombstone; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -2086,20 +2016,6 @@ CREATE OR REPLACE TRIGGER "product_categorization_set_verified_at" BEFORE INSERT
 --
 
 CREATE CONSTRAINT TRIGGER "report_has_an_input_file" AFTER INSERT ON "public"."report" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "public"."report_check_has_input_file"();
-
-
---
--- Name: unit_weight unit_weight_set_updated_at; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE TRIGGER "unit_weight_set_updated_at" BEFORE UPDATE ON "public"."unit_weight" FOR EACH ROW EXECUTE FUNCTION "public"."set_updated_at"();
-
-
---
--- Name: unit_weight unit_weight_set_verified_at; Type: TRIGGER; Schema: public; Owner: postgres
---
-
-CREATE OR REPLACE TRIGGER "unit_weight_set_verified_at" BEFORE INSERT OR UPDATE ON "public"."unit_weight" FOR EACH ROW EXECUTE FUNCTION "public"."set_verified_at"();
 
 
 --
@@ -2475,51 +2391,6 @@ GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."rejected_upload" T
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."result_file" TO "anon";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."result_file" TO "authenticated";
 GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."result_file" TO "service_role";
-
-
---
--- Name: TABLE "unit_weight"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."unit_weight" TO "anon";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."unit_weight" TO "authenticated";
-GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."unit_weight" TO "service_role";
-GRANT SELECT ON TABLE "public"."unit_weight" TO "cache_client";
-
-
---
--- Name: COLUMN "unit_weight"."original_unit"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT INSERT("original_unit") ON TABLE "public"."unit_weight" TO "cache_client";
-
-
---
--- Name: COLUMN "unit_weight"."cleaned_unit"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT INSERT("cleaned_unit") ON TABLE "public"."unit_weight" TO "cache_client";
-
-
---
--- Name: COLUMN "unit_weight"."extracted_weight"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT INSERT("extracted_weight") ON TABLE "public"."unit_weight" TO "cache_client";
-
-
---
--- Name: COLUMN "unit_weight"."example_products"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT INSERT("example_products") ON TABLE "public"."unit_weight" TO "cache_client";
-
-
---
--- Name: COLUMN "unit_weight"."suggested_by"; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT INSERT("suggested_by") ON TABLE "public"."unit_weight" TO "cache_client";
 
 
 --

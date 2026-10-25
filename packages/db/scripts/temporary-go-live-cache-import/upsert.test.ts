@@ -7,7 +7,6 @@ import type { DatabaseExecutor } from '../../src/schema.ts';
 import {
   insertEntreeClassification,
   insertProductCategorization,
-  insertUnitWeight,
 } from '../../src/testing/fixtures/index.ts';
 import { withRollback } from '../../src/testing/transactions.ts';
 import type { ProductCategorizationRow } from './clean.ts';
@@ -17,7 +16,6 @@ import {
   importTable,
   upsertEntreeClassifications,
   upsertProductCategorizations,
-  upsertUnitWeights,
 } from './upsert.ts';
 
 const SUGGESTED_BY = 'import:products.csv';
@@ -197,54 +195,6 @@ describe('upsertEntreeClassifications', () => {
   });
 });
 
-describe('upsertUnitWeights', () => {
-  test('inserts a new row and promotes an unverified one', async () => {
-    const originalUnit = `${crypto.randomUUID()} CS `;
-
-    await withRollback(DATABASE, async (transaction) => {
-      const unverified = await insertUnitWeight(transaction);
-
-      const counts = await upsertUnitWeights(
-        transaction,
-        [
-          { originalUnit, cleanedUnit: 'oz', extractedWeight: null, exampleProducts: 'BEANS' },
-          {
-            originalUnit: unverified.originalUnit,
-            cleanedUnit: 'kg',
-            extractedWeight: 2.5,
-            exampleProducts: null,
-          },
-        ],
-        SUGGESTED_BY,
-      );
-
-      expect(counts).toEqual({ inserted: 1, promoted: 1, alreadyVerified: 0 });
-      const rows = await transaction
-        .selectFrom('unitWeight')
-        .select(['originalUnit', 'cleanedUnit', 'extractedWeight', 'exampleProducts', 'isVerified'])
-        .where('originalUnit', 'in', [originalUnit, unverified.originalUnit])
-        .orderBy('cleanedUnit')
-        .execute();
-      expect(rows).toEqual([
-        {
-          originalUnit: unverified.originalUnit,
-          cleanedUnit: 'kg',
-          extractedWeight: 2.5,
-          exampleProducts: null,
-          isVerified: true,
-        },
-        {
-          originalUnit,
-          cleanedUnit: 'oz',
-          extractedWeight: null,
-          exampleProducts: 'BEANS',
-          isVerified: true,
-        },
-      ]);
-    });
-  });
-});
-
 describe('importTable', () => {
   function productImport(rows: readonly ProductCategorizationRow[]) {
     return {
@@ -371,15 +321,15 @@ describe('importInOneTransaction', () => {
             ),
         },
         {
-          table: 'unit_weight',
-          upsert: () => Promise.reject(new Error('unit_weight failed')),
+          table: 'entree_classification',
+          upsert: () => Promise.reject(new Error('entree_classification failed')),
         },
       ],
       { mirror: false },
       async () => true,
     );
 
-    await expect(outcome).rejects.toThrow('unit_weight failed');
+    await expect(outcome).rejects.toThrow('entree_classification failed');
     expect(await readProducts(DATABASE, [product])).toEqual([]);
   });
 });

@@ -77,7 +77,6 @@ __pycache__/
 # Handed out privately; see the data_files READMEs. Never committed. After the un-ignores above.
 python/**/data_files/previously_categorized_items.csv
 python/**/data_files/previously_classified_entrees.csv
-python/**/data_files/previously_classified_weights.csv
 
 # Jupyter
 .ipynb_checkpoints/
