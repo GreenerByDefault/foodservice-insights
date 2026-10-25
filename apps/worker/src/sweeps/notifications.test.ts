@@ -27,7 +27,7 @@ import {
 import { EmailError, type Emailer } from '@gbd/email';
 import {
   recordingEmailer,
-  SAMPLE_ORGANIZATION_ID,
+  SAMPLE_ORGANIZATION_SLUG,
   SAMPLE_REPORT_ID,
   unreachableEmailer,
 } from '@gbd/email/testing';
@@ -549,7 +549,7 @@ describe('emailForNotifiableAttempt', () => {
     return {
       id: crypto.randomUUID() as AnalysisAttemptId,
       reportId: SAMPLE_REPORT_ID,
-      organizationId: SAMPLE_ORGANIZATION_ID,
+      organizationSlug: SAMPLE_ORGANIZATION_SLUG,
       reportName: 'Q1 procurement',
       status: 'succeeded',
       notificationAttempts: 1,
@@ -566,7 +566,7 @@ describe('emailForNotifiableAttempt', () => {
     return {
       id: crypto.randomUUID() as AnalysisAttemptId,
       reportId: SAMPLE_REPORT_ID,
-      organizationId: SAMPLE_ORGANIZATION_ID,
+      organizationSlug: SAMPLE_ORGANIZATION_SLUG,
       reportName: 'Q1 procurement',
       status: 'failed',
       notificationAttempts: 1,
@@ -580,7 +580,7 @@ describe('emailForNotifiableAttempt', () => {
     expect(emailForNotifiableAttempt(attempt)).toEqual({
       kind: 'analysis-succeeded',
       to: attempt.to,
-      organizationId: attempt.organizationId,
+      organizationSlug: attempt.organizationSlug,
       reportId: attempt.reportId,
       reportName: attempt.reportName,
       pdfFileId: attempt.pdfFileId,
@@ -603,7 +603,7 @@ describe('emailForNotifiableAttempt', () => {
     expect(emailForNotifiableAttempt(attempt)).toEqual({
       kind: 'analysis-failed',
       to: attempt.to,
-      organizationId: attempt.organizationId,
+      organizationSlug: attempt.organizationSlug,
       reportId: attempt.reportId,
       reportName: attempt.reportName,
       reason,

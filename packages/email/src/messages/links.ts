@@ -1,13 +1,13 @@
 /** The links our emails point at.
  *
- * `apps/web/src/routes/` is the source of truth for these paths; they are rebuilt here rather than
- * imported because the web app writes its own hrefs inline in Svelte today. When it grows a shared
- * route module, these move there and this file goes away.
+ * `apps/web/src/lib/hrefs.ts` is the source of truth for these paths. The three org- and
+ * report-scoped ones are rebuilt here because an email has no app to import from; the report link
+ * is guarded by the system e2e, which follows it (`tests/e2e/specs/report-lifecycle.e2e.ts`).
  *
  * Every link is absolute, because an email has no origin to be relative to.
  */
 
-import type { OrganizationId, ReportId, ResultFileId } from '@gbd/db';
+import type { ReportId, ResultFileId } from '@gbd/db';
 import type { EmailContext } from '../client.ts';
 
 /** A URL built by this module, i.e. not from user input. */
@@ -19,10 +19,10 @@ function trustedUrl(url: string): TrustedUrl {
 
 export function reportUrl(
   context: EmailContext,
-  organizationId: OrganizationId,
+  organizationSlug: string,
   reportId: ReportId,
 ): TrustedUrl {
-  return trustedUrl(`${context.siteUrl}/orgs/${organizationId}/reports/${reportId}`);
+  return trustedUrl(`${context.siteUrl}/orgs/${organizationSlug}/reports/${reportId}`);
 }
 
 /** The stable, unauthenticated download link — see `apps/web/src/routes/file/result/[id=uuid]/`. */

@@ -115,6 +115,15 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
       timeout: LIFECYCLE_TIMEOUT_MS,
     })
     .toContain(`Your report is ready: ${reportName}`);
+
+  // The link the email carries, followed: the guard on `@gbd/email`'s rebuilt report URL.
+  const [message] = await readMailbox(user.email, {
+    subject: `Your report is ready: ${reportName}`,
+  });
+  const reportLink = message?.text.match(/https?:\/\/\S+\/orgs\/\S+\/reports\/[0-9a-f-]+/)?.[0];
+  expect(reportLink).toBeDefined();
+  await page.goto(new URL(reportLink as string).pathname);
+  await expect(page.getByRole('heading', { name: reportName })).toBeVisible();
 });
 
 async function telemetrySummary(db: SharedWorkerFixtures['db'], reportId: ReportId) {

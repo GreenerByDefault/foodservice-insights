@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   anAnalysisFailed,
   anAnalysisSucceeded,
-  SAMPLE_ORGANIZATION_ID,
+  SAMPLE_ORGANIZATION_SLUG,
   SAMPLE_REPORT_ID,
 } from '../testing/fixtures.ts';
 import { recordingEmailer } from '../testing/recording.ts';
@@ -11,7 +11,7 @@ import { renderAnalysisFailed, renderAnalysisSucceeded } from './analysis.ts';
 
 const emailer = recordingEmailer().service;
 
-const REPORT_URL = `https://example.test/orgs/${SAMPLE_ORGANIZATION_ID}/reports/${SAMPLE_REPORT_ID}`;
+const REPORT_URL = `https://example.test/orgs/${SAMPLE_ORGANIZATION_SLUG}/reports/${SAMPLE_REPORT_ID}`;
 const CONTACT_URL = 'mailto:support@example.test';
 
 describe('renderAnalysisSucceeded', () => {

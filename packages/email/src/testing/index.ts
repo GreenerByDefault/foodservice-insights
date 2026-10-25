@@ -8,7 +8,7 @@ export {
   anAnalysisFailed,
   anAnalysisSucceeded,
   anOrganizationInvite,
-  SAMPLE_ORGANIZATION_ID,
+  SAMPLE_ORGANIZATION_SLUG,
   SAMPLE_REPORT_ID,
 } from './fixtures.ts';
 export { setup } from './global-setup.ts';

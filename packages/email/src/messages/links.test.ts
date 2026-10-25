@@ -1,18 +1,18 @@
 /** These paths must match `apps/web/src/routes/` — see that directory for the source of truth. */
 
-import type { OrganizationId, ReportId, ResultFileId } from '@gbd/db';
+import type { ReportId, ResultFileId } from '@gbd/db';
 import { describe, expect, test } from 'vitest';
 import { recordingEmailer } from '../testing/recording.ts';
 import { reportUrl, resultFileUrl, signInUrl, supportMailtoUrl } from './links.ts';
 
 const emailer = recordingEmailer().service;
-const ORGANIZATION_ID = 'org-id' as OrganizationId;
+const ORGANIZATION_SLUG = 'org-slug';
 const REPORT_ID = 'report-id' as ReportId;
 
 describe('reportUrl', () => {
-  test('points at apps/web/src/routes/(app)/orgs/[organizationId]/reports/[reportId]', () => {
-    expect(reportUrl(emailer, ORGANIZATION_ID, REPORT_ID)).toBe(
-      'https://example.test/orgs/org-id/reports/report-id',
+  test('points at apps/web/src/routes/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]', () => {
+    expect(reportUrl(emailer, ORGANIZATION_SLUG, REPORT_ID)).toBe(
+      'https://example.test/orgs/org-slug/reports/report-id',
     );
   });
 });
