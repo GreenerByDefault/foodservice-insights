@@ -40,7 +40,7 @@ export type WorkerConfig = {
   /** How long to wait before asking the queue again, after a poll that did not start an attempt. */
   queuePollIntervalMs: number;
 
-  /** How often to mirror child progress into the database and check the kill thresholds below. */
+  /** How often to check each child's progress and the kill thresholds below, and renew its lease. */
   directIntervalMs: number;
 
   /** How long a child may go without progressing before it is killed as `hung`. */

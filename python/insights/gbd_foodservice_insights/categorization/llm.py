@@ -56,6 +56,8 @@ RETRYABLE_STATUS_CODES: Final = frozenset({408, 409, 425, 429, 500, 502, 503, 50
 # lever to pull in an incident. Conservative until measured.
 # *Rejected: a worker config field checked in `apps/worker/src/config.ts`* — its relations need
 # the fleet size and the account's limits, neither of which that file knows either.
+# *Rejected: `asyncio` in place of the thread pool (`utils.py`)* — a handful of blocking calls
+# runs fine on threads, and `asyncio` would make every caller up the pipeline async.
 LLM_CONCURRENCY: Final = 3
 
 DEFAULT_MODEL: Final = "gpt-4.1-mini"

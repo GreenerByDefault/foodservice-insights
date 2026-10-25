@@ -163,138 +163,40 @@ concurrency-safe, and atomic. The statement lives in
 - *Rejected: automatic requeuing.* Once a worker claims an attempt it leaves the queue. If the
   attempt fails for any reason, no other worker retries it — **retrying is a user-initiated
   action.** This is a simpler architecture.
-- *Rejected: `LISTEN`/`NOTIFY` pub-sub.* Workers poll every 1–2 seconds over a long-lived pooled
-  connection, which is simpler.
+- *Rejected: `LISTEN`/`NOTIFY` pub-sub.* Workers wait `queuePollIntervalMs` after a poll that
+  starts nothing, over a long-lived pooled connection, which is simpler.
 
 ## Worker
 
-> The detail in this section moves to `apps/worker/README.md` when that package lands. The seams
-> — the queue contract above, and the parent ↔ child run directory — stay here.
+The worker is a long-running process in a Docker container that serves no requests. Its
+**parent process** claims attempts and spawns a Python **child process** for each one (spawn,
+don't fork), running `gbd_foodservice_insights`, up to `maxConcurrentAttempts` at once. How the
+parent catches a hung or dead child is [`apps/worker/README.md`](../apps/worker/README.md#design).
 
-`gbd_foodservice_insights` is heavily IO-bound with many API calls: light CPU, moderate memory, no GPU.
+- **Only the parent interacts with the database and blob store**, which simplifies the child and
+  shrinks the security blast radius. The child reads its inputs from a run directory and writes
+  its results back into it; [`contract/`](../contract/) is that directory's contract.
+- **The parent does not send the result email.** A separate sweep,
+  [`sweeps/notifications.ts`](../apps/worker/src/sweeps/notifications.ts), sends it once the row is
+  terminal, whoever made it so; see § Email below.
 
-The worker is a long-running process in a Docker container. It uses no web framework — it does not
-serve requests.
+### Reaping
 
-The worker has a **parent process** that spawns up to 3 **child processes** running
-`gbd_foodservice_insights`. Each child is a separate Python process for isolation (spawn, don't fork).
-**Only the parent interacts with the database and blob store**, which simplifies the child and
-shrinks the security blast radius.
-
-Parent lifecycle:
-
-1. Pull an analysis attempt from the queue, if current attempts < 3.
-2. Fetch the input file from the blob store.
-3. Spawn a child process to run `gbd_foodservice_insights`, setting up a folder with the required inputs.
-  - The inputs include the human-verified product categorizations, read fresh on every claim; [`attempt/lifecycle.ts`](../apps/worker/src/attempt/lifecycle.ts) says why.
-4. The child runs, writes its results into that folder, and exits.
-  - Exit 0 plus a result file the parent can parse is success; exit 1 means the child wrote a failure instead; any other exit means it reached no verdict at all.
-  - Throughout, the child keeps `telemetry.json` current: its LLM usage and each finished stage's counts and time.
-5. Upload the result files to the blob store and save metadata to the database.
-  - After a recorded success, suggest the products the child's LLM categorized to the cache, unverified. Like the telemetry, it never changes the verdict.
-  - Then, whatever the ending and whoever now owns the attempt, record the telemetry. It never changes the verdict.
-
-Whenever a child fails in any way — including being killed by its parent — the parent marks the
-analysis attempt failed. Either way, the parent does not send the email itself — a separate,
-derived sweep does, in [`sweeps/notifications.ts`](../apps/worker/src/sweeps/notifications.ts); see
-§ Email below. A `canceled` row gets no email at all.
-
-Refer to [`contract/`](../contract/) for the worker ↔ child contract.
-
-### Progress, leases, and reaping
-
-Catching a hung or crashed analysis means answering two different questions — is the *child*
-still making progress, and does the *parent* still get to act on that — and each has to keep
-working when the other's machinery is down. That split is **two independent axes**, and mixing
-them forfeits what each is for:
-
-| | Axis A — child liveness | Axis B — supervisor authority |
-| --- | --- | --- |
-| Medium | the filesystem | Postgres |
-| Signal | `progress.json` `sequence` → parent's `lastProgressAt` | the guarded `UPDATE` |
-| Clock | the parent's, only ever as a difference | the database's, on both write and read |
-| Answers | should I kill this child? | may I still write this attempt's verdict, and is anyone still watching it? |
-| Survives a DB outage | **yes, by design** | no |
-| Survives losing the container | no | **yes, that is its whole job** |
-
-Because Axis B reads and writes the *database's* `now()`, cross-worker liveness never depends on
-worker clocks agreeing. Because Axis A only ever subtracts the *parent's* clock, it keeps working
-through a total database outage. **Never write the child's progress timestamp into the
-database** — see *Rejected* below for why that specific mistake is not just untidy but unsafe.
-
-The one rule that resolves the two axes into one design:
-
-> **A worker renews the lease on an attempt if and only if it has just checked that attempt's
-> child and will still reach a verdict for it.**
-
-Child progress is an *input* to the renewal decision, never the value written. "Has someone taken
-this attempt?" is the renewal's *answer*. "Tell other parents I am alive" is its *effect*.
-
-That rule has a corollary: a parent that cannot evaluate its child's health must **stop
-renewing**, so the reaper converges the attempt. This is the same shape as "only a zero-row update
-means lost" below: *the write fails ⇒ still run the checks; the checks cannot be evaluated ⇒ skip the
-write.* The two rules this adds on top — no check, no renewal; and fencing once a lease has expired — are
-decided in [`apps/worker/src/failures.ts`](../apps/worker/src/failures.ts), which names them.
-
-Four layered defenses, because a hung analysis has to be caught even if the process that should
-notice it is itself hung:
-
-1. **The child reports progress** by updating a file every time it makes progress, such as
-   finishing an API call. The parent checks that file roughly every 30 seconds. If the child has
-   not progressed in `killAfterNoProgressMs`, the parent kills it as hung. The threshold must exceed
-   the longest valid API call including backoff — see [`config.ts`](../apps/worker/src/config.ts).
-2. **The parent hard-kills** a child after `killAfterTotalRuntimeMs` no matter what, as a safety net
-   for hung attempts — see [`config.ts`](../apps/worker/src/config.ts).
-3. **A claim held too long is reaped, regardless of what its lease says.** `claimedCeilingMs` catches a
-   parent that keeps renewing a lease forever but never actually finishes the attempt — a failure
-   the other two defenses cannot, since both watch the *child*, and this parent's child may look
-   perfectly healthy. It is the second, independent predicate of the same sweep as defense 4, since
-   the parent this catches is by definition not going to catch itself. See
-   [`config.ts`](../apps/worker/src/config.ts).
-4. **Other workers reap**, in [`converge.ts`](../apps/worker/src/sweeps/converge.ts). The reaper exists for the
-   *row*, not the processes: the parent is PID 1 in its container, so killing it tears down the PID
-   namespace and takes every child with it, and the PaaS restarts the container — there is no
-   orphan class of process to worry about. What can happen is a container dying (e.g. OOM) and
-   leaving its claimed attempts stuck `processing`, with nobody left to reach a verdict and nothing
-   else to ever converge them. So, every worker proactively looks for `processing` attempts whose
-   lease has expired and marks them `failed('abandoned')` — see
-   [`converge.ts`](../apps/worker/src/sweeps/converge.ts). The notification sweep sends the email, on its
-   own schedule, once the row is terminal.
+A container can die (e.g. OOM) and leave its claimed attempts `processing`, with nobody left to
+reach a verdict. So every worker reaps: it marks any `processing` attempt whose lease has expired
+`failed('abandoned')`, in [`sweeps/converge.ts`](../apps/worker/src/sweeps/converge.ts).
 
 Reaping introduces a race: another parent can kill an attempt while the original parent, being
 hung, does not realize it. **All database updates to an analysis attempt must be written to
 tolerate this** — see the terminal-state and status invariants in
 [`packages/db/README.md`](../packages/db/README.md#the-analysis-attempt-state-machine).
 
-When the parent's own database calls fail, **only a zero-row guarded update means we lost the
-attempt**; an error means only that we still do not know.
-
-A *thrown* lease-renewal error skips that write, but the local no-progress and hard-ceiling
-checks still run — they read the clock and the progress file, not the database. A progress read
-that itself throws is the mirror image: it skips the renewal, and it skips the no-progress check
-it could not evaluate. But the two rules that read nothing but the clock — the hard ceiling and
-fencing — keep firing regardless, so an unreadable `progress.json` can never buy a child unbounded
-runtime.
-
-A parent that gives up on recording a verdict stops renewing the lease first, so reaping can
-still converge the attempt. Reasoning in
-[`apps/worker/src/failures.ts`](../apps/worker/src/failures.ts).
-
-*Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
-onto one medium: a parent whose database is down stops being able to answer "should I kill this
-child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
-
-*Rejected: excluding the reaper's own `worker_id` from the sweep.* A live parent already kills its
-own children locally, so the only case where the reap's own filter would matter is a parent that is
-alive but no longer directing — exactly when the reap should fire. Reaping one of our own costs
-nothing: the next lease renewal returns "lost" and the direct loop kills the child. See
-[`converge.ts`](../apps/worker/src/sweeps/converge.ts).
-
 ### Canceling
 
 The web server never writes `analysis_attempt.status`. Canceling writes `cancel_requested_at` on a
 non-terminal attempt, and a worker converges it to `canceled` — the owning parent on its next lease
-renewal, or the queue's cancel sweep if nobody has claimed it.
+renewal, or, if nobody has claimed it, the pending-attempt sweep in
+[`sweeps/converge.ts`](../apps/worker/src/sweeps/converge.ts).
 
 - **Deleting a report also writes `cancel_requested_at`**, in the same transaction as
   `report.deleted_at`. Soft-deleting on its own would not stop anything, because no worker reads
@@ -308,23 +210,14 @@ renewal, or the queue's cancel sweep if nobody has claimed it.
 
 ### Concurrency and scaling
 
-Three independent levers:
-
-| Lever | Effect |
-| --- | --- |
-| `ThreadPoolExecutor` inside `gbd_foodservice_insights` (`LLM_CONCURRENCY` in [`categorization/llm.py`](../python/insights/gbd_foodservice_insights/categorization/llm.py)) | Speeds up an *individual* attempt |
-| More child processes per worker (vertical) | More concurrent attempts; limited by CPU and memory contention |
-| More workers (horizontal) | More concurrent attempts |
-
-Note that `asyncio` is *not* the right tool inside `gbd_foodservice_insights`; use
-`ThreadPoolExecutor`.
-
-Every lever multiplies API load: `max concurrent API calls = workers × child processes × threads`.
-Watch upstream rate limits when tuning any of them. More workers, or more attempts per worker, also
-spend database connections from that same budget (see [Supabase](#supabase-database-auth-and-blob-store)).
-
-We will probably start with 2 workers, handling 4–6 concurrent attempts depending on whether each
-worker runs 2 or 3.
+The analysis is IO-bound — many API calls, light CPU, moderate memory, no GPU — so concurrency is
+cheap until it meets upstream rate limits. Concurrent API calls are the product of three levers:
+`WORKER_INSTANCES` ([`budget.ts`](../packages/db/src/budget.ts)) × `maxConcurrentAttempts`
+([`config.ts`](../apps/worker/src/config.ts)) × `LLM_CONCURRENCY`
+([`categorization/llm.py`](../python/insights/gbd_foodservice_insights/categorization/llm.py)).
+Watch the rate limits when tuning any of them. Each worker instance also holds its own
+connection pool, so adding one spends database connections from the budget in `budget.ts` (see
+[Supabase](#supabase-database-auth-and-blob-store)).
 
 ## Deployments
 
@@ -369,6 +262,11 @@ kills the old container outright. Two mitigations, both required:
   backwards compatible for as long as an old worker might still be running. `deploy.yml` deploys
   the worker at the commit the web runs, so only a rollback from the host's dashboard can leave the
   worker ahead.
+
+  When a change cannot stay compatible, an attempt says so: a worker claims only attempts whose
+  `required_contract_version` is at most its own `WORKER_CONTRACT_VERSION`
+  ([`queue.ts`](../apps/worker/src/attempt/queue.ts)), so an older worker leaves work it cannot do
+  in the queue for a newer one.
 - **The worker drains rather than dying.** The parent distinguishes `SIGTERM` from `SIGKILL` and
   gives an in-flight attempt `drainGraceMs` to finish before forcing it — see
   [`config.ts`](../apps/worker/src/config.ts) for the grace values and why they're sized the way they
@@ -571,7 +469,7 @@ handling.
 | Worker has trouble with Supabase or Supabase Storage | An error is never treated as a verdict. Loops absorb the failure and retry by ticking; processing a claimed attempt fails it as `infrastructure`; terminal writes get a bounded retry and are then re-attempted each tick until the database recovers, with reaping as the backstop. Records written after the verdict, such as the attempt's telemetry, get the bounded retry and are then logged and dropped. A claim statement Postgres *refuses* makes the worker drain and exit nonzero. Reasoning in `apps/worker/src/failures.ts` |
 | Web server or worker is overloaded | Host alerts on CPU, memory, and restarts (§ Alerts). There is no disk alert; a full disk surfaces as abandoned attempts, for reasons in `.do/worker.yaml` |
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
-| Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [Progress, leases, and reaping](#progress-leases-and-reaping) |
+| Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [`apps/worker/README.md`](../apps/worker/README.md#design) |
 | A third-party API rate limits us, e.g. OpenAI | The child retries with backoff, then fails as `upstream_api`; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk. Reasoning in `OpenAiLlmClient` (`python/insights/gbd_foodservice_insights/categorization/llm.py`) |
 | Workers cannot keep up with demand | Alert on attempts waiting too long to be claimed |
 | Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. Alert when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
