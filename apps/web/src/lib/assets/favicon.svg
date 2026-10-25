@@ -1,6 +1,5 @@
-<!-- A placeholder until GBD supplies the real mark (docs/requirements.md § Landing page). The two raster
-     copies in `static/` are generated from this file; after changing it, regenerate them from
-     `apps/web`:
+<!-- The two raster copies in `static/` are generated from this file; after changing it,
+     regenerate them from `apps/web`:
        rsvg-convert -w 32 -h 32 src/lib/assets/favicon.svg | magick - static/favicon.ico
        rsvg-convert -w 180 -h 180 -b '#234162' src/lib/assets/favicon.svg -o static/apple-touch-icon.png
      The touch icon is filled to the edge because iOS rounds its corners itself. -->

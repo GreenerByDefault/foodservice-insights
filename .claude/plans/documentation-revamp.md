@@ -12,12 +12,6 @@ The root README is already a front door with a map, and the TypeScript guide is
   § Auth, § Input file upload and validation, § Email and § Secrets management each restate one
   package's code, and the copies are wrong in places: `submission.ts` "is imported by the
   browser" (it is not; `inspect-file.ts` is).
-- **`docs/requirements.md` has drifted from the product** it now describes: the server "sends requests
-  to a Python worker" (it enqueues; the worker pulls), "CSRF protection tokens" (SvelteKit's origin
-  check), `HttpOnly` cookies (deliberately not, per docs/architecture.md § Auth), an audit list missing
-  five event kinds `apps/web/src/lib/server/audit.ts` records, an expired invite that "does not
-  redirect" (it does, for a user with no memberships), country-of-users as a nice-to-have (built
-  in #687), and two `TBD`s that should be greppable `**Open:**`.
 - **Some commands in the docs do not work as written**: `apps/worker/README.md`'s build command
   skips the `@gbd/*` packages it imports; `packages/email/README.md`'s example omits a required
   `reportName`.
@@ -54,15 +48,16 @@ code.
   the section they name, like any other reference.
 - **Runbooks are out of scope.** Another session owns `.claude/plans/runbooks.md` and where its
   entries land. The README's link into it (to the plan itself, "once it lands", since #693 dropped
-  the section it used to anchor on), `012_write_guard.ts`'s hint naming "Write to the
-  database by hand", and the architecture doc's "needs no runbook" line are left for that session. If it
-  chooses `docs/runbooks.md`, that fits the rule above.
+  the section it used to anchor on), `012_write_guard.ts`'s hint and `docs/requirements.md`
+  § Superadmin, which both name "Write to the database by hand" by title, and the architecture
+  doc's "needs no runbook" line are left for that session. If it chooses `docs/runbooks.md`, that
+  fits the rule above.
 - **Leave the go-live gaps to the go-live plans.** docs/architecture.md § Stack says Supabase Auth and
   Postmark while production still runs placeholder sign-in and the dropping email stub;
   `production-sign-in.md` and `email-provider.md` make that true within days, and `.do/README.md`
   already says so. Likewise § Alerts, § Logs and § Hosting, which `alerts.md`, `better-stack.md`
   and `custom-domain.md` rewrite: their headings stay, and this plan does not restructure them.
-- **Order.** The three PRs touch different files and can land in any order.
+- **Order.** The two PRs touch different files and can land in either order.
 - *Rejected: `docs/python.md` beside `docs/typescript.md`.* Symmetric, but it moves the Python
   guide out of the only directory that holds Python.
 - *Rejected: keeping ARCHITECTURE.md and REQUIREMENTS.md at the root.* Updating references is
@@ -100,28 +95,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   § The model is the fuller copy.
 - **§ File links**: drop "we can add download metrics later".
 
-## PR 2 — docs/requirements.md matches the product
-
-- § Processing: the server enqueues an attempt and a worker pulls it.
-- § File upload: a workbook may have many sheets; `apps/web/src/lib/reports/excel/sheets.ts`
-  picks which one is read.
-- § Roles: rows for retrying one's own report, and any report in the org (creator-or-admin, as
-  `lib/server/reports/guards.ts` checks).
-- § Superadmin: set by hand in the SQL editor through the write guard, naming the runbook entry
-  "Write to the database by hand" by title, as the database's own error hint does.
-- § Invite flow: an expired invite does redirect a user who belongs to no organization
-  (`_organizationsPageRedirect`).
-- § Audit trail: state the intent (who can see what, and every destructive action), name
-  `apps/web/src/lib/server/audit.ts` as the list, and say no authentication events are recorded.
-- § Security: SvelteKit's origin check, not CSRF tokens; cookies `Secure` and `SameSite`, and not
-  `HttpOnly`, for the reason in `docs/architecture.md` § Auth.
-- § Metrics: country of users is built; keep its privacy constraint as the requirement.
-- `**Open:**` for the landing page (a draft exists; GBD's copy and design are pending) and
-  account recovery (no script or runbook decided).
-- The opening's spec-era instruction ("When implementing … replace these docs with a link")
-  becomes the standing rule: a limit lives in code, and this file names its constant.
-
-## PR 3 — Package docs, and the code their errors pointed at
+## PR 2 — Package docs, and the code their errors pointed at
 
 - `python/lab/test_data/README.md`: rewrite to about 20 lines. What the dataset is and how it was
   anonymized, which lab step (by `python/lab/README.md`'s numbering) each file feeds, safe to
@@ -163,8 +137,8 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   name (`ARCHITECTURE.md` and `REQUIREMENTS.md` now appear only in frozen SQL and the check's
   own tests).
 - **Gates.** Every PR: `just lint`, since ruff formats Markdown repo-wide and it runs the doc
-  check. PRs that touch TypeScript or package scripts (1, 3): `pnpm lint && pnpm check &&
-  pnpm test`, in the background. PRs that touch Python (3): `just lint && just check && just
+  check. PRs that touch TypeScript or package scripts (1, 2): `pnpm lint && pnpm check &&
+  pnpm test`, in the background. PRs that touch Python (2): `just lint && just check && just
   test`, and for its marker removal, `--strict-markers` passing confirms nothing used them.
 - **Read-through.** Each moved section reads correctly where it landed, with no dangling "above"
   or "below".
