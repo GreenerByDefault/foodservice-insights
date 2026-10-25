@@ -6,8 +6,7 @@
  *
  * A workbook is converted to CSV here and judged as that CSV, which is why every rule, message
  * and date decision in `csv/` applies to a spreadsheet unchanged. The workbook rides along as a
- * second field for the server to store unopened — see docs/architecture.md § Input file upload and
- * validation.
+ * second field for the server to store unopened — see apps/web/README.md § Uploads.
  */
 
 import type { UnitSystem } from '@gbd/db';

@@ -41,8 +41,10 @@ keep settled decisions settled — read them before proposing a change.
 | Component | Language | Owns |
 | --- | --- | --- |
 | `apps/web` | TypeScript | Frontend, backend routes, upload validation, file links, invite and GBD-notice email |
-| Worker parent | TypeScript | Queue claiming, child process lifecycle, DB and blob store writes, email |
+| `apps/worker` | TypeScript | The worker parent: queue claiming, child process lifecycle, DB and blob store writes, result email |
+| `apps/grafana` | TypeScript | Dashboards, as files pushed to Grafana Cloud |
 | `packages/*` | TypeScript | Shared database, storage, email, and domain code |
+| `contract/` | JSON | The run directory the worker parent and child share |
 | `python/worker_child` | Python | One analysis run, via `gbd_foodservice_insights` |
 | `python/insights` | Python | The AI analysis library |
 | `python/lab` | Python | Data-science experiments. Ships nothing |
@@ -90,10 +92,8 @@ paid Team plan's roles restrict those. If anyone adds a Supabase MCP server, con
 
 ## Web app
 
-SvelteKit covers both the frontend and the backend, using its default rendering strategy:
-server-side rendering (SSR) for the first request, then client-side navigation (CSR) after
-hydration. Server-only code (`hooks.server.ts`, `+layout.server.ts`, `+page.server.ts`) runs on
-every navigation regardless of whether the client re-renders the page.
+SvelteKit covers both the frontend and the backend; how it renders is in
+[`apps/web/README.md`](../apps/web/README.md).
 
 **Database access, in both the web app and the worker, uses [Kysely](https://kysely.dev)**, a
 type-safe SQL builder: we write SQL directly in TypeScript. This gives predictable query
@@ -108,18 +108,9 @@ plain `fetch()` rather than form actions or remote functions — is in
 ## Auth
 
 Auth is entirely within `apps/web` — Supabase Auth on the client, a `handle()` hook that resolves
-the JWT into `locals` on the server. See [`apps/web/README.md`](../apps/web/README.md#auth) for the
-design.
-
-**A Content Security Policy is what stands between an XSS and a stolen session**, because the
-session cookie cannot be `HttpOnly`. See `kit.csp` in `apps/web/vite.config.ts` and
-`apps/web/src/lib/server/security-headers.ts`. Browsers report violations to `/csp-report`, which
-logs each one at `warn` as `CSP violation`.
-
-**Open:** validating sessions with `getClaims()` instead of `getUser()`, once the hosted project is
-confirmed on asymmetric signing keys. It checks the JWT locally, removing the round trip to Supabase
-Auth that every request — the poll endpoints included — pays today, at the cost of no longer
-noticing a deleted user before their token expires.
+the JWT into `locals` on the server. Nothing else reads a session. The design, and the Content
+Security Policy that guards the session cookie, are in
+[`apps/web/README.md`](../apps/web/README.md#auth).
 
 ## Client ↔ server
 
@@ -316,12 +307,7 @@ Refer to [`packages/storage/README.md`](../packages/storage/README.md) for the p
 We send email as HTTP requests to a provider, using emails generated in
 [`packages/email`](../packages/email) rather than a template stored with the provider. That keeps
 templates in version control and swappable across local mail catchers and providers alike.
-
-Locally, mail goes to [Mailpit](https://mailpit.axllent.org), a fake SMTP server with a web
-inbox, so nothing leaves the machine. `packages/email`'s own tests and e2e tests read that inbox
-for real.
-Every other test fakes the transport with an in-memory `recordingEmailer()`, asserting only that
-the right email was asked for.
+Locally, mail goes to [Mailpit](https://mailpit.axllent.org), so nothing leaves the machine.
 
 The provider is **Postmark**, chosen above all for deliverability
 ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/email-provider.md)).
@@ -333,20 +319,11 @@ Sign-in codes and email-change confirmations go through Supabase Auth, not us.
 
 ### Result notifications
 
-Sending the result email is not part of settling an attempt. A separate, derived sweep,
-[`sweeps/notifications.ts`](../apps/worker/src/sweeps/notifications.ts), computes which rows are
-"due" straight from `analysis_attempt` — terminal, not canceled, unsent, still has a requester,
-attempts remaining — rather than pushing a job onto a queue when an attempt finishes.
-
-A sweep claims due rows with a short-lived claim, which is what gives mutual exclusion between
-workers, then sends. `notification_attempts`, incremented by the claim, both caps the spend and
-turns the claim's own expiry into the backoff: bounded exponential, doubling from
-`notificationRetryBaseMs` each try. Its total window, and its floor against `@gbd/email`'s
-`SEND_TIMEOUT_MS`, are both checked in [`config.ts`](../apps/worker/src/config.ts).
-
-This is deliberately at-least-once, not at-most-once: a response lost after the provider accepted
-the email looks identical to a send that never went out, so an occasional duplicate is the
-tradeoff for never silently dropping one.
+Sending the result email is not part of settling an attempt. A separate sweep,
+[`sweeps/notifications.ts`](../apps/worker/src/sweeps/notifications.ts), derives which emails are
+due straight from `analysis_attempt`, rather than pushing a job onto a queue when an attempt
+finishes, and retries a failed send with bounded backoff. Its header says when an email is due,
+and why delivery is at-least-once.
 
 ## File links
 
@@ -359,33 +336,11 @@ Instead, **file links go through a lightweight public API on the web server.** T
 whether the file is still accessible, and if so issues a temporary signed URL from the blob store.
 The bucket stays private; our stable links are the only way in.
 
-Routing downloads through our server also means we can add server-side download metrics later.
-
 ## Input file upload and validation
 
-**The web server accepts only CSV**; the client converts XLSX to CSV before uploading with
-`read-excel-file`, taking care with Excel dates.
-[`apps/web/src/lib/reports/excel/`](../apps/web/src/lib/reports/excel/) owns that conversion, which
-tab of a workbook is read, and the reasoning behind both.
-
-**The original workbook travels as a second field and is stored without ever being opened** —
-sized, sniffed for `PK`, hashed, stored. Decompressing or parsing it server-side would move every
-zip- and XML-bomb risk out of the uploader's own tab and onto us, so the guard against those runs
-in the browser, in `excel/zip.ts`, against a cap in
-[`apps/web/src/lib/reports/limits.ts`](../apps/web/src/lib/reports/limits.ts). The upload's download
-link then hands back the file the user actually chose rather than a CSV they never saw.
-
-**A workbook the browser refuses is never sent**, so no workbook-specific rejection reaches
-`rejected_upload` and that table needs no new reason value for one.
-
-**The file is sent directly to the web server**, not through a presigned upload URL. At a 10MB
-cap the performance is fine, the server has to download the file for validation anyway, and it
-avoids the risk of a presigned URL accepting arbitrary bytes.
-
-**The web server fully validates before uploading to the blob store**, including security scans,
-so the worker does not need to re-validate exhaustively.
-[`apps/web/src/lib/reports/submission.ts`](../apps/web/src/lib/reports/submission.ts) decides what is
-accepted, and is imported by the browser as well, so the two cannot disagree.
+**The web server fully validates an upload before it reaches the blob store**, so the worker
+trusts its input rather than re-validating it. How the browser and the server split that work is
+in [`apps/web/README.md`](../apps/web/README.md#uploads).
 
 `gbd_foodservice_insights` is already written to reduce prompt injection risk — for example, all output
 belongs to a fixed set of values.
@@ -398,14 +353,9 @@ templated by `.env.example`. `.env.test` is committed because every value in it 
 GitHub Actions holds every production secret, for the migrate step and the push to Grafana Cloud
 in [`deploy.yml`](../.github/workflows/deploy.yml), and for the running apps, which receive theirs at
 deploy ([`.do/README.md`](../.do/README.md)) — only in the `production` Environment, which only
-`main` can deploy from, never as repo secrets.
+`main` can deploy from, never as repo secrets. Rotating one is in [`.do/README.md`](../.do/README.md).
 
-**Server config is read at runtime, not inlined at build time** — every variable in
-`apps/web/src/env.ts` is dynamic, never `static: true`. One build artifact therefore runs against
-any environment, and rotating a credential does not require a rebuild. The cost is that no server
-module may read config at the module-level while being imported.
-
-**Open:** no rotation process exists yet for suspected leaks.
+**Open:** a process for a suspected leak.
 
 ### Agent guardrails
 
@@ -471,23 +421,20 @@ handling.
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
 | Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [`apps/worker/README.md`](../apps/worker/README.md#design) |
 | A third-party API rate limits us, e.g. OpenAI | The child retries with backoff, then fails as `upstream_api`; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk. Reasoning in `OpenAiLlmClient` (`python/insights/gbd_foodservice_insights/categorization/llm.py`) |
-| Workers cannot keep up with demand | Alert on attempts waiting too long to be claimed |
-| Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. Alert when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
+| Workers cannot keep up with demand | **Open:** an alert on attempts waiting too long to be claimed |
+| Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. **Open:** alerts when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
 | Email is slow or down | The notification sweep retries a bounded number of times with exponential backoff (§ Result notifications), then gives up; delivery is best effort either way. Auth's own OTP email is a separate system this doesn't cover — **Open:** can we alert on that too? |
 | The blob store is down while uploading a completed attempt's results | The verdict parks rather than being discarded — the analysis work is already paid for. It resumes on later ticks for up to `uploadRetryBudgetMs`, then converts to `failed('infrastructure')` |
 | Database exhausts connections | Clients and the database periodically terminate connections, plus timeouts, to limit zombie connections. Use connection pools and cap the number of connections |
 
 Two alert queries name what "notifications are broken" means concretely, both against
 `analysis_attempt`: **gave up** is terminal, not `canceled`, unsent, and
-`notification_attempts >= 5`; **stuck** is the same query without the attempts clause, and with
+`notification_attempts >= maxNotificationAttempts` ([`config.ts`](../apps/worker/src/config.ts));
+**stuck** is the same query without the attempts clause, and with
 `finished_at < now() - interval '1 hour'` in its place.
 
 ## Data model
 
 The database is the coordination point between the web app and the worker: the queue, the
-analysis attempt state machine, and the audit trail all live there. A `report` is one accepted
-upload; it has exactly one `input_file` and one or more `analysis_attempt` rows, each of which
-produces `result_file` rows.
-
-The model is in [`packages/db/README.md`](../packages/db/README.md), which also names which file
-answers which question about the schema, including why it is shaped the way it is.
+analysis attempt state machine, and the audit trail all live there. The model is in
+[`packages/db/README.md`](../packages/db/README.md#the-model).

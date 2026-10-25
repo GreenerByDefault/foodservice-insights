@@ -3,6 +3,13 @@
 The SvelteKit app: frontend and backend together. For how it fits into the wider system, see
 [`docs/architecture.md`](../../docs/architecture.md).
 
+It renders the way SvelteKit does by default, as a
+[hybrid app](https://svelte.dev/docs/kit/glossary#Hybrid-app): the first request is rendered on
+the server, and later navigations render in the browser. Server code still runs on navigation:
+a `load` in a `+layout.server.ts` or `+page.server.ts` reruns on the server whenever its
+[dependencies change](https://svelte.dev/docs/kit/load#Rerunning-load-functions), passing through
+`hooks.server.ts` like any other request.
+
 ## Routes
 
 **An organization is a path segment**, `/orgs/[organizationSlug]` — its permanent, immutable
@@ -168,6 +175,29 @@ control that caused it is already gone, like signing out from the user menu.
 **One component renders both a client-side and a server-side rejection**: both narrow to
 `UploadRejection` in `src/lib/reports/rejection.ts`.
 
+## Uploads
+
+**The browser judges a file before sending it, and the server judges it again.** The browser's
+check is `src/lib/reports/inspect-file.ts`; the server's is `src/lib/reports/submission.ts`. They
+share `csv/normalize.ts` and the caps in `limits.ts`, so a file gets the same verdict on either
+side, and the server's is the one that counts.
+
+**The server accepts only CSV**; the browser converts a workbook to CSV first.
+`src/lib/reports/excel/` owns that conversion, which sheet is read, and the reasoning behind both.
+
+**The original workbook travels as a second field and is stored without ever being opened** —
+sized, sniffed for `PK`, hashed, stored. Decompressing or parsing it on the server would move
+every zip- and XML-bomb risk out of the uploader's own tab and onto us, so the guard against those
+runs in the browser, in `excel/zip.ts`. The download link then hands back the file the user
+actually chose rather than a CSV they never saw.
+
+**The server can still reject a workbook**, as `too_large` or `unparseable`, but has no
+workbook-specific reason: anything subtler the browser refused, and never sent.
+
+**The file is sent directly to the web server**, not through a presigned upload URL. At
+`MAX_UPLOAD_FIELD_BYTES` (`src/lib/reports/upload-limit.js`) the performance is fine, the server
+has to read the file to validate it anyway, and a presigned URL would accept arbitrary bytes.
+
 ## Auth
 
 The frontend uses Supabase Auth to log in, sign up, and log out. Supabase updates its own
@@ -201,8 +231,15 @@ Everything downstream of `identifyUser` is the same in both, signing out include
 already signed in to sign in again. `classifyAuthResult` in `identify.ts` maps every other
 `getUser()` answer.
 
-**The session cookie is not `HttpOnly`**, because the browser client has to read it; see
-[`docs/architecture.md` § Auth](../../docs/architecture.md#auth) for the CSP that compensates.
+**The session cookie is not `HttpOnly`**, because the browser client has to read it, so a Content
+Security Policy is what stands between an XSS and a stolen session. It is `kit.csp` in
+`vite.config.ts`, with the other headers in `src/lib/server/security-headers.ts`. Browsers report
+violations to `/csp-report`, which logs each one at `warn` as `CSP violation`.
+
+**Open:** validating sessions with `getClaims()` instead of `getUser()`, once the hosted project is
+confirmed on asymmetric signing keys. It checks the JWT locally, removing the round trip to Supabase
+Auth that every request — the poll endpoints included — pays today, at the cost of no longer
+noticing a deleted user before their token expires.
 
 **We do not embed custom claims in the JWT.** The server looks up claims from the database on each
 request instead, which is simpler and avoids stale-claim problems.
