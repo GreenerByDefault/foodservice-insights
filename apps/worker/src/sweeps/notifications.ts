@@ -7,6 +7,10 @@
  * `notification_email_sent_at`. The claim gives mutual exclusion between workers; leaving a
  * failed send's claim in place gives retry backoff for free. `notification_attempts`, incremented
  * by the claim, both caps the spend and makes the claim expiry exponential.
+ *
+ * Delivery is at-least-once, not at-most-once: a response lost after the provider accepted the
+ * email looks identical to a send that never went out, so an occasional duplicate is the price of
+ * never silently dropping one.
  */
 
 import type { Logger } from '@gbd/core/log';

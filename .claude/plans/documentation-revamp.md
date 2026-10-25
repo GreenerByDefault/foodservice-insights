@@ -4,14 +4,10 @@
 
 The docs' structure dates from the project's first weeks, when the root README was the only
 guide and the architecture doc was partly a spec. The product is now built and close to go-live.
-The root README is already a front door with a map, and the TypeScript guide is
-`docs/typescript.md`; what remains no longer fits:
+The root README is already a front door with a map, the TypeScript guide is
+`docs/typescript.md`, and `docs/architecture.md` keeps to cross-component facts, leaving each
+package's detail to that package's doc. What remains no longer fits:
 
-- **`docs/architecture.md` still carries detail one package owns, and that copy has drifted.**
-  § Worker already keeps only the seams, its design now in `apps/worker/README.md` § Design. But
-  § Auth, § Input file upload and validation, § Email and § Secrets management each restate one
-  package's code, and the copies are wrong in places: `submission.ts` "is imported by the
-  browser" (it is not; `inspect-file.ts` is).
 - **Some commands in the docs do not work as written**: `apps/worker/README.md`'s build command
   skips the `@gbd/*` packages it imports; `packages/email/README.md`'s example omits a required
   `reportName`.
@@ -57,45 +53,12 @@ code.
   `production-sign-in.md` and `email-provider.md` make that true within days, and `.do/README.md`
   already says so. Likewise § Alerts, § Logs and § Hosting, which `alerts.md`, `better-stack.md`
   and `custom-domain.md` rewrite: their headings stay, and this plan does not restructure them.
-- **Order.** The two PRs touch different files and can land in either order.
 - *Rejected: `docs/python.md` beside `docs/typescript.md`.* Symmetric, but it moves the Python
   guide out of the only directory that holds Python.
 - *Rejected: keeping ARCHITECTURE.md and REQUIREMENTS.md at the root.* Updating references is
   mechanical, and with them in `docs/` the folder has an obvious charter.
 
-## PR 1 — The rest of docs/architecture.md keeps to cross-component facts
-
-Each section whose subject is one package moves to that package's doc, leaving a line and a
-pointer; nothing in § Alerts, § Logs or § Hosting changes.
-
-- **§ Web app**: drop the SSR/CSR paragraph (SvelteKit's default, in no way ours); keep Kysely,
-  which both apps use.
-- **§ Auth → `apps/web/README.md` § Auth**: the CSP paragraph and the `getClaims()` **Open**. The
-  section keeps two lines and the pointer; `apps/web/README.md`'s link back for the CSP becomes a
-  link within the file.
-- **§ Input file upload and validation → `apps/web/README.md` § Uploads** (new), fixed: the
-  browser imports `inspect-file.ts`, which shares `csv/normalize.ts` and `limits.ts` with
-  `submission.ts`; the server can reject a workbook, as `too_large` or `unparseable`, with no
-  workbook-specific reason; the "10MB" becomes `upload-limit.js`'s constant. What stays in
-  architecture is the seam: the web server fully validates before the blob store, so the worker
-  trusts its input. The three code comments citing the section move with it.
-- **§ Email**: drop the testing paragraph (`packages/email/README.md` § Testing) and the
-  backoff detail and due-row list (`sweeps/notifications.ts`'s header, which also has the
-  soft-deleted condition the doc's list lacked). The at-least-once trade-off moves into that
-  header, the one thing the code does not say.
-- **§ Secrets management**: drop the runtime-config paragraph, a third copy of `apps/web/src/env.ts`'s
-  header and § Images. The rotation **Open** becomes "**Open:** a process for a suspected leak";
-  rotating is `.do/README.md`'s.
-- **§ Components**: add `apps/grafana` and `contract/`, and name `apps/worker`.
-- **§ Failure modes**: rows promising alerts that do not exist yet ("attempts waiting too long",
-  "failing attempts exceed a threshold") say **Open:**, per `alerts.md`'s rule that docs never
-  promise an alert; the "gave up" query names `maxNotificationAttempts` instead of `5`.
-  `alerts.md` rewrites these rows when the alerts land.
-- **§ Data model**: the coordination-point sentence and the pointer; `packages/db/README.md`
-  § The model is the fuller copy.
-- **§ File links**: drop "we can add download metrics later".
-
-## PR 2 — Package docs, and the code their errors pointed at
+## PR 1 — Package docs, and the code their errors pointed at
 
 - `python/lab/test_data/README.md`: rewrite to about 20 lines. What the dataset is and how it was
   anonymized, which lab step (by `python/lab/README.md`'s numbering) each file feeds, safe to
@@ -120,7 +83,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 - `contract/README.md`: stop listing `contract.json`'s keys (the list misses three); say it holds
   every name both sides must agree on.
 - `.claude/rules/web.md`: one line pointing at `apps/web/README.md` as this app's design (routes,
-  API calls, forms, errors, auth, writes), the way `db.md` points at `packages/db/README.md`. No
+  API calls, forms, errors, uploads, auth, writes), the way `db.md` points at `packages/db/README.md`. No
   rule routes an agent there today.
 - Comments that cite docs wrongly: `apps/worker/src/attempt/queue.ts:99,110` (`reaper.ts` →
   `sweeps/converge.ts`); `apps/web/e2e/reports/reconnect.e2e.ts:6` ("`README.md` § Routes" →
@@ -132,13 +95,11 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 
 ## Verification
 
-- **Links.** `scripts/ci/check_doc_links.py` passes after every PR. It covers comment citations
-  too, but not a doc named without `§`, so a later move still wants a `git grep` for the old
-  name (`ARCHITECTURE.md` and `REQUIREMENTS.md` now appear only in frozen SQL and the check's
-  own tests).
-- **Gates.** Every PR: `just lint`, since ruff formats Markdown repo-wide and it runs the doc
-  check. PRs that touch TypeScript or package scripts (1, 2): `pnpm lint && pnpm check &&
-  pnpm test`, in the background. PRs that touch Python (2): `just lint && just check && just
-  test`, and for its marker removal, `--strict-markers` passing confirms nothing used them.
-- **Read-through.** Each moved section reads correctly where it landed, with no dangling "above"
-  or "below".
+- **Links.** `scripts/ci/check_doc_links.py` passes. It covers comment citations too, but not a
+  doc named without `§`, so a move still wants a `git grep` for the old name (`ARCHITECTURE.md`
+  and `REQUIREMENTS.md` now appear only in frozen SQL and the check's own tests).
+- **Gates.** `just lint && just check && just test`, and for the marker removal,
+  `--strict-markers` passing confirms nothing used them. `pnpm lint && pnpm check && pnpm test`
+  in the background, for the TypeScript comments and package scripts.
+- **Read-through.** Each rewritten doc reads correctly on its own, with no dangling "above" or
+  "below".

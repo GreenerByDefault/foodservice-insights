@@ -286,7 +286,7 @@ Follow security best practices for web development.
 - Protect against CSRF with SvelteKit's origin check.
 - Sanitize and encode user inputs to prevent XSS.
 - Set cookies `Secure` and `SameSite`. The session cookie is not `HttpOnly`, for the reason in
-  [`docs/architecture.md` § Auth](architecture.md#auth).
+  [`apps/web/README.md` § Auth](../apps/web/README.md#auth).
 
 ### Abuse limits
 
