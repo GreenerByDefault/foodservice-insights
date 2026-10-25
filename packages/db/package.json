@@ -14,7 +14,6 @@
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
-    "test": "pnpm run test:unit",
     "migrate": "node scripts/migrate.ts",
     "seed:identity": "node scripts/seed-identity.ts",
     "seed:history": "node scripts/seed-history.ts",

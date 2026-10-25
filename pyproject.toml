@@ -61,7 +61,7 @@ allowed-confusables = ["×", "–", "ℹ"]
 [tool.pytest.ini_options]
 minversion = "9"
 addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
-testpaths = ["python"]
+testpaths = ["python", "scripts"]
 # `worker_child`'s tests import shared helpers from `tests/support/`, and
 # `--import-mode=importlib` puts nothing on `sys.path` by itself. This makes `support`
 # importable in every test session, so no other test directory may claim that name. The CI

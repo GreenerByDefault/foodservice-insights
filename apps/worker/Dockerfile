@@ -9,7 +9,8 @@
 # Python builder
 # ------------------------------------------------------
 FROM registry.access.redhat.com/ubi10/python-314-minimal:latest AS python-builder
-COPY --from=ghcr.io/astral-sh/uv@sha256:8b940d3a9d65bed080436972241af2e21c84b5e8c9193f7014ed71479ee795ff /uv /usr/bin/uv
+# Dependabot bumps this; match .github/actions/setup-python/action.yml's uv version by hand.
+COPY --from=ghcr.io/astral-sh/uv:0.12.9@sha256:8b940d3a9d65bed080436972241af2e21c84b5e8c9193f7014ed71479ee795ff /uv /usr/bin/uv
 
 # Base image default is uid 1001; root only for writing /opt/venv (COPY below always writes as
 # root, and this stage's output is copied out by path rather than run).

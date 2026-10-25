@@ -151,13 +151,6 @@ catalogs:
       specifier: ^2.9.1
       version: 2.9.1
 
-overrides:
-  brace-expansion@5: ^5.0.12
-  cookie@<0.7.0: ^0.7.0
-  devalue@<5.9.3: ^5.9.3
-  nanoid@3: ^3.3.18
-  source-map-js@<1.2.2: ^1.2.2
-
 patchedDependencies:
   bits-ui@2.19.5: c6df5bb33730a72deea7726c02bc1adede79e7d73da76852ddcf913415e8b152
 
@@ -351,12 +344,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
-      '@types/pg':
-        specifier: 'catalog:'
-        version: 8.23.1
-      pg:
-        specifier: 'catalog:'
-        version: 8.23.1
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -521,9 +508,6 @@ importers:
       '@gbd/email':
         specifier: workspace:*
         version: link:../../packages/email
-      '@gbd/storage':
-        specifier: workspace:*
-        version: link:../../packages/storage
       '@gbd/web':
         specifier: workspace:*
         version: link:../../apps/web
@@ -1636,8 +1620,8 @@ packages:
   ms@2.1.2:
     resolution: {integrity: sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==}
 
-  nanoid@3.3.19:
-    resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
+  nanoid@3.3.20:
+    resolution: {integrity: sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -3197,7 +3181,7 @@ snapshots:
 
   ms@2.1.2: {}
 
-  nanoid@3.3.19: {}
+  nanoid@3.3.20: {}
 
   neo-async@2.6.2: {}
 
@@ -3336,7 +3320,7 @@ snapshots:
 
   postcss@8.5.31:
     dependencies:
-      nanoid: 3.3.19
+      nanoid: 3.3.20
       picocolors: 1.1.1
       source-map-js: 1.2.2
 

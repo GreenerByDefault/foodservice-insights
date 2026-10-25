@@ -12,7 +12,6 @@
     "@gbd/core": "workspace:*",
     "@gbd/db": "workspace:*",
     "@gbd/email": "workspace:*",
-    "@gbd/storage": "workspace:*",
     "@gbd/web": "workspace:*",
     "@gbd/worker": "workspace:*",
     "@playwright/test": "catalog:",

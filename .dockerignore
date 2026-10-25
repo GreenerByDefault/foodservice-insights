@@ -7,3 +7,6 @@
 **/dist
 **/__pycache__
 .venv
+
+# GBD's private cache, never committed. Hatchling ships every file in `data_files/`.
+**/data_files/previously_*.csv

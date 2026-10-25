@@ -40,6 +40,7 @@ catalog:
   clsx: ^2.1.1
   tailwind-merge: ^3.7.0
   tailwind-variants: ^3.3.1
+  # Only here because bits-ui peer-depends on it; our own code never imports it.
   '@internationalized/date': ^3.12.4
   # Transitive deps of bits-ui; direct because our own code (the ported file-drop-zone) imports
   # them too.
@@ -108,24 +109,11 @@ peerDependencyRules:
   allowedVersions:
     runed>@sveltejs/kit: '3'
 
-# pnpm 11 blocks very-recently-published packages by default; exceptions go here.
-# Drop an entry once the version is no longer new.
-minimumReleaseAgeExclude:
-  - shadcn-svelte@1.5.0
-
-# Fix for https://github.com/huntabyte/bits-ui/pull/2166.
+# PinInput's deferred selection sync. Upstream closed https://github.com/huntabyte/bits-ui/pull/2166
+# unmerged, so drop this once bits-ui's changelog mentions that fix by another route.
 patchedDependencies:
   bits-ui@2.19.5: patches/bits-ui@2.19.5.patch
 # bits-ui is only a dependency of @gbd/web, so `pnpm deploy --filter @gbd/worker` (apps/worker's
 # Dockerfile) prunes it out of scope entirely — pnpm would otherwise treat the patch above as
 # unused and fail that deploy.
 allowUnusedPatches: true
-
-# Security floors for transitive deps whose parents have not yet bumped them. Drop an entry once
-# the lockfile resolves past it without help (`pnpm audit` is clean).
-overrides:
-  brace-expansion@5: ^5.0.12
-  cookie@<0.7.0: ^0.7.0
-  devalue@<5.9.3: ^5.9.3
-  nanoid@3: ^3.3.18
-  source-map-js@<1.2.2: ^1.2.2

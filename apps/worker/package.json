@@ -8,8 +8,7 @@
     "dev": "node --watch --watch-path=src src/main.ts",
     "check": "tsc --noEmit",
     "start": "node dist/main.js",
-    "test:unit": "TEST_DB=1 vitest run",
-    "test": "pnpm run test:unit"
+    "test:unit": "TEST_DB=1 vitest run"
   },
   "dependencies": {
     "@gbd/core": "workspace:*",
@@ -21,8 +20,6 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@types/pg": "catalog:",
-    "pg": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "yaml": "catalog:"
