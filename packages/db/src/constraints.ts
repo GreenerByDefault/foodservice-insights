@@ -23,6 +23,11 @@ export const MAX_ORGANIZATION_SLUG_LENGTH = 48;
  * inside the b-tree's limit. */
 export const MAX_CACHE_KEY_BYTES = 2000;
 
+/** A character a cache table's key may not hold, `*_product_no_invisible_characters`: a control
+ * character, or a format character that renders as nothing, such as a zero-width space. */
+export const INVISIBLE_KEY_CHARACTER =
+  /[\p{Cc}\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]/u;
+
 /** What an organization's slug may look like, `organization_slug_format`: lowercase alphanumerics,
  * hyphen-separated, no leading, trailing, or doubled hyphen. */
 export const ORGANIZATION_SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;

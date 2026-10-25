@@ -41,6 +41,11 @@ MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 UUID_PATTERN = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 # The `analysis_attempt_llm_usage_*_model_format` CHECKs.
 MODEL_PATTERN = re.compile(r"[a-z0-9][a-z0-9._:-]{0,99}")
+# The cache tables' `*_product_no_invisible_characters` CHECKs.
+INVISIBLE_PRODUCT_CHARACTER = re.compile(
+    r"[\x00-\x1f\x7f-\x9f\xad\u061c\u180e\u200b-\u200f"
+    r"\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]"
+)
 # Every count in `telemetry.json` lands in a Postgres `integer`.
 MAX_POSTGRES_INTEGER: Final = 2**31 - 1
 
@@ -195,6 +200,10 @@ def _new_categorization_payload(row: NewCategorization) -> dict[str, Any]:
     _require(
         row.product and row.product == row.product.strip(),
         f"product {row.product!r} is blank or has surrounding whitespace",
+    )
+    _require(
+        not INVISIBLE_PRODUCT_CHARACTER.search(row.product),
+        f"product {row.product!r} has a control or invisible format character",
     )
     _require(
         len(row.product.encode("utf-8")) <= MAX_PRODUCT_BYTES,

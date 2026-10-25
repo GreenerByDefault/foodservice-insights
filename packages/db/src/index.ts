@@ -11,6 +11,7 @@ export {
   shutdownDatabase,
 } from './client.ts';
 export {
+  INVISIBLE_KEY_CHARACTER,
   MAX_ANALYSIS_ATTEMPTS,
   MAX_CACHE_KEY_BYTES,
   MAX_DISPLAY_NAME_LENGTH,

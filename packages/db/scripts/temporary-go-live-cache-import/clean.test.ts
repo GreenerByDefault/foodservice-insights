@@ -73,11 +73,52 @@ describe('cleanProductCategorizations', () => {
 
   test("strips the product as Python's str.strip does, not as JavaScript's trim", () => {
     const cleaned = cleanProductCategorizations(
-      records(product('\x1cSteak\x85', 'Beef'), product('Ham\ufeff', 'Beef')),
+      records(product('\x1cSteak\x85', 'Beef')),
       VOCABULARY,
     );
 
-    expect(cleaned.rows.map((row) => row.product)).toEqual(['Steak', 'Ham\ufeff']);
+    expect(cleaned.rows.map((row) => row.product)).toEqual(['Steak']);
+  });
+
+  test('removes invisible characters from the product before stripping it', () => {
+    const cleaned = cleanProductCategorizations(
+      records(
+        product('Chilli Con Carne\u200b', 'beef'),
+        product('\ufeff Ham\u00adhock\u200b ', 'Beef'),
+        product('Steak\u00a0Pie', 'Beef'),
+      ),
+      VOCABULARY,
+    );
+
+    expect(cleaned).toEqual({
+      rows: [
+        { product: 'Chilli Con Carne', category: 'Beef', cleanedName: null },
+        { product: 'Hamhock', category: 'Beef', cleanedName: null },
+        // A no-break space is visible, and an upload may hold one.
+        { product: 'Steak\u00a0Pie', category: 'Beef', cleanedName: null },
+      ],
+      skipped: [],
+      rewritten: [
+        { line: 2, reason: 'removed invisible U+200B from product' },
+        { line: 2, reason: 'category "beef" imported as "Beef"' },
+        { line: 3, reason: 'removed invisible U+FEFF, U+00AD, U+200B from product' },
+      ],
+      refused: [],
+    });
+  });
+
+  test('keeps the last of two products that differ only in an invisible character', () => {
+    const cleaned = cleanProductCategorizations(
+      records(product('Ham', 'Beef'), product('Ham\u200b', NO_MATCHES_FOUND)),
+      VOCABULARY,
+    );
+
+    expect(cleaned.rows).toEqual([
+      { product: 'Ham', category: NO_MATCHES_FOUND, cleanedName: null },
+    ]);
+    expect(cleaned.skipped).toEqual([
+      { line: 2, reason: 'repeated later with a different category' },
+    ]);
   });
 
   test('imports a blank cleaned name as null', () => {
@@ -147,15 +188,21 @@ describe('cleanProductCategorizations', () => {
     });
   });
 
-  test('refuses an unknown category and an over-long product', () => {
+  test('refuses an unknown category, an over-long product and a line break in one', () => {
     const cleaned = cleanProductCategorizations(
-      records(product('Milk', 'Mlik'), product(OVER_LONG_KEY, 'Beef'), product('Steak', 'Beef')),
+      records(
+        product('Milk', 'Mlik'),
+        product(OVER_LONG_KEY, 'Beef'),
+        product('Steak\nPie', 'Beef'),
+        product('Steak', 'Beef'),
+      ),
       VOCABULARY,
     );
 
     expect(cleaned.refused).toEqual([
       { line: 2, reason: 'unknown category "Mlik"' },
       { line: 3, reason: `key of 2001 bytes, over the ${MAX_CACHE_KEY_BYTES}-byte limit` },
+      { line: 4, reason: 'a control character, such as a line break, in product' },
     ]);
   });
 });
@@ -187,6 +234,17 @@ describe('cleanEntreeClassifications', () => {
       rewritten: [],
       refused: [],
     });
+  });
+
+  test('removes invisible characters from the product', () => {
+    const cleaned = cleanEntreeClassifications(records(entree('Chilli Con Carne\u200b', 'entree')));
+
+    expect(cleaned.rows).toEqual([
+      { product: 'Chilli Con Carne', classification: 'entree', cleanedName: null },
+    ]);
+    expect(cleaned.rewritten).toEqual([
+      { line: 2, reason: 'removed invisible U+200B from product' },
+    ]);
   });
 
   test('normalizes a label the way the lab does', () => {
