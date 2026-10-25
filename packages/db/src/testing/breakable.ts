@@ -7,32 +7,10 @@
 
 import { type AddressInfo, connect, createServer, type Server, type Socket } from 'node:net';
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
+import type { Breakable } from '@gbd/core/testing';
 import type { Kysely } from 'kysely';
 import { initializeDatabase, shutdownDatabase } from '../client.ts';
 import type { Database } from '../schema.ts';
-
-export type Breakable<T> = {
-  readonly service: T;
-  /** Make every subsequent request fail, as though the real service had gone down. */
-  break(): void;
-  /** Let requests reach the real service again. The pool or SDK client on top reconnects on its
-   * own, the same way it would after a real network blip. */
-  restore(): void;
-  close(): Promise<void>;
-};
-
-/** Open a `Breakable`, run `body` against it, and close it whether `body` throws or not. */
-export async function withBreakable<S>(
-  open: () => Promise<Breakable<S>>,
-  body: (breakable: Breakable<S>) => Promise<void>,
-): Promise<void> {
-  const breakable = await open();
-  try {
-    await body(breakable);
-  } finally {
-    await breakable.close();
-  }
-}
 
 type TcpProxy = {
   readonly port: number;

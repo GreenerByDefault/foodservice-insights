@@ -1,5 +1,6 @@
 import { DAY_MS } from '@gbd/core';
 import { insertOrganizationInvite, withRollback } from '@gbd/db/testing';
+import { aTestEmailAddress } from '@gbd/email/testing';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Actor } from '#lib/server/auth/types.js';
 import { database } from '#lib/server/db.js';
@@ -166,7 +167,7 @@ describe('_createInvite', () => {
       for (let i = 0; i < HOURLY_INVITE_LIMIT; i++) {
         await insertOrganizationInvite(transaction, {
           organizationId,
-          email: `${crypto.randomUUID()}@example.test`,
+          email: aTestEmailAddress('create-invite'),
           invitedByUserId: admin,
         });
       }

@@ -1,5 +1,6 @@
 <script lang="ts">
-import { FIELD, MAX_DISPLAY_NAME_LENGTH } from '#lib/account/display-name.js';
+import { MAX_DISPLAY_NAME_LENGTH } from '@gbd/db/constraints';
+import { FIELD } from '#lib/account/display-name.js';
 import { renameSelf } from '#lib/account/api/rename-self.js';
 import { Button } from '#lib/components/ui/button/index.js';
 import * as Field from '#lib/components/ui/field/index.js';

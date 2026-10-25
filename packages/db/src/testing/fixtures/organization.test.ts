@@ -1,9 +1,9 @@
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { dbMsAgo } from '../../clock.ts';
 import { DATABASE } from '../../env.ts';
 import { withRollback } from '../transactions.ts';
 import { insertOrganization, insertOrganizationInvite } from './organization.ts';
-import { dbMsAgo } from './values.ts';
 
 describe('insertOrganization', () => {
   test('backdates createdAt', async () => {

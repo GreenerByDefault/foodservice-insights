@@ -52,6 +52,7 @@
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import * as path from 'node:path';
+import { RUN_STALE_AFTER_MS } from '@gbd/core/testing';
 import { Client, DatabaseError } from 'pg';
 import { initializeDatabase, shutdownDatabase } from '../client.ts';
 import { migrateToLatest } from '../migrate.ts';
@@ -72,11 +73,6 @@ const SUPERUSER_PASSWORD = 'postgres';
  * same time.
  */
 const TEMPLATE_LOCK_KEY = 847_362_910_147n;
-
-/** How long a run database may exist before the sweep considers it abandoned. Long enough that no
- * still-running Playwright suite could own one — see `sweepStaleFixtures` for the same bound
- * applied to fixture rows. */
-const RUN_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
 /** How long a template's staging database (`..._building_<timestamp>_<suffix>`) may exist before
  * the sweep considers its build abandoned. Much shorter than `RUN_STALE_AFTER_MS`: a real build is

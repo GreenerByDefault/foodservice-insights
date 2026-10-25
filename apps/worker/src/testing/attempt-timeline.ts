@@ -5,8 +5,7 @@
  * columns a test needs to overtake is what gives them somewhere to move from.
  */
 
-import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
-import { msAgo } from '../sql.ts';
+import { type AnalysisAttemptId, type DatabaseExecutor, dbMsAgo } from '@gbd/db';
 
 /** How far in the past (in milliseconds) each column should land. Unset columns default to the
  * next one along, so passing only `renewedAgo` backdates `created_at`/`claimed_at`/
@@ -39,16 +38,16 @@ export async function backdateAttemptTimeline(
   await db
     .updateTable('analysisAttempt')
     .set({
-      createdAt: msAgo(createdAgo),
-      claimedAt: msAgo(claimedAgo),
-      leaseRenewedAt: msAgo(renewedAgo),
+      createdAt: dbMsAgo(createdAgo),
+      claimedAt: dbMsAgo(claimedAgo),
+      leaseRenewedAt: dbMsAgo(renewedAgo),
       // Unlike the three above, only set when named: every reaper test backdates a `processing`
       // attempt, whose finished_at must stay NULL.
       ...(offsets.finishedAgo !== undefined || offsets.notificationClaimedAgo !== undefined
-        ? { finishedAt: msAgo(finishedAgo) }
+        ? { finishedAt: dbMsAgo(finishedAgo) }
         : {}),
       ...(offsets.notificationClaimedAgo !== undefined
-        ? { notificationClaimedAt: msAgo(notificationClaimedAgo) }
+        ? { notificationClaimedAt: dbMsAgo(notificationClaimedAgo) }
         : {}),
     })
     .where('id', '=', attemptId)

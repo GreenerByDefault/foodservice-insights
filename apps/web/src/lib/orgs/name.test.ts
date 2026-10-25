@@ -1,15 +1,11 @@
-import { MAX_ORGANIZATION_NAME_LENGTH as DB_MAX_ORGANIZATION_NAME_LENGTH } from '@gbd/db';
+import { MAX_ORGANIZATION_NAME_LENGTH } from '@gbd/db/constraints';
 import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
-import { MAX_ORGANIZATION_NAME_LENGTH, OrganizationNameSchema } from './name.ts';
+import { OrganizationNameSchema } from './name.ts';
 
 function parse(name: unknown) {
   return v.safeParse(OrganizationNameSchema, name);
 }
-
-test('MAX_ORGANIZATION_NAME_LENGTH mirrors @gbd/db, since this file cannot import it directly', () => {
-  expect(MAX_ORGANIZATION_NAME_LENGTH).toBe(DB_MAX_ORGANIZATION_NAME_LENGTH);
-});
 
 describe('OrganizationNameSchema', () => {
   test('trims it', () => {

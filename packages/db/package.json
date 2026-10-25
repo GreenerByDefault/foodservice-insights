@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./constraints": "./dist/constraints.js",
     "./env": "./dist/env.js",
     "./seed": "./dist/seed.js",
     "./testing": "./dist/testing/index.js"

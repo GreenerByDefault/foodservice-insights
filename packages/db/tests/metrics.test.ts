@@ -6,13 +6,12 @@ import { type RawBuilder, sql, type Transaction } from 'kysely';
 import { afterAll, describe, expect, test } from 'vitest';
 import { METRICS_READER_CONNECTION_LIMIT } from '../src/budget.ts';
 import { initializeDatabase, shutdownDatabase } from '../src/client.ts';
+import { DB_NOW, dbMsAgo } from '../src/clock.ts';
 import { DATABASE } from '../src/env.ts';
 import type { UsersId } from '../src/generated/auth/Users.ts';
 import type { Database } from '../src/schema.ts';
 import { expectConstraintViolation } from '../src/testing/constraints.ts';
 import {
-  DB_NOW,
-  dbMsAgo,
   FINISHED_RUN_TELEMETRY,
   insertAnalysisAttempt,
   insertAppUser,

@@ -25,6 +25,7 @@ import { lookup } from 'node:dns/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { requireEnv } from '@gbd/core/env';
+import { RUN_STALE_AFTER_MS } from '@gbd/core/testing';
 
 const execFileAsync = promisify(execFile);
 
@@ -54,10 +55,6 @@ const STARTED_LABEL = 'gbd-system-e2e-started';
  * worktree's live container: the owner of a live one is still running.
  */
 const OWNER_LABEL = 'gbd-system-e2e-owner-pid';
-
-/** Matches `sweepStaleRunDatabases`. The backstop for a container whose owning pid has been
- * recycled, or which was started on a different machine than the one sweeping. */
-const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
 /** Set by `test-run.ts` for the Playwright child, and the thing `assertBuiltContainerImages`
  * looks for. */
@@ -387,7 +384,9 @@ async function labelled(subcommand: 'ps' | 'images', format: string): Promise<st
 function isStale(startedAt: string): boolean {
   const started = Number(startedAt);
   if (Number.isNaN(started) || started === 0) return false;
-  return Date.now() - started > STALE_AFTER_MS;
+  // The backstop for a container whose owning pid has been recycled, or which was started on a
+  // different machine than the one sweeping.
+  return Date.now() - started > RUN_STALE_AFTER_MS;
 }
 
 /** Whether the harness that started a container is still running. `EPERM` means the pid exists

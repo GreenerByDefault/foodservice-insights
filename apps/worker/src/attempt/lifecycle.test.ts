@@ -8,10 +8,9 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import type { Logger } from '@gbd/core/log';
-import { collectingLogger } from '@gbd/core/testing';
+import { type Breakable, collectingLogger } from '@gbd/core/testing';
 import type { AnalysisAttemptId } from '@gbd/db';
 import {
-  type Breakable,
   breakableDatabase,
   insertProductCategorization,
   readAnalysisAttemptRow,

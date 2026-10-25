@@ -4,11 +4,8 @@ import { Button } from '#lib/components/ui/button/index.js';
 import * as Field from '#lib/components/ui/field/index.js';
 import { Input } from '#lib/components/ui/input/index.js';
 import { MIN_NAME_LENGTH } from '#lib/forms/validation.js';
-import {
-  FIELD,
-  MAX_ORGANIZATION_NAME_LENGTH,
-  type OrganizationNameFailure,
-} from '#lib/orgs/name.js';
+import { MAX_ORGANIZATION_NAME_LENGTH } from '@gbd/db/constraints';
+import { FIELD, type OrganizationNameFailure } from '#lib/orgs/name.js';
 
 interface Props {
   initialName: string;

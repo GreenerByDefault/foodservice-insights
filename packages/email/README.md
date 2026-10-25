@@ -41,7 +41,7 @@ test asserts on `kind` and `to` and leaves the copy to this package.
 
 This package's own tests, along with all e2e tests, prove the Mailpit transport for real instead of faking
 it. Every test addresses its mail to `aTestEmailAddress()`, a random recipient nothing else in the
-suite will use, and reads the mailbox back with `waitForEmail`/`waitForEmails`.
+suite will use, and reads the mailbox back with `waitForEmail`.
 
 ## Previewing
 

@@ -1,4 +1,5 @@
 import type { RawBuilder } from 'kysely';
+import { DB_NOW } from '../../clock.ts';
 import type { UsersId } from '../../generated/auth/Users.ts';
 import type { AnalysisAttempt, AnalysisAttemptId } from '../../generated/public/AnalysisAttempt.ts';
 import type {
@@ -14,7 +15,7 @@ import type { ResultFile } from '../../generated/public/ResultFile.ts';
 import type ResultFileKind from '../../generated/public/ResultFileKind.ts';
 import type { DatabaseExecutor } from '../../schema.ts';
 import { insertReport } from './report.ts';
-import { aChecksum, DB_NOW } from './values.ts';
+import { aChecksum } from './values.ts';
 
 /** An attempt in `status`, with whatever other columns make it a state the app can actually
  * produce:

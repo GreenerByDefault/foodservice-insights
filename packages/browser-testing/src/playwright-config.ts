@@ -35,15 +35,10 @@ export type CreatePlaywrightConfigOptions = {
     /** Replaces the default `node start.js`. A caller that starts the app some other way — e.g.
      * `tests/e2e`, which runs it as a container — supplies its own here.
      *
-     * **`env` below does not reach a command that is only a launcher.** Playwright sets it on the
-     * process it spawns, so for a `docker run` it lands on the CLI rather than in the container:
-     * such a command has to carry `PORT`, `PROTOCOL_HEADER` and the rest itself. */
+     * **The shared `webServer.env` does not reach a command that is only a launcher.** Playwright
+     * sets it on the process it spawns, so for a `docker run` it lands on the CLI rather than in
+     * the container: such a command has to carry `PORT`, `PROTOCOL_HEADER` and the rest itself. */
     command?: string;
-    /** Set when the config isn't itself next to the app's `start.js` — e.g. `tests/e2e`, which
-     * runs `apps/web`'s build from outside that package. */
-    cwd?: string;
-    /** Merged on top of the shared `PORT`/`PROTOCOL_HEADER`/`TEST_DB`. */
-    env?: Record<string, string>;
     /** Opt in to a SIGTERM-then-wait teardown. Playwright's default is SIGKILL to the process
      * group, which is fine for a server it owns directly but strands whatever a launcher command
      * started — a killed `docker run` leaves its container running. */
@@ -91,7 +86,6 @@ export function createPlaywrightConfig(
       // database cloned from a pre-migrated template. It sets `DB_CONNECTION_STRING`, which
       // overrides `.env.test`.
       command: webServer?.command ?? 'node --env-file-if-exists=../../.env.test start.js',
-      ...(webServer?.cwd !== undefined ? { cwd: webServer.cwd } : {}),
       ...(webServer?.gracefulShutdown !== undefined
         ? { gracefulShutdown: webServer.gracefulShutdown }
         : {}),
@@ -106,7 +100,6 @@ export function createPlaywrightConfig(
         // moment, its timer runs before it reads the new request, and the client gets
         // `write EPIPE`.
         KEEP_ALIVE_TIMEOUT: '0',
-        ...webServer?.env,
       },
       // `url` waits for a 2xx response; `port` only waits for a listening socket.
       url: `${baseURL}/health/ready`,

@@ -6,6 +6,7 @@
  */
 
 import { DeleteBucketCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
+import { RUN_STALE_AFTER_MS } from '@gbd/core/testing';
 import { bucketExists, ensureBucket } from '../buckets.ts';
 import type { BlobStore } from '../client.ts';
 import { sendOptions } from '../client.ts';
@@ -13,11 +14,6 @@ import { asBlobStoreError, isNotFoundError } from '../errors.ts';
 import { deletePrefix } from '../objects.ts';
 
 const RUN_BUCKET_PREFIX = 'files-';
-
-/** How long a run bucket may exist before the sweep considers it abandoned — the same bound
- * `sweepStaleRunDatabases` (`@gbd/db/testing`) applies to run databases, since both exist for the
- * lifetime of one Playwright run. */
-const RUN_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
 export interface RunBucket {
   readonly name: string;

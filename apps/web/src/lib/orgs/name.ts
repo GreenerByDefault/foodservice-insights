@@ -1,5 +1,6 @@
 /** The form field name and the schema for an organization's name, shared by create and rename. */
 
+import { MAX_ORGANIZATION_NAME_LENGTH } from '@gbd/db/constraints';
 import { MIN_NAME_LENGTH, requiredText } from '#lib/forms/validation.js';
 
 export const FIELD = {
@@ -7,11 +8,6 @@ export const FIELD = {
   // person's name — the same reason `report-name` does.
   name: 'organization-name',
 } as const;
-
-/** Mirrors `@gbd/db`'s `MAX_ORGANIZATION_NAME_LENGTH` (and the `organization_name_length` check
- * constraint behind it) — duplicated rather than imported, since importing a value out of
- * `@gbd/db` here would pull `pg` into the browser bundle. `name.test.ts` pins the two together. */
-export const MAX_ORGANIZATION_NAME_LENGTH = 100;
 
 /** Every way a create or rename can come back unsuccessful; rename never sees the slug ones. */
 export type OrganizationNameFailure =

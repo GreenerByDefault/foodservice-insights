@@ -1,7 +1,4 @@
-/** Product name, as shown to users.
- *
- * This is a placeholder value only to set up packages/core.
- */
+/** The product name, as shown to users. */
 export const APP_NAME = 'Foodservice Insights';
 
 export * from './local-host.ts';
