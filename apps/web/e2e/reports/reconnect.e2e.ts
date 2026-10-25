@@ -3,7 +3,7 @@
  *
  * This is what the endpoint's existence stands on: SvelteKit's `invalidate()` falls back to a
  * full-page navigation when its own data request fails at the network level, which breaks the
- * page outright once the connection itself is the problem (see `README.md` § Routes). Polling a
+ * page outright once the connection itself is the problem (see `apps/web/README.md` § Routes). Polling a
  * dedicated `+server.ts` with a plain `fetch` avoids that.
  */
 

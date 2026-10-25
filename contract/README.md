@@ -4,10 +4,8 @@ The parent (`apps/worker`, TypeScript) sets up a run directory and spawns the ch
 (`python/worker_child`, Python) to read and write it. That directory is the only seam between the
 two stacks. This directory is its source of truth.
 
-- [`contract.json`](contract.json) — every name both sides must agree on: paths within the run
-  directory, the input CSV's columns and date format, the invocation shape, the exit codes, who
-  may claim each failure reason, how many bytes a categorization's product may hold, and what a
-  finding the customer sees may carry. Neither side reads it at runtime; both copy it into their
+- [`contract.json`](contract.json) — every name and limit both sides must agree on. Neither side
+  reads it at runtime; both copy it into their
   own constants and assert equality in a unit test.
 - [`fixtures/valid/`](fixtures/valid/) — golden documents for each message. The side that *writes*
   a message in production asserts its writer reproduces the fixture; the side that *reads* it

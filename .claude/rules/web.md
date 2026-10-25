@@ -5,6 +5,8 @@ paths:
 
 # The web app
 
+- **[`apps/web/README.md`](../../apps/web/README.md) is this app's design**: routes, calling the
+  API, forms, errors, uploads, auth and writes. Read the section for what you are changing.
 - **Most Svelte in training data is Svelte 4**, so look up an API with the Svelte MCP server
   rather than recalling it. Hand self-contained `.svelte` and `.svelte.ts` work to the
   `svelte-file-editor` subagent; otherwise run `svelte-autofixer` on each Svelte file you write

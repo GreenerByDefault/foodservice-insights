@@ -35,8 +35,8 @@ Run these from anywhere in the repo.
 | --- | --- |
 | `just` | List every recipe |
 | `just sync` | Install every package and dev tool into `.venv` |
-| `just lint` | Ruff: lint rules, import sorting, and a formatting check |
-| `just fmt` | Ruff, applying fixes |
+| `just lint` | Ruff: lint rules, import sorting, and a formatting check; `nbstripout` fails on a notebook with outputs |
+| `just fmt` | Ruff, applying fixes; `nbstripout`, stripping notebook outputs |
 | `just check` | ty: typechecking |
 | `just test` | Tests for the two packages we ship |
 | `just test-lab` | Tests for the lab |
@@ -48,8 +48,6 @@ For anything one-off, prefix it with `uv run`: `uv run python`, `uv run pytest -
 Tests live in `<package>/tests/` and are named `test_*.py`. They run concurrently under
 `pytest-xdist`; a bare `uv run pytest` is serial, which is what you want while debugging a
 single failure.
-
-Mark a test `@pytest.mark.slow` or `@pytest.mark.llm` if it's expensive or calls a real LLM.
 
 The lab's database tests skip unless `TEST_DB=1` is set, and then need the test stack running and
 migrated ([root README § The two databases](../README.md#the-two-databases)):

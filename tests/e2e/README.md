@@ -27,7 +27,7 @@ of a real child. This tier is only the wiring between components — a component
 belongs to its own tier.
 
 The worker runs in `WORKER_MODE=mock-llm` (see
-[`apps/worker/README.md`](../../apps/worker/README.md#worker_mode)): the real analysis at production
+the root [`README.md`](../../README.md#analysis-modes)): the real analysis at production
 timings, with a keyword fake for the LLM. So each spec picks its outcome by what it uploads — a
 product the fake cannot categorize is how the failure spec gets `unusable_data`.
 *Rejected: a second stack on `stubbed` for the failure spec — one queue cannot serve two modes, and
