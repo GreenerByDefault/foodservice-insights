@@ -13,7 +13,7 @@ from gbd_foodservice_insights_lab.food_report import serving
 from gbd_foodservice_insights_lab.food_report.excel import build_qa_excel_report
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 from gbd_foodservice_insights_lab.food_report.serving import ServingReport
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 
 
 def _write_placeholder_pdf(_report: FoodReport, _charts: object, path: Path, **_: object) -> None:

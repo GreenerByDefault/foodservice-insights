@@ -150,13 +150,5 @@ class TestPlotTimeSeriesWithPeriods:
         plt.close(fig)
 
 
-# Clean up matplotlib
-@pytest.fixture(autouse=True)
-def cleanup_plt():
-    """Clean up matplotlib figures after each test."""
-    yield
-    plt.close("all")
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

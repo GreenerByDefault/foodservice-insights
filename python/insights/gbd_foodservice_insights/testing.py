@@ -3,18 +3,23 @@ import io
 import re
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
     AnalysisOutcome,
     AnalysisRequest,
+    CachedCategorization,
     ListedFinding,
     LlmOperation,
+    MonthlyCounts,
     NewCategorization,
     ReportProgress,
     ReportTelemetry,
     Telemetry,
+    UnitSystem,
 )
 from gbd_foodservice_insights.input_csv import INPUT_COLUMNS
 
@@ -50,7 +55,7 @@ def stub_analysis(
 
     It exists to test the *wrapper*, producing outcomes a mocked LLM never could — a missing
     declared file, each exception type on demand. Every keyword names an outcome of the seam,
-    not a library internal, so the port landing won't change what it expresses. Writes real
+    not a library internal. Writes real
     files with real magic bytes into `request.output_directory`, unless told to skip one.
     """
     for _ in range(progress_calls):
@@ -147,6 +152,35 @@ UNKNOWN_PRODUCTS: Final = ("Paper Towels", "Dish Soap")
 
 # The months `contract/fixtures/valid/run.json` has counts for.
 SAMPLE_MONTHS: Final = ("2025-01", "2025-02", "2025-03")
+# Not a `dict`: `worker_child` hands over a read-only view.
+SAMPLE_COUNTS: Final = MonthlyCounts("people", MappingProxyType(dict.fromkeys(SAMPLE_MONTHS, 1000)))
+
+
+def a_request(
+    directory: Path,
+    *,
+    report_name: str | None = None,
+    site_name: str | None = None,
+    counts: MonthlyCounts | None = SAMPLE_COUNTS,
+    unit_system: UnitSystem = "kg",
+    categorization_cache: tuple[CachedCategorization, ...] = (),
+) -> AnalysisRequest:
+    """A request reading `directory/input.csv` and writing into `directory/output`, which it
+    creates."""
+    output_directory = directory / "output"
+    output_directory.mkdir(exist_ok=True)
+    return AnalysisRequest(
+        run_id="test-run",
+        input_csv=directory / "input.csv",
+        output_directory=output_directory,
+        report_name=report_name,
+        site_name=site_name,
+        organization_name="Acme Foodservice",
+        counts=counts,
+        unit_system=unit_system,
+        categorization_cache=categorization_cache,
+    )
+
 
 type InputRow = tuple[str, str, float]
 

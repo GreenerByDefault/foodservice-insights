@@ -1,8 +1,4 @@
-"""
-Shared utility functions for the GBD package.
-
-Includes file I/O helpers, progress reporting, concurrency, and environment detection.
-"""
+"""Progress logging and a bounded thread pool, for code that makes many slow calls."""
 
 import logging
 import time

@@ -40,7 +40,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from gbd_foodservice_insights.plotting_utils import GBD_COLORS
 from matplotlib.ticker import MaxNLocator
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from thefuzz import fuzz
 
 from gbd_foodservice_insights_lab.extraction.llm import (
@@ -711,7 +711,7 @@ def _build_json_rows_prompt(
 
 
 def _extract_native_pdf_text(pdf_path: Path, page: int) -> str:
-    """Use PyPDF2 text as a cheap routing hint before spending API calls."""
+    """Use pypdf text as a cheap routing hint before spending API calls."""
     try:
         reader = PdfReader(pdf_path)
         return reader.pages[page - 1].extract_text() or ""

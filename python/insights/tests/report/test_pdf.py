@@ -38,7 +38,7 @@ from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 
 JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
 
@@ -177,7 +177,7 @@ def _write(
 
 def _title_page(client: str) -> list[_PageText]:
     pdf = _RecordingPdf()
-    create_title_page(pdf, client, "Procurement")  # ty: ignore[invalid-argument-type]
+    create_title_page(pdf, client, "Procurement")
     return pdf.pages[0]
 
 
@@ -212,7 +212,7 @@ def test_title_page_replaces_underscores_in_the_client_name() -> None:
 
 def _text_page_titles(lines: list[str], bold_lines: set[str] | None = None) -> list[str]:
     pdf = _RecordingPdf()
-    create_text_page(pdf, "Title", lines, bold_lines=bold_lines)  # ty: ignore[invalid-argument-type]
+    create_text_page(pdf, "Title", lines, bold_lines=bold_lines)
     return _page_titles(pdf)
 
 
@@ -234,7 +234,7 @@ def test_text_page_bolds_lines_compared_after_stripping() -> None:
     pdf = _RecordingPdf()
 
     create_text_page(
-        pdf,  # ty: ignore[invalid-argument-type]
+        pdf,
         "Title",
         ["  Heading?", "", "body"],
         bold_lines={"Heading?  "},
@@ -250,7 +250,7 @@ def test_text_page_bolds_lines_compared_after_stripping() -> None:
 
 def _summary_page(narrative: ExecutiveNarrative) -> list[_PageText]:
     pdf = _RecordingPdf()
-    create_executive_summary_page(pdf, narrative)  # ty: ignore[invalid-argument-type]
+    create_executive_summary_page(pdf, narrative)
     return pdf.pages[0]
 
 
@@ -563,7 +563,7 @@ def test_category_template_fits_every_cell_and_splits_months_across_pages(months
     )
 
     pdf = _RecordingTablePdf()
-    create_category_template_pages(pdf, template)  # ty: ignore[invalid-argument-type]
+    create_category_template_pages(pdf, template)
 
     assert pdf.overflowing == []
     assert all(columns[0] == "Category" for columns in pdf.columns)
@@ -588,7 +588,7 @@ def test_pack_columns_fills_a_page_exactly_before_starting_another() -> None:
 
 def _decision_kpis_page(concentration: AnimalEmissionsConcentration) -> list[str]:
     pdf = _RecordingPdf()
-    create_decision_kpis_page(pdf, concentration)  # ty: ignore[invalid-argument-type]
+    create_decision_kpis_page(pdf, concentration)
     return [t.text for t in pdf.pages[0]]
 
 
@@ -742,7 +742,7 @@ def test_substitution_scenarios_page_wraps_a_long_scenario_inside_its_cell() -> 
     )
     pdf = _RecordingTablePdf()
 
-    create_substitution_scenarios_page(pdf, scenarios)  # ty: ignore[invalid-argument-type]
+    create_substitution_scenarios_page(pdf, scenarios)
 
     assert pdf.headings == ["Substitution Scenarios"]
     assert pdf.scenario_cells == ["50% ruminant-to-legume\nswap with a long name", "10% swap"]
