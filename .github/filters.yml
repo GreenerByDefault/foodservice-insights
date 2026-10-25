@@ -9,7 +9,7 @@
 # be aliased.
 #
 # `scripts/ci/check_filters.py` enforces that every exclusion still matches a tracked file
-# (or is marked `# planned` and matches none). `push: main` runs everything unfiltered as a
+# (or is marked `# planned` and matches none). The merge queue runs every job unfiltered as a
 # second backstop.
 
 # Docker build inputs.

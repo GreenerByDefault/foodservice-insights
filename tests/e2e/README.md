@@ -33,10 +33,10 @@ product the fake cannot categorize is how the failure spec gets `unusable_data`.
 *Rejected: a second stack on `stubbed` for the failure spec — one queue cannot serve two modes, and
 a whole extra database, bucket and worker buys nothing the upload cannot provoke.*
 
-**`@gbd/worker` is a devDependency here even though nothing imports it**, and the `test:system`
-task in [`turbo.json`](../../turbo.json) names the Dockerfiles and `python/**` in its `inputs`.
-Both exist to put what the images are built from into Turbo's hash, so a worker or Python change
-invalidates the cache and rebuilds an image instead of replaying a stale pass.
+**`@gbd/web` and `@gbd/worker` are devDependencies here even though nothing imports them**, and
+the `test:system` task in [`turbo.json`](../../turbo.json) names the Dockerfiles and `python/**` in
+its `inputs`. Both exist to put what the images are built from into Turbo's hash, so an app or
+Python change invalidates the cache and rebuilds an image instead of replaying a stale pass.
 
 **Deliberately not covered:** the other failure reasons, and the parent-torture cases — a child
 that ignores SIGTERM, exits with no verdict, or leaks a grandchild. `apps/worker/src/worker.test.ts`

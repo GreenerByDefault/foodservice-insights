@@ -8,8 +8,7 @@
     "grafana:stop": "node scripts/stop.ts",
     "grafana:deploy": "node scripts/deploy.ts",
     "check": "tsc --noEmit",
-    "test:unit": "TEST_DB=1 vitest run",
-    "test": "pnpm run test:unit"
+    "test:unit": "TEST_DB=1 vitest run"
   },
   "dependencies": {
     "@gbd/core": "workspace:*",

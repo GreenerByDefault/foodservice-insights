@@ -13,7 +13,6 @@
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
-    "test": "pnpm run test:unit",
     "truncate": "node scripts/truncate.ts",
     "preview": "node scripts/preview.ts"
   },

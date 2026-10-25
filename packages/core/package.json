@@ -13,8 +13,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "check": "tsc --noEmit",
-    "test:unit": "vitest run",
-    "test": "pnpm run test:unit"
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "pino": "catalog:"

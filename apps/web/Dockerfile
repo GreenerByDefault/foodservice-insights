@@ -23,8 +23,7 @@ COPY packages/db/package.json packages/db/package.json
 COPY packages/email/package.json packages/email/package.json
 COPY packages/storage/package.json packages/storage/package.json
 # @gbd/browser-testing is a devDependency of @gbd/web, not a runtime one — its source never
-# ships — but `uv sync`'s Python equivalent applies to pnpm too: `--frozen-lockfile` needs every
-# workspace member the lockfile knows about to have a package.json on disk, or install fails.
+# ships — but it is in `--filter @gbd/web...`'s dependency closure, so install needs its manifest.
 COPY packages/browser-testing/package.json packages/browser-testing/package.json
 
 RUN pnpm install --frozen-lockfile --filter @gbd/web...

@@ -26,6 +26,10 @@ case $file in
     "$PWD/node_modules/.bin/biome" check --write --no-errors-on-unmatched "$file"
     ;;
   *.py)
+    "$PWD/.venv/bin/ruff" check --fix --select I --quiet "$file"
+    "$PWD/.venv/bin/ruff" format "$file"
+    ;;
+  *.md)
     "$PWD/.venv/bin/ruff" format "$file"
     ;;
 esac
