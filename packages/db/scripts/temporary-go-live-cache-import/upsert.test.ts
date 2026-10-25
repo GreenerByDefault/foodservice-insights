@@ -162,8 +162,8 @@ describe('upsertEntreeClassifications', () => {
       const counts = await upsertEntreeClassifications(
         transaction,
         [
-          { product, classification: 'entree', cleanedName: 'burger' },
-          { product: unverified.product, classification: 'side/add-on', cleanedName: null },
+          { product, classification: 'entree' },
+          { product: unverified.product, classification: 'side/add-on' },
         ],
         SUGGESTED_BY,
       );
@@ -171,7 +171,7 @@ describe('upsertEntreeClassifications', () => {
       expect(counts).toEqual({ inserted: 1, promoted: 1, alreadyVerified: 0 });
       const rows = await transaction
         .selectFrom('entreeClassification')
-        .select(['product', 'classification', 'cleanedName', 'isVerified', 'suggestedBy'])
+        .select(['product', 'classification', 'isVerified', 'suggestedBy'])
         .where('product', 'in', [product, unverified.product])
         .orderBy('classification')
         .execute();
@@ -179,14 +179,12 @@ describe('upsertEntreeClassifications', () => {
         {
           product,
           classification: 'entree',
-          cleanedName: 'burger',
           isVerified: true,
           suggestedBy: SUGGESTED_BY,
         },
         {
           product: unverified.product,
           classification: 'side/add-on',
-          cleanedName: null,
           isVerified: true,
           suggestedBy: SUGGESTED_BY,
         },

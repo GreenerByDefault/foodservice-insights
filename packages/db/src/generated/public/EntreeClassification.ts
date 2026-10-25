@@ -23,8 +23,6 @@ export default interface EntreeClassificationTable {
     EntreeClassificationLabel
   >;
 
-  cleanedName: ColumnType<string | null, string | null, string | null>;
-
   isVerified: ColumnType<boolean, boolean | undefined, boolean>;
 
   /** Maintained by a trigger from is_verified. A value typed here is ignored. */

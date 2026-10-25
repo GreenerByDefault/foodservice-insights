@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from gbd_foodservice_insights.categorization.cache import unanimous_index
+from gbd_foodservice_insights.categorization.cache import CategorizationCache, unanimous_index
 
 from gbd_foodservice_insights_lab import PACKAGE_DIR
 from gbd_foodservice_insights_lab.categorization.product_cache import load_categorization_cache
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 ENTREE_LABEL_ENTREE = "entree"
 ENTREE_LABEL_SIDE_ADDON = "side/add-on"
 ENTREE_LABEL_UNSURE = "unsure"
+ENTREE_CACHE_COLUMNS = ("product", "entree_classification")
 
 
 def _normalize_entree_classification(
@@ -64,7 +65,7 @@ def get_previously_classified_entrees_location() -> Path:
 
 def _empty_previously_classified_entrees() -> pd.DataFrame:
     """Return an empty DataFrame with the historical entree cache schema."""
-    return pd.DataFrame(columns=["product", "entree_classification", "cleaned_item_names"])
+    return pd.DataFrame(columns=list(ENTREE_CACHE_COLUMNS))
 
 
 def get_previously_classified_entrees() -> pd.DataFrame:
@@ -80,17 +81,13 @@ def get_previously_classified_entrees() -> pd.DataFrame:
 
     # Only an empty cell is missing, so a product named `NA` or `None` stays one.
     df = pd.read_csv(path, dtype=str, keep_default_na=False, na_values=[""])
-    required_cols = {"product", "entree_classification"}
-    missing_cols = required_cols - set(df.columns)
+    missing_cols = set(ENTREE_CACHE_COLUMNS) - set(df.columns)
     if missing_cols:
         raise ValueError(
             f"Historical entree classifications missing columns: {sorted(missing_cols)}"
         )
-    # Back-compat: pre-migration files have no cleaned-name column. Add an empty
-    # one so callers can rely on it; the cleaned-name reuse index then simply
-    # yields nothing until the column is backfilled / accumulated.
-    if "cleaned_item_names" not in df.columns:
-        df["cleaned_item_names"] = pd.NA
+    # A file from before cleaned names moved to the product cache still has their column.
+    df = df.loc[:, list(ENTREE_CACHE_COLUMNS)]
     if not df.empty:
         df["entree_classification"] = df["entree_classification"].apply(
             _normalize_entree_classification
@@ -101,25 +98,32 @@ def get_previously_classified_entrees() -> pd.DataFrame:
 
 def build_entree_cleaned_name_reuse_index(
     historical_df: pd.DataFrame | None = None,
+    product_cache: CategorizationCache | None = None,
 ) -> dict[str, str]:
     """
     Build a ``{normalized cleaned name -> entree classification}`` reuse index
     from the historical entree cache.
 
-    Returns ``{}`` when the cache carries no cleaned names (e.g. a pre-migration
-    file that has not yet been backfilled).  A cleaned name is only included
-    when every contributing row agrees on a single label.
+    A historical product's cleaned name is the product cache's, or the product
+    itself where that has none.  A cleaned name is only included when every
+    contributing row agrees on a single label.
     """
     if historical_df is None:
         historical_df = get_previously_classified_entrees()
-    if historical_df.empty or "cleaned_item_names" not in historical_df.columns:
-        return {}
-
-    work = historical_df[["cleaned_item_names", "entree_classification"]].copy()
-    work = work.dropna(subset=["entree_classification"])
+    work = historical_df[["product", "entree_classification"]].dropna(
+        subset=["entree_classification"]
+    )
     if work.empty:
         return {}
+    if product_cache is None:
+        product_cache = load_categorization_cache()
 
+    products = product_cache.products
+    cleaned_names = products.loc[
+        products["cleaned_item_names"] != "", ["product", "cleaned_item_names"]
+    ]
+    work = work.merge(cleaned_names, on="product", how="left", validate="many_to_one")
+    work["cleaned_item_names"] = work["cleaned_item_names"].fillna(work["product"])
     work["entree_classification"] = work["entree_classification"].apply(
         _normalize_entree_classification
     )
@@ -132,16 +136,12 @@ def save_historical_entree_classifications(new_df: pd.DataFrame) -> None:
     """
     Append new entree classifications to historical data and de-duplicate.
     """
-    required_cols = {"product", "entree_classification"}
-    missing_cols = required_cols - set(new_df.columns)
+    missing_cols = set(ENTREE_CACHE_COLUMNS) - set(new_df.columns)
     if missing_cols:
         raise ValueError(f"new_df missing required columns for entree save: {sorted(missing_cols)}")
 
     existing = get_previously_classified_entrees()
-    cols_to_save = ["product", "entree_classification"]
-    if "cleaned_item_names" in new_df.columns:
-        cols_to_save.append("cleaned_item_names")
-    valid_rows = new_df.loc[:, cols_to_save].copy()
+    valid_rows = new_df.loc[:, list(ENTREE_CACHE_COLUMNS)].copy()
     valid_rows = valid_rows.dropna(subset=["entree_classification"])
     valid_rows = valid_rows.loc[valid_rows["entree_classification"].astype(str).str.strip() != ""]
     if not valid_rows.empty:
@@ -154,65 +154,9 @@ def save_historical_entree_classifications(new_df: pd.DataFrame) -> None:
 
     combined = pd.concat([existing, valid_rows], ignore_index=True)
     combined = combined.drop_duplicates(subset=["product"], keep="last")
-    # Stable column order: product, entree_classification, cleaned_item_names.
-    ordered_cols = ["product", "entree_classification"]
-    if "cleaned_item_names" in combined.columns:
-        ordered_cols.append("cleaned_item_names")
-    ordered_cols += [c for c in combined.columns if c not in ordered_cols]
-    combined = combined[ordered_cols]
     combined.to_csv(get_previously_classified_entrees_location(), index=False)
 
     logger.info(
         "Historical entree classifications updated: %d unique products.",
         combined["product"].nunique(),
     )
-
-
-def backfill_entree_cleaned_names() -> dict[str, int]:
-    """
-    One-shot migration: populate ``cleaned_item_names`` in the entree cache by
-    borrowing names from the category cache (joined on ``product``).
-
-    Existing non-empty cleaned names are preserved; products absent from the
-    category cache fall back to their raw product name.  Idempotent — re-running
-    only fills rows that are still empty.  Returns counts for logging.
-    """
-    entree = get_previously_classified_entrees()
-    n_total = len(entree)
-
-    category = load_categorization_cache().products
-    name_map = category.loc[category["cleaned_item_names"] != "", ["product", "cleaned_item_names"]]
-
-    existing_clean = entree["cleaned_item_names"]
-    has_clean = existing_clean.notna() & (existing_clean.astype(str).str.strip() != "")
-    n_already = int(has_clean.sum())
-
-    borrowed = entree[["product"]].merge(name_map, on="product", how="left")["cleaned_item_names"]
-    borrowed.index = entree.index
-    n_borrowed = int((~has_clean & borrowed.notna()).sum())
-
-    filled = existing_clean.where(has_clean, borrowed).fillna(entree["product"])
-    n_fallback = n_total - n_already - n_borrowed
-
-    entree = entree.copy()
-    entree["cleaned_item_names"] = filled
-    ordered_cols = ["product", "entree_classification", "cleaned_item_names"]
-    ordered_cols += [c for c in entree.columns if c not in ordered_cols]
-    entree[ordered_cols].to_csv(get_previously_classified_entrees_location(), index=False)
-
-    logger.info(
-        (
-            "Entree cleaned-name backfill: %d rows (%d kept, %d borrowed from category cache, "
-            "%d fell back to product)."
-        ),
-        n_total,
-        n_already,
-        n_borrowed,
-        n_fallback,
-    )
-    return {
-        "n_total": n_total,
-        "n_already": n_already,
-        "n_borrowed": n_borrowed,
-        "n_fallback": n_fallback,
-    }

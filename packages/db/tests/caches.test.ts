@@ -148,13 +148,6 @@ function productTableTests(table: string, insert: Insert): void {
 
     await expect(work).resolves.toBeUndefined();
   });
-
-  test.each(['', ' ', '\t'])('rejects a blank cleaned_name %j', async (cleanedName) => {
-    await expectConstraintViolation(
-      insertRejected(insert, { cleanedName }),
-      `${table}_cleaned_name_not_blank`,
-    );
-  });
 }
 
 describe('product_categorization', () => {
@@ -162,6 +155,13 @@ describe('product_categorization', () => {
 
   reviewColumnTests('product_categorization', insert);
   productTableTests('product_categorization', insert);
+
+  test.each(['', ' ', '\t'])('rejects a blank cleaned_name %j', async (cleanedName) => {
+    await expectConstraintViolation(
+      insertRejected(insert, { cleanedName }),
+      'product_categorization_cleaned_name_not_blank',
+    );
+  });
 
   test.each(['', ' Cheese', 'Cheese\n'])(
     'rejects a blank or untrimmed category %j',
@@ -328,7 +328,6 @@ describe('cache_client', () => {
     expect(grants).toEqual([
       'entree_classification SELECT',
       'entree_classification.classification INSERT',
-      'entree_classification.cleaned_name INSERT',
       'entree_classification.product INSERT',
       'entree_classification.suggested_by INSERT',
       'product_categorization SELECT',

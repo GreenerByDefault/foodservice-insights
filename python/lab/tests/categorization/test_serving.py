@@ -135,11 +135,11 @@ def test_serving_end_to_end(tmp_path):
     )
     assert not (tmp_path / "categories.csv").exists()
     assert (tmp_path / "entrees.csv").read_text() == (
-        "product,entree_classification,cleaned_item_names\n"
-        "Chicken Breast Boneless,entree,chicken breast boneless\n"
-        "Ground Beef 80/20,entree,ground beef\n"
-        "Brown Rice,side/add-on,brown rice\n"
-        "Salmon Fillet,entree,salmon fillet\n"
+        "product,entree_classification\n"
+        "Chicken Breast Boneless,entree\n"
+        "Ground Beef 80/20,entree\n"
+        "Brown Rice,side/add-on\n"
+        "Salmon Fillet,entree\n"
     )
 
 

@@ -115,7 +115,6 @@ export async function upsertEntreeClassifications(
           .column('product')
           .doUpdateSet((eb) => ({
             classification: eb.ref('excluded.classification'),
-            cleanedName: eb.ref('excluded.cleanedName'),
             isVerified: true,
             suggestedBy: eb.ref('excluded.suggestedBy'),
           }))
