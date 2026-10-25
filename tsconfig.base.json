@@ -2,8 +2,11 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "target": "esnext",
-    "module": "preserve",
-    "moduleResolution": "bundler",
+    // Node resolution, because bundler resolution would accept an extensionless relative import
+    // that Node then rejects at runtime. apps/web is unaffected: `$app/tsconfig`, which it extends
+    // after this file, sets bundler resolution.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "lib": ["esnext"],
     "types": [],
 
