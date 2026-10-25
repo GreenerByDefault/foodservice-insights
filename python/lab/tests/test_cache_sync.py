@@ -63,7 +63,7 @@ def test_pull_writes_the_verified_rows_for_the_loaders_to_read(
     test_database: psycopg.Connection, cache_files: tuple[Path, Path]
 ) -> None:
     prefix = f"pull-{uuid.uuid4()}"
-    awkward = f'{prefix} Bacon, "thick"\ncut'
+    awkward = f'{prefix} Bacon, "thick" cut'
     _insert(
         test_database,
         "product_categorization",

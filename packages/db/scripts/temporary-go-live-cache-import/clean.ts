@@ -70,7 +70,7 @@ export function cleanProductCategorizations(
   const byLowercase = new Map(vocabulary.map((name) => [name.toLowerCase(), name]));
 
   const outcomes = records.map(({ line, values }): Outcome<ProductCategorizationRow> => {
-    const product = stripLikePython(values.product);
+    const { key: product, rewrite: keyRewrite } = readKey(values.product);
     const category = values.category.trim();
     if (product === '') return { kind: 'skip', line, reason: 'blank product' };
     if (category === '') return { kind: 'skip', line, reason: 'blank category' };
@@ -89,7 +89,10 @@ export function cleanProductCategorizations(
       key: product,
       value: known,
       row: { product, category: known, cleanedName: nullIfBlank(values.cleaned_item_names) },
-      rewrite: known === category ? undefined : rewriteNote('category', category, known),
+      rewrites: [
+        keyRewrite,
+        known === category ? undefined : rewriteNote('category', category, known),
+      ],
     };
   });
   return collect(outcomes, 'category');
@@ -99,7 +102,7 @@ export function cleanEntreeClassifications(
   records: readonly CsvRecord<EntreeColumn>[],
 ): Cleaned<EntreeClassificationRow> {
   const outcomes = records.map(({ line, values }): Outcome<EntreeClassificationRow> => {
-    const product = stripLikePython(values.product);
+    const { key: product, rewrite: keyRewrite } = readKey(values.product);
     if (product === '') return { kind: 'skip', line, reason: 'blank product' };
     const keyProblem = checkKey(product);
     if (keyProblem) return { kind: 'refuse', line, reason: keyProblem };
@@ -115,8 +118,10 @@ export function cleanEntreeClassifications(
       key: product,
       value: classification,
       row: { product, classification, cleanedName: nullIfBlank(values.cleaned_item_names) },
-      rewrite:
+      rewrites: [
+        keyRewrite,
         classification === raw ? undefined : rewriteNote('classification', raw, classification),
+      ],
     };
   });
   return collect(outcomes, 'classification');
@@ -130,7 +135,7 @@ type Outcome<Row> =
       /** What two rows of one key must agree on to be a harmless repeat. */
       value: string;
       row: Row;
-      rewrite?: string | undefined;
+      rewrites: readonly (string | undefined)[];
     }
   | { kind: 'skip' | 'refuse'; line: number; reason: string };
 
@@ -159,12 +164,37 @@ function collect<Row>(outcomes: readonly Outcome<Row>[], valueName: string): Cle
   return {
     rows: kept.map((candidate) => candidate.row),
     skipped: [...notes('skip'), ...repeats].toSorted((a, b) => a.line - b.line),
-    rewritten: kept.flatMap(({ line, rewrite }) => (rewrite ? [{ line, reason: rewrite }] : [])),
+    rewritten: kept.flatMap(({ line, rewrites }) =>
+      rewrites.flatMap((reason) => (reason ? [{ line, reason }] : [])),
+    ),
     refused: notes('refuse'),
   };
 }
 
+/** The key a product cell is cached under: without format characters, then stripped like an
+ * upload's products. A format character, such as a zero-width space, renders as nothing, and the
+ * web app refuses an upload holding one, so a key that kept it could never be matched. */
+function readKey(cell: string): { key: string; rewrite: string | undefined } {
+  const removed = new Set(cell.match(FORMAT_CHARACTER));
+  const key = stripLikePython(cell.replace(FORMAT_CHARACTER, ''));
+  if (removed.size === 0) return { key, rewrite: undefined };
+  return {
+    key,
+    rewrite: `removed invisible ${[...removed].map(codePoint).join(', ')} from product`,
+  };
+}
+
+const FORMAT_CHARACTER = /\p{Cf}/gu;
+const CONTROL_CHARACTER = /\p{Cc}/u;
+
+function codePoint(character: string): string {
+  const hex = (character.codePointAt(0) ?? 0).toString(16).toUpperCase();
+  return `U+${hex.padStart(4, '0')}`;
+}
+
 function checkKey(key: string): string | undefined {
+  // Refused in an upload as well. Removing one, such as a line break, would join two words.
+  if (CONTROL_CHARACTER.test(key)) return 'a control character, such as a line break, in product';
   const bytes = Buffer.byteLength(key, 'utf8');
   return bytes > MAX_CACHE_KEY_BYTES
     ? `key of ${bytes} bytes, over the ${MAX_CACHE_KEY_BYTES}-byte limit`

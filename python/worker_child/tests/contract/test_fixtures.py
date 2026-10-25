@@ -347,6 +347,11 @@ def test_new_categorizations_payload_accepts_a_product_of_exactly_the_byte_bound
             [replace(BURGER, product="\u3000Beyond Burger Patty 4oz")],
             id="product-not-stripped",
         ),
+        pytest.param(
+            VALID_ANALYSIS_ATTEMPT_ID,
+            [replace(BURGER, product="Beyond Burger\u200b Patty 4oz")],
+            id="product-has-invisible-character",
+        ),
     ],
 )
 def test_new_categorizations_payload_refuses_what_the_parent_would(

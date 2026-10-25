@@ -7,6 +7,7 @@
 import {
   type AnalysisAttemptId,
   type CountsBasis,
+  INVISIBLE_KEY_CHARACTER,
   MAX_CACHE_KEY_BYTES,
   type UnitSystem,
 } from '@gbd/db';
@@ -253,6 +254,10 @@ const NewCategorizationsSchema = v.strictObject({
       v.strictObject({
         product: v.pipe(
           stripped,
+          v.check(
+            (product) => !INVISIBLE_KEY_CHARACTER.test(product),
+            'needs no control or invisible format character',
+          ),
           v.check(
             (product) => UTF8.encode(product).length <= MAX_CACHE_KEY_BYTES,
             `needs at most ${MAX_CACHE_KEY_BYTES} bytes of UTF-8`,

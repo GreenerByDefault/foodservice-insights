@@ -4,7 +4,7 @@
 import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { CACHE_CLIENT_CONNECTION_LIMIT } from '../src/budget.ts';
-import { MAX_CACHE_KEY_BYTES } from '../src/constraints.ts';
+import { INVISIBLE_KEY_CHARACTER, MAX_CACHE_KEY_BYTES } from '../src/constraints.ts';
 import { DATABASE } from '../src/env.ts';
 import {
   POSTGRES_CODE_INSUFFICIENT_PRIVILEGE,
@@ -27,6 +27,16 @@ type Insert = (
  * counted characters would admit the over-long one. */
 const FOUR_BYTE_CHARACTER = '😀';
 const KEY_AT_MAX_BYTES = FOUR_BYTE_CHARACTER.repeat(MAX_CACHE_KEY_BYTES / 4);
+
+const INVISIBLE_RANGE_ENDS = [
+  ...['0001', '001F', '007F', '009F', '00AD', '061C', '180E', '200B', '200F'],
+  ...['202A', '202E', '2060', '2064', '2066', '206F', 'FEFF'],
+];
+
+/** Inside the product, where only `*_product_no_invisible_characters` can object to it. */
+function productHolding(hex: string): string {
+  return `Beef${String.fromCodePoint(Number.parseInt(hex, 16))}Patty`;
+}
 
 function insertRejected(insert: Insert, overrides: Record<string, unknown>): Promise<unknown> {
   return withRollback(DATABASE, (transaction) => insert(transaction, overrides));
@@ -55,8 +65,9 @@ function reviewColumnTests(table: string, insert: Insert): void {
 
 /** For the two tables keyed on a product, which the pipeline strips and then matches exactly. */
 function productTableTests(table: string, insert: Insert): void {
-  // `btrim` would let the newline and the no-break space through; Python's `str.strip` does not.
-  test.each([' Beef', 'Beef\n', 'Beef\u00a0'])(
+  // `btrim` would let the no-break space through; Python's `str.strip` does not. A newline is a
+  // control character, which `*_product_no_invisible_characters` refuses first.
+  test.each([' Beef', 'Beef\u00a0'])(
     'rejects a product with surrounding whitespace %j',
     async (product) => {
       await expectConstraintViolation(
@@ -72,6 +83,34 @@ function productTableTests(table: string, insert: Insert): void {
       `${table}_product_length`,
     );
   });
+
+  // Each end of every range in the constraint's class, then the characters just outside it.
+  // Together, these pin INVISIBLE_KEY_CHARACTER to the constraint it mirrors.
+
+  test.each(INVISIBLE_RANGE_ENDS)(
+    'rejects a product holding U+%s, which INVISIBLE_KEY_CHARACTER matches',
+    async (hex) => {
+      const product = productHolding(hex);
+
+      expect(INVISIBLE_KEY_CHARACTER.test(product)).toBe(true);
+      await expectConstraintViolation(
+        insertRejected(insert, { product }),
+        `${table}_product_no_invisible_characters`,
+      );
+    },
+  );
+
+  // U+00A0 is a no-break space, which is visible, and an upload may hold one.
+  test.each(['00A0', '200A', '2010'])(
+    'accepts a product holding U+%s, which INVISIBLE_KEY_CHARACTER does not match',
+    async (hex) => {
+      const product = productHolding(hex);
+
+      expect(INVISIBLE_KEY_CHARACTER.test(product)).toBe(false);
+      const row = await withRollback(DATABASE, (transaction) => insert(transaction, { product }));
+      expect(row).toMatchObject({ product });
+    },
+  );
 
   // Together, these pin MAX_CACHE_KEY_BYTES to the constraint it mirrors.
 

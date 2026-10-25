@@ -1117,6 +1117,7 @@ CREATE TABLE IF NOT EXISTS "public"."entree_classification" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     CONSTRAINT "entree_classification_cleaned_name_not_blank" CHECK ((("cleaned_name" IS NULL) OR ("cleaned_name" ~ '[^[:space:]]'::"text"))),
     CONSTRAINT "entree_classification_product_length" CHECK ((("octet_length"("product") >= 1) AND ("octet_length"("product") <= 2000))),
+    CONSTRAINT "entree_classification_product_no_invisible_characters" CHECK (("product" !~ '[\u0001-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]'::"text")),
     CONSTRAINT "entree_classification_product_trimmed" CHECK (("product" !~ '^[[:space:]]|[[:space:]]$'::"text")),
     CONSTRAINT "entree_classification_suggested_by_not_blank" CHECK (("suggested_by" ~ '[^[:space:]]'::"text"))
 );
@@ -1284,6 +1285,7 @@ CREATE TABLE IF NOT EXISTS "public"."product_categorization" (
     CONSTRAINT "product_categorization_category_trimmed_not_empty" CHECK ((("category" !~ '^[[:space:]]|[[:space:]]$'::"text") AND ("category" <> ''::"text"))),
     CONSTRAINT "product_categorization_cleaned_name_not_blank" CHECK ((("cleaned_name" IS NULL) OR ("cleaned_name" ~ '[^[:space:]]'::"text"))),
     CONSTRAINT "product_categorization_product_length" CHECK ((("octet_length"("product") >= 1) AND ("octet_length"("product") <= 2000))),
+    CONSTRAINT "product_categorization_product_no_invisible_characters" CHECK (("product" !~ '[\u0001-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff]'::"text")),
     CONSTRAINT "product_categorization_product_trimmed" CHECK (("product" !~ '^[[:space:]]|[[:space:]]$'::"text")),
     CONSTRAINT "product_categorization_suggested_by_not_blank" CHECK (("suggested_by" ~ '[^[:space:]]'::"text"))
 );

@@ -49,9 +49,9 @@ which a pull overwrites:
   prefix, since the test database is shared. It never reads `CACHE_DB_CONNECTION_STRING`, which
   on a developer's laptop is production. CI's `py-lab` job runs them against the migrated test
   stack, and runs on a migration change too.
-- **The tables are the source of truth for their rules.** `002_caches.ts` holds the columns,
-  the CHECKs every writer must satisfy, and `cache_client`'s grants; `tests/caches.test.ts`
-  asserts each. In short: `cache_client` can `SELECT` the two tables and `INSERT` only the
+- **The tables are the source of truth for their rules.** `packages/db/public-schema.sql` holds
+  the columns and the CHECKs every writer must satisfy, and `002_caches.ts` `cache_client`'s
+  grants; `tests/caches.test.ts` asserts each. In short: `cache_client` can `SELECT` the two tables and `INSERT` only the
   key, value and `suggested_by` columns, so every row it writes lands unverified. It has a
   60-second idle-in-transaction timeout, a 10-minute idle-session timeout, and 10 connections
   (`packages/db/src/budget.ts`). One rejected row fails its whole `INSERT`.
@@ -118,9 +118,13 @@ Merges when the strings are ready to hand out. Rehearse it beforehand against th
   `push_entree_classifications`.
   - Each runs `INSERT … ON CONFLICT DO NOTHING` in chunks, maps the columns back through
     `CACHE_TABLES`, and names only the columns `cache_client` may insert.
-  - Before sending anything, each makes the rows pass the tables' CHECKs: products stripped as
-    Python's `str.strip` does, and failing loudly over `MAX_CACHE_KEY_BYTES` in UTF-8; blank
-    values as null.
+  - Before sending anything, each makes the rows pass the tables' CHECKs: products without
+    format characters such as a zero-width space, as the go-live import removes them, then
+    stripped as Python's `str.strip` does; failing loudly on a control character inside a
+    product or over `MAX_CACHE_KEY_BYTES` in UTF-8; blank values as null.
+  - **Open:** a client's file can hold a zero-width space the pulled keys no longer do, so its
+    product misses the cache. Either the lab removes format characters as it reads a client's
+    file, or it lives with the extra LLM calls.
 - `spreadsheet.py`:
   - Step 1 pushes `categorized.new_categorizations` through `push_product_categorizations`. For
     serving data, it also pushes the Gemini-labelled products through
