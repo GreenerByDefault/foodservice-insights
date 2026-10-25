@@ -13,7 +13,7 @@ paths:
 # TypeScript
 
 What is specific to the TypeScript stack, on top of [`AGENTS.md`](../../AGENTS.md).
-[`README.md`](../../README.md) covers what to run, and its testing table gives the file suffix
+[`docs/typescript.md`](../../docs/typescript.md) covers what to run, and its testing table gives the file suffix
 each runner picks up: a misnamed test is skipped or run by the wrong runner.
 
 ## Verifying a change

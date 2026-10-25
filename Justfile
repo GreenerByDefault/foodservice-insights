@@ -1,4 +1,4 @@
-# Python only. TypeScript has pnpm and Turbo — see README.md.
+# Python only. TypeScript has pnpm and Turbo — see docs/typescript.md.
 #
 # Recipe names mirror the pnpm scripts in `package.json` so the two stacks feel the same, and
 # CI runs these recipes rather than its own copy of the commands.

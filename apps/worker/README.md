@@ -31,11 +31,40 @@ Beyond the vars every package reads from `.env`, it needs:
 | `WORKER_MAX_CONCURRENT_ATTEMPTS` | Optional. Overrides `maxConcurrentAttempts` |
 | `PLATFORM_SHUTDOWN_GRACE_MS` | The host's shutdown grace, which `drainGraceMs` is derived from. Required by `WORKER_MODE=live`; optional otherwise |
 | `WORKER_DRAIN_GRACE_MS` | Optional. Overrides the derived `drainGraceMs` |
-| `CACHE_DB_CONNECTION_STRING` | Optional. Points the categorization cache's reads and suggestions at another database than `DB_CONNECTION_STRING`'s: on a laptop, the hosted project as `cache_client`. Only `WORKER_MODE=live` honors it; `stubbed` and `mock-llm` log a warning and use their own. Production leaves it unset |
+| `CACHE_DB_CONNECTION_STRING` | Optional. Points the categorization cache's reads and suggestions at another database than `DB_CONNECTION_STRING`'s — see [below](#the-categorization-cache). Production leaves it unset |
 
 `createWorkerConfig` in [`src/config.ts`](src/config.ts) is the only way to obtain a checked
 `WorkerConfig` — every tunable, and the relations enforced between them, is documented there
 rather than here.
+
+### The categorization cache
+
+The worker looks each product up in a cache of categorizations that a person has verified, and
+sends only the rest to the LLM. Yours is in your local database, and starts empty. With
+`WORKER_MODE=live`, point it at production's instead, so your runs start from Greener by
+Default's answers:
+
+1. Ask Greener by Default for the `cache_client` connection string, and treat it like
+   `OPENAI_API_KEY`. It can only read the cache and suggest rows to it.
+2. Put it in `.env` as `CACHE_DB_CONNECTION_STRING`, beside `WORKER_MODE=live`, in the form
+   `.env.example` shows: its `sslrootcert` is the absolute path to the repo's `supabase-ca.crt`.
+3. Restart the worker. Its `Worker started` line names the cache database as
+   `cache_client@db.<project-ref>.supabase.co:5432/postgres`, not `worker`.
+
+Each product your runs send to the LLM then lands in production's cache as a suggestion, which a
+person verifies in Supabase Studio before any run uses it.
+
+- **Comment the line out while changing the categorization prompt or model.** Otherwise the
+  experiment's answers become the first suggestion for every product it sees, and block the real
+  model's.
+- **Never put this string in `DB_CONNECTION_STRING`.** Your worker would claim production's
+  reports.
+- `WORKER_MODE=mock-llm` and `stubbed` ignore it with a warning, so their keyword and fake
+  answers never reach the shared cache, and use your local one.
+- The lab reads the same variable; see [`python/lab/README.md`](../../python/lab/README.md#working-on-a-client).
+
+Without the string, you can load a CSV copy of the cache into your local database with the
+[temporary go-live import](../../packages/db/scripts/temporary-go-live-cache-import/README.md).
 
 ### `WORKER_MODE`
 

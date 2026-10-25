@@ -13,7 +13,7 @@ they load when you touch that stack's files:
 
 | Working on | Rules | Getting started |
 | --- | --- | --- |
-| TypeScript — `apps/`, `packages/`, `tests/` | [`.claude/rules/typescript.md`](.claude/rules/typescript.md) | [`README.md`](README.md) |
+| TypeScript — `apps/`, `packages/`, `tests/` | [`.claude/rules/typescript.md`](.claude/rules/typescript.md) | [`docs/typescript.md`](docs/typescript.md) |
 | Python — `python/` | [`.claude/rules/python.md`](.claude/rules/python.md) | [`python/README.md`](python/README.md) |
 
 If you are about to change one of those stacks and its rule file has not appeared in your

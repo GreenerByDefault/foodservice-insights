@@ -6,7 +6,7 @@ server and worker, so it is safe to run alongside anything else.
 **Both services run as their real Docker images** — see
 [`scripts/containers.ts`](scripts/containers.ts) for why, and for the networking that makes a
 container reachable from a host browser. That networking needs a one-time `/etc/hosts` line (see
-the repo root [`README.md`](../../README.md)), which the run checks for before it does anything
+[`docs/typescript.md`](../../docs/typescript.md#setup)), which the run checks for before it does anything
 slow.
 
 The one tier that exercises more than one component at a time:

@@ -3,12 +3,10 @@
 ## Context
 
 The docs' structure dates from the project's first weeks, when the root README was the only
-guide and the architecture doc was partly a spec. The product is now built and close to go-live, and
-the structure no longer fits:
+guide and the architecture doc was partly a spec. The product is now built and close to go-live.
+The root README is already a front door with a map, and the TypeScript guide is
+`docs/typescript.md`; what remains no longer fits:
 
-- **The root README is 413 lines, and its bottom 240 are the TypeScript developer guide.** The
-  Python guide lives in `python/README.md`, so every reader, Python ones included, scrolls past
-  one stack's guide, and the docs map sits in the middle where nobody looks for it.
 - **`docs/architecture.md` (587 lines) carries detail one component owns, and that copy has drifted.**
   § Worker opens with "The detail in this section moves to `apps/worker/README.md` when that
   package lands", long after it landed, while `apps/worker/README.md` points back at it. Most of
@@ -24,17 +22,16 @@ the structure no longer fits:
   five event kinds `apps/web/src/lib/server/audit.ts` records, an expired invite that "does not
   redirect" (it does, for a user with no memberships), country-of-users as a nice-to-have (built
   in #687), and two `TBD`s that should be greppable `**Open:**`.
-- **Some commands in the docs do not work as written**: `pnpm test:db:clean` without `TEST_DB=1`
-  cleans the dev stack, where no test databases exist; `pnpm exec playwright show-trace` fails
-  from the root; `apps/worker/README.md`'s build command skips the `@gbd/*` packages it imports;
-  `packages/email/README.md`'s example omits a required `reportName`.
+- **Some commands in the docs do not work as written**: `apps/worker/README.md`'s build command
+  skips the `@gbd/*` packages it imports; `packages/email/README.md`'s example omits a required
+  `reportName`.
 - **Small rot elsewhere**: `python/lab/test_data/README.md` (345 lines) describes notebooks and
-  step numbers that no longer exist; `python/README.md` sends readers to a "repo layout" the root
-  README does not have; a few code comments cite doc sections that moved or never existed.
+  step numbers that no longer exist; a few code comments cite doc sections that moved or never
+  existed.
 
 Goal: docs a human or agent can find their way through, each fact in the one place the
-`writing-docs` skill says it belongs, and a root README that is a front door with a map. Where
-a doc is wrong because the code is awkward, fix the code.
+`writing-docs` skill says it belongs. Where a doc is wrong because the code is awkward, fix the
+code.
 
 ## Decisions
 
@@ -69,77 +66,14 @@ a doc is wrong because the code is awkward, fix the code.
   `production-sign-in.md` and `email-provider.md` make that true within days, and `.do/README.md`
   already says so. Likewise § Alerts, § Logs and § Hosting, which `alerts.md`, `better-stack.md`
   and `custom-domain.md` rewrite: their headings stay, and this plan does not restructure them.
-- **Order.** PR 1, PRs 2–3, and PR 4 are independent; PR 2 precedes PR 3 (both edit
-  `docs/architecture.md`), and PR 5 goes last (it edits `apps/worker/README.md` after PRs 1
-  and 2).
+- **Order.** PRs 1–2 and PR 3 are independent; PR 1 precedes PR 2 (both edit
+  `docs/architecture.md`), and PR 4 goes last (it edits `apps/worker/README.md` after PR 1).
 - *Rejected: `docs/python.md` beside `docs/typescript.md`.* Symmetric, but it moves the Python
   guide out of the only directory that holds Python.
 - *Rejected: keeping ARCHITECTURE.md and REQUIREMENTS.md at the root.* Updating references is
   mechanical, and with them in `docs/` the folder has an obvious charter.
 
-## PR 1 — The root README becomes a front door; the TypeScript guide moves to docs/typescript.md
-
-**`README.md`** (~170 lines), in this order:
-
-1. What the product is (as today).
-2. **Run the app locally**: Prerequisites, First time, Start it, Analysis modes, Signing in for
-   real, as today, less § The categorization cache (below).
-3. **The two databases**: dev vs test, `TEST_DB=1`, always `scripts/supabase`. It stays here
-   because both stacks use it: the lab's database tests need the test stack too.
-4. **Developing**: the stack table, now TypeScript → `docs/typescript.md`, Python →
-   `python/README.md`, and AGENTS.md for how code is written and verified; then § Working with
-   Claude Code, unchanged.
-5. **Where to find things**, the map regrouped by question rather than one 19-row list:
-   - *Understand it*: `docs/requirements.md`, `docs/architecture.md`.
-   - *Work on it*: `docs/typescript.md`, `python/README.md`, `AGENTS.md`.
-   - *Each component*: one row per package or app README, as today.
-   - *Run it in production*: `.do/README.md`, `apps/grafana/README.md`.
-6. **What CI runs**: that a PR runs only the jobs its changes can affect, per
-   `.github/filters.yml`, and the merge queue. Drop "a TypeScript-only change skips every Python
-   job, and vice versa", which is not true (migrations run `python_lab`; Python runs `system`).
-
-Within the README, say the Mailpit and Studio URLs once each (today three times and twice).
-
-**`docs/typescript.md`** (new, ~210 lines): the root README's § TypeScript (Setup, Everyday
-commands, Uploading reports by hand, Testing, Tests and the database, Occasional tasks), opening
-with one line naming it the counterpart of `python/README.md`. Fixed on the way:
-
-- `pnpm --filter @gbd/web exec playwright show-trace <zip>`, and drop "on failure" from the CI
-  report (the e2e and system jobs upload one on every run).
-- `pnpm test` is `test:unit` then `test:playwright`, not "Everything": it leaves out
-  `test:system` and Python.
-- To scope a task to one package, `pnpm turbo run <task> --filter=<pkg>`, not
-  `pnpm --filter <pkg> <task>`, which skips `^build` (the trap `.claude/rules/typescript.md`
-  names).
-- Seeding: Grafana's vitest setup also clones and seeds a run database, so "only Playwright
-  seeds" goes; after a truncate it is `seed:identity` alone, matching § Reset a database.
-- `REPORT_RATE_LIMIT=off` is already `.env.example`'s value.
-- § Screenshots shrinks to a pointer at `apps/web/e2e/README.md`, which already has
-  `screenshots:update` and `test:browser:stop`. § Tests and the database stays one line per rule,
-  each pointing at the package README that owns it.
-
-**Code fix: `pnpm test:db:clean` targets the test stack, with or without `TEST_DB=1`.** It only
-ever makes sense there (`packages/db/scripts/clean.ts`'s header says so), so
-`packages/db/package.json`'s `db:clean` script sets `TEST_DB=1` itself, and the header's usage
-line stays true.
-
-**§ The categorization cache → `apps/worker/README.md`**, as a section after its env var table,
-whose `CACHE_DB_CONNECTION_STRING` row it expands. It configures the worker's `live` mode, which
-only some developers run. The README's `live` row links it.
-
-**References**: `#reset-a-database` (`packages/db/README.md`) and § Tests and the database
-(`python/lab/tests/conftest.py`) → `docs/typescript.md`; `tests/e2e/README.md`'s `/etc/hosts`
-pointer → `docs/typescript.md` § Setup; the categorization cache (`.env.example`,
-`caches-to-supabase.md`) → `apps/worker/README.md`; `.claude/rules/typescript.md` ("README.md
-covers what to run, and its testing table…") and `Justfile:1` → `docs/typescript.md`;
-`AGENTS.md`'s TypeScript "Getting started" cell → `docs/typescript.md`; `python/README.md`'s
-opening, which promises a repo layout → "running the app, the local databases, and the docs map".
-The runtime "see the README" messages (`apps/web/src/lib/server/env.ts`, `packages/core/src/env.ts`,
-`packages/email/src/testing/global-setup.ts`) are about `.env` and starting the stacks, which stay
-in the root README. `production-sign-in.md` PR 2 names "the root README" for sign-in, which also
-stays there.
-
-## PR 2 — Worker detail moves out of docs/architecture.md
+## PR 1 — Worker detail moves out of docs/architecture.md
 
 **`docs/architecture.md` § Worker keeps the seams**, about 40 lines where there are 160:
 
@@ -179,7 +113,7 @@ corollaries and thrown-renewal cases (`failures.ts`), and the reaper's own-`work
 - § Worker queue says "workers wait `queuePollIntervalMs` after a poll that starts nothing"
   instead of "every 1–2 seconds". Heading unchanged.
 
-## PR 3 — The rest of docs/architecture.md keeps to cross-component facts
+## PR 2 — The rest of docs/architecture.md keeps to cross-component facts
 
 Each section whose subject is one package moves to that package's doc, leaving a line and a
 pointer; nothing in § Alerts, § Logs or § Hosting changes.
@@ -211,7 +145,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   § The model is the fuller copy.
 - **§ File links**: drop "we can add download metrics later".
 
-## PR 4 — docs/requirements.md matches the product
+## PR 3 — docs/requirements.md matches the product
 
 - § Processing: the server enqueues an attempt and a worker pulls it.
 - § File upload: a workbook may have many sheets; `apps/web/src/lib/reports/excel/sheets.ts`
@@ -232,15 +166,16 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 - The opening's spec-era instruction ("When implementing … replace these docs with a link")
   becomes the standing rule: a limit lives in code, and this file names its constant.
 
-## PR 5 — Package docs, and the code their errors pointed at
+## PR 4 — Package docs, and the code their errors pointed at
 
 - `python/lab/test_data/README.md`: rewrite to about 20 lines. What the dataset is and how it was
   anonymized, which lab step (by `python/lab/README.md`'s numbering) each file feeds, safe to
   commit, not for client work. Drop the file tree, row counts, and the notebooks that no longer
   exist. `python/lab/README.md`'s "one input per step" matches it.
 - `apps/worker/README.md`:
-  - Its `WORKER_MODE` table repeats the root README's and restates `src/modes.ts`; keep only what
-    the root's lacks (the timings profile) as a sentence.
+  - Its `WORKER_MODE` table repeats the root README's § Analysis modes and restates
+    `src/modes.ts`; keep only what the root's lacks (the timings profile) as a sentence. Its
+    § The categorization cache, moved there from the root README, stays.
   - Build with `pnpm turbo run build --filter=@gbd/worker`, which builds the packages it imports.
   - The env table gains `OPENAI_API_KEY` (required by `live`) and `WORKER_GIT_SHA`, and
     `PYTHON_BIN` is unneeded in `off`.
@@ -272,12 +207,9 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   too, but not a doc named without `§`, so a later move still wants a `git grep` for the old
   name (`ARCHITECTURE.md` and `REQUIREMENTS.md` now appear only in frozen SQL and the check's
   own tests).
-- **PR 1:** with the test stack up, create a leftover by hand (`CREATE DATABASE fsi_test_manual`
-  as `supabase_admin` on port 65322); `pnpm test:db:clean` with no `TEST_DB` drops it, and so
-  does `TEST_DB=1 pnpm test:db:clean` on a second one.
 - **Gates.** Every PR: `just lint`, since ruff formats Markdown repo-wide and it runs the doc
-  check. PRs that touch TypeScript or package scripts (1, 2, 5): `pnpm lint && pnpm check &&
-  pnpm test`, in the background. PRs that touch Python (2, 5): `just lint && just check && just
-  test`, and for PR 5's marker removal, `--strict-markers` passing confirms nothing used them.
+  check. PRs that touch TypeScript or package scripts (1, 4): `pnpm lint && pnpm check &&
+  pnpm test`, in the background. PRs that touch Python (1, 4): `just lint && just check && just
+  test`, and for PR 4's marker removal, `--strict-markers` passing confirms nothing used them.
 - **Read-through.** Each moved section reads correctly where it landed, with no dangling "above"
-  or "below"; the root README renders on GitHub with the map visible without much scrolling.
+  or "below".

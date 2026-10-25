@@ -1,5 +1,5 @@
-/** CLI for `cleanAllTestDatabases` (see `run-database.ts`). `TEST_DB=1` targets the test stack,
- * though this is the one command that only makes sense there.
+/** CLI for `cleanAllTestDatabases` (see `run-database.ts`). It only makes sense on the test stack,
+ * so the package script sets `TEST_DB=1` itself.
  *
  *   pnpm test:db:clean
  *
