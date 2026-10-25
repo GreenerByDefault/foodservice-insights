@@ -174,7 +174,10 @@ When GBD's final CSVs arrive, follow the import's
 
 - Deletes `packages/db/scripts/temporary-go-live-cache-import/`, `@gbd/db`'s
   `temporary-go-live-cache-import` script, and `apps/worker/README.md`'s link to it at the end of
-  § The categorization cache.
+  § The categorization cache. With them: `packages/db/src/client.ts`'s `hostedFromACheckout`
+  option and the refusal it skips (its comment says "Delete this with the script"),
+  `.claude/settings.json`'s `temporary-go-live-cache-import` ask rule, and `runbooks.md`'s
+  sentence naming it as the one production-touching script.
 - If PR 1 has landed, it deletes this plan. Otherwise it removes this PR and § The final
   import.
 

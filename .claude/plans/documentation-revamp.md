@@ -92,6 +92,25 @@ code.
   `apps/web/src/lib/server/files.ts:5-6` (points at a route header that does not explain).
 - Left alone: `.do/README.md`'s "until `email-provider.md` wires up Postmark", which that plan's
   PR rewrites within days.
+- From the end-of-phase audit (2026-10-25), each a line or two:
+  - `python/README.md`: `just test` runs `scripts/ci/tests` too; `OPENAI_API_KEY` is read from
+    the process, and only the worker parent and the lab load `.env` (calling `analyze()` from a
+    shell needs it exported); link `python/insights/README.md`; name `scripts/profile_report.py`
+    as the measurement `python.md`'s "do not optimize without a measurement" asks for.
+  - `python/insights/README.md`'s "see its README": the lab's `food_report/` has no README; point
+    at `python/lab/README.md` § The pipeline.
+  - `.claude/rules/contract.md` `paths`: add `python/worker_child/worker_child/run.py`,
+    `writer.py` and `python/worker_child/tests/support/contract_fixtures.py`, which write and read
+    the contract documents.
+  - `.claude/skills/writing-docs/SKILL.md`: the root also holds `CLAUDE.md`.
+  - `.claude/skills/plan-advance/SKILL.md`: the register example is `*Rejected: …*` and
+    "Considered, not done", which plans use; none uses "Accepted:".
+  - `apps/web/e2e/README.md` § Screenshots: record the Git LFS decision, which today lives only in
+    the deleted `visual-testing.md`. Measured 2026-10-21: 168 PNGs, 1,626 PNG blobs over 75
+    commits, about 52 MB of a 60 MB pack. Not LFS (bandwidth quotas, CI checkout setup, and it
+    cannot shrink history). New trigger: a clone noticeably slow, or the pack past about 500 MB.
+    The coming redesign will regenerate every image at least once, so prune the set to screens
+    with real visual risk before it, as the README already asks.
 
 ## Verification
 

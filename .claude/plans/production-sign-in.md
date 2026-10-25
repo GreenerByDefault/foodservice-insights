@@ -20,11 +20,14 @@ Eric's.
    settings and templates (`email-provider.md`).
 3. `SITE_URL`, Supabase's Site URL, and `custom-domain.md`'s PR: the app answers at
    `insights.greenerbydefault.com`. This needs only the CNAME, so it can run alongside 2.
-4. `email-provider.md`'s PR: production sends through Postmark. Not before 2, since
+4. [`result-email-links.md`](result-email-links.md)'s PR: the result email links to the report by
+   slug. Before 5, since Postmark is what would deliver the broken link; it needs nothing from
+   GBD, so it can land any time before then.
+5. `email-provider.md`'s PR: production sends through Postmark. Not before 2, since
    `EMAIL_TRANSPORT=provider` is what keeps mail from going out under `p=reject` until the DNS
    verifies.
-5. Postmark approves the account.
-6. This plan: § Before PR 1, then PR 1 and PR 2.
+6. Postmark approves the account.
+7. This plan: § Before PR 1, then PR 1 and PR 2.
 
 ## Before PR 1: the hosted project
 
