@@ -4,6 +4,9 @@ paths:
   - "apps/worker/src/contract/**"
   - "python/worker_child/worker_child/contract/**"
   - "python/worker_child/tests/contract/**"
+  - "python/worker_child/worker_child/run.py"
+  - "python/worker_child/worker_child/writer.py"
+  - "python/worker_child/tests/support/contract_fixtures.py"
 ---
 
 # The worker contract

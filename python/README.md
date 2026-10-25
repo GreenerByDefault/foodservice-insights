@@ -1,6 +1,7 @@
 # Python
 
-The AI analysis library, the worker's child process, and the data-science lab. This file is
+The AI analysis library ([`insights/README.md`](insights/README.md)), the worker's child process,
+and the data-science lab ([`lab/README.md`](lab/README.md)). This file is
 the Python counterpart to [`docs/typescript.md`](../docs/typescript.md). The root
 [`README.md`](../README.md) has running the app, the local databases, and the docs map, and
 [`.claude/rules/python.md`](../.claude/rules/python.md) has how we write Python.
@@ -35,10 +36,10 @@ Run these from anywhere in the repo.
 | --- | --- |
 | `just` | List every recipe |
 | `just sync` | Install every package and dev tool into `.venv` |
-| `just lint` | Ruff: lint rules, import sorting, and a formatting check |
-| `just fmt` | Ruff, applying fixes |
+| `just lint` | Ruff: lint rules, import sorting, and a formatting check; `nbstripout` fails on a notebook with outputs |
+| `just fmt` | Ruff, applying fixes; `nbstripout`, stripping notebook outputs |
 | `just check` | ty: typechecking |
-| `just test` | Tests for the two packages we ship |
+| `just test` | Tests for the two packages we ship, and for `scripts/ci/` |
 | `just test-lab` | Tests for the lab |
 
 For anything one-off, prefix it with `uv run`: `uv run python`, `uv run pytest -k categorize -x`.
@@ -48,8 +49,6 @@ For anything one-off, prefix it with `uv run`: `uv run python`, `uv run pytest -
 Tests live in `<package>/tests/` and are named `test_*.py`. They run concurrently under
 `pytest-xdist`; a bare `uv run pytest` is serial, which is what you want while debugging a
 single failure.
-
-Mark a test `@pytest.mark.slow` or `@pytest.mark.llm` if it's expensive or calls a real LLM.
 
 The lab's database tests skip unless `TEST_DB=1` is set, and then need the test stack running and
 migrated ([root README § The two databases](../README.md#the-two-databases)):
@@ -63,5 +62,12 @@ Add it to `[project.dependencies]` of the package that imports it, then `just sy
 
 ### API keys
 
-The analysis library reads `OPENAI_API_KEY`. Set it in the repo root's `.env`; see
-[`../.env.example`](../.env.example). The lab reads two more; see [`lab/README.md`](lab/README.md).
+The analysis library reads `OPENAI_API_KEY` from the process environment. Set it in the repo
+root's `.env` ([`../.env.example`](../.env.example)), which only the worker parent and the lab load:
+to call `analyze()` from a shell, export it first. The lab reads two more; see
+[`lab/README.md`](lab/README.md).
+
+### Measure before optimizing
+
+`uv run python scripts/profile_report.py` profiles building a report at the row cap; its docstring
+says what it covers.

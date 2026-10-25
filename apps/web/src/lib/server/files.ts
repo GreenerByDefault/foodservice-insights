@@ -2,8 +2,8 @@
  * confirmed is accessible, check the object is actually there and hand back a redirect to a
  * freshly signed URL.
  *
- * See `routes/file/input/[id=uuid]/+server.ts` for why these routes are unauthenticated and why
- * the redirect — not the link the user holds — is what expires.
+ * These routes are unauthenticated and the link the user holds never expires; only the redirect
+ * does. `docs/architecture.md` § File links says why.
  */
 
 import { type BlobStore, objectExists, signedObjectUrl } from '@gbd/storage';

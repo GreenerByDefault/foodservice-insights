@@ -14,15 +14,13 @@ the internet does not know, not to document everything.
 This plan supersedes `.claude/plans/runbooks.md`: adopt it under that name, replacing the file.
 PR 1 recovers the three existing entries with `git show origin/main:.claude/plans/runbooks.md`.
 
-**It runs beside [`documentation-revamp.md`](documentation-revamp.md)**, which creates `docs/`
-(`architecture.md`, `requirements.md`, `typescript.md`), adds a CI link checker
-(`scripts/ci/check_doc_links.py`), and leaves runbooks to this plan, saying `docs/` is where they
-fit. Either plan's PR 1 may land first: `docs/` with only `runbooks/` in it is fine, and the
-revamp's PR 2 rewrites every `docs/architecture.md` reference it finds, so each PR here links whatever
-name is on `main` the day it opens. The lines both plans touch, one each: the revamp's PR 3 adds a
-"Run it in production" row to the README map (PR 1 here adds `docs/runbooks/` to it), its PR 5
-rewrites the secrets **Open** in architecture (PR 3 here resolves it), and its PR 6 marks account
-recovery **Open** (PR 4 here resolves it). Whichever lands second adjusts the line.
+**The documentation revamp has landed**, and left runbooks to this plan. `docs/` holds what no
+single directory contains (`architecture.md`, `requirements.md`, `typescript.md`), so
+`docs/runbooks/` fits it, and `scripts/ci/check_doc_links.py` checks every link and `§` citation
+these PRs add. The lines it left for this plan: the README map's "Run it in production" table
+(PR 1 here adds `docs/runbooks/` to it), the secrets **Open** in `docs/architecture.md` § Secrets management
+(PR 3 here resolves it), and the account recovery **Open** in `docs/requirements.md` (PR 4 here
+resolves it).
 
 Facts from the tree (2026-10-20) that shape the design:
 
@@ -42,7 +40,7 @@ Facts from the tree (2026-10-20) that shape the design:
   Supabase (`.claude/settings.json`). A runbook is run by a person from their own shell or a
   vendor's dashboard.
 - **House skills never run scripts, and rules are path-scoped pointers**: `db.md` points at
-  `packages/db/README.md`; the revamp's PR 7 makes `web.md` point at `apps/web/README.md`. The one
+  `packages/db/README.md`, and `web.md` at `apps/web/README.md`. The one
   production-touching script (`temporary-go-live-cache-import/`) is TTY-only, prompts for the
   credential, and `caches-to-supabase.md` PR 2 deletes it, so nothing may link it.
 - **`cache_client`'s one password is shared** by every developer and data scientist holding
@@ -210,8 +208,7 @@ Branch off `main`. Recover the three entries first:
   `review-cache-suggestions.md`); `.do/README.md:16-17`. The guard's hint is unchanged.
 - **Other plans, one line each:** `better-stack.md:56,118` →
   `docs/runbooks/trace-a-problem-through-the-logs.md`; `caches-to-supabase.md:69-70`;
-  `email-provider.md:278-281` → `docs/runbooks/a-user-did-not-get-an-email.md`, plus its rows;
-  `documentation-revamp.md`'s "Runbooks are out of scope" bullet names `docs/runbooks/`.
+  `email-provider.md:278-281` → `docs/runbooks/a-user-did-not-get-an-email.md`, plus its rows.
 - `/plan-advance` removes this section.
 
 ## PR 2 — Deploying

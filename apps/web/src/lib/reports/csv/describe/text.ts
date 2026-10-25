@@ -25,7 +25,8 @@ export function quote(raw: string): string {
   return `"${shortened}"`;
 }
 
-/** A small thousands separator, since `Intl` and `toLocaleString` are banned here per the README.md. */
+/** A fixed English thousands separator. `Intl` and `toLocaleString` follow the runtime's locale, so
+ * the browser and the server, which both describe a file, could word one problem differently. */
 export function groupDigits(value: number): string {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }

@@ -11,7 +11,7 @@ the one entry point the worker calls; the lab calls the same modules directly.
 `report/pdf.write_report_pdf()` / `report/excel.write_client_workbook()` write the client-facing
 PDF and workbook. The lab's `gbd_foodservice_insights_lab.food_report.pipeline.run_food_report()`
 wraps those with file handling and the rest of the bundle (chart PNGs, the QA workbook, the run
-manifest, the run log) — see its README. To change:
+manifest, the run log) — see [`python/lab/README.md` § The pipeline](../lab/README.md#the-pipeline). To change:
 
 | What | Where |
 | --- | --- |

@@ -10,7 +10,7 @@ keep every document either accurate or obviously dead. [`AGENTS.md`](../../../AG
 Comments covers the same question for code comments.
 
 - **A doc lives at the highest point in the tree that contains all the code it describes.**
-  The root holds only `README.md` and `AGENTS.md`. [`docs/`](../../../docs/) holds what no single
+  The root holds only `README.md`, `AGENTS.md` and `CLAUDE.md`. [`docs/`](../../../docs/) holds what no single
   directory contains: product intent ([`requirements.md`](../../../docs/requirements.md)), the
   seams between components ([`architecture.md`](../../../docs/architecture.md), which cannot be
   colocated because it owns no one component), and the TypeScript guide, whose code spans `apps/`,

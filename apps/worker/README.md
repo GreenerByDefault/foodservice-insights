@@ -10,27 +10,25 @@ the seams it shares with the rest of the system — the queue, reaping, cancelin
 [`src/main.ts`](src/main.ts) is the entrypoint:
 
 ```sh
-pnpm --filter @gbd/worker build && pnpm --filter @gbd/worker start
+pnpm turbo run build --filter=@gbd/worker && pnpm --filter @gbd/worker start
 ```
 
-`pnpm dev` runs it under `node --watch --watch-path=src`, restarting only on changes to this
-package's own `src/`. Without `--watch-path`, `node --watch` also restarts on every write to a
-`@gbd/*` dependency's `dist/` — pnpm symlinks those in real, not under `node_modules` by path, so
-Node's usual `node_modules` exclusion doesn't apply — which mid-processes an attempt every time
-another package's `tsc --watch` recompiles. A dependency change still needs a manual restart to
-take effect.
+`pnpm dev` restarts it on changes to this package's `src/` only, so a change to a `@gbd/*`
+dependency needs a manual restart.
 
 Beyond the vars every package reads from `.env`, it needs:
 
 | Var | |
 | --- | --- |
 | `WORKER_RUN_ROOT` | Where each attempt gets its own run directory |
-| `PYTHON_BIN` | The Python interpreter that runs the analysis child — the repo venv, not the bare system interpreter |
-| `WORKER_MODE` | Which `analyze` the child runs — see below |
+| `WORKER_MODE` | Which analysis the child runs — see the root [`README.md`](../../README.md#analysis-modes) |
+| `PYTHON_BIN` | The Python interpreter that runs the analysis child — the repo venv, not the bare system interpreter. Unneeded with `WORKER_MODE=off` |
+| `OPENAI_API_KEY` | Required by `WORKER_MODE=live` |
 | `WORKER_ID` | Optional. Defaults to a value derived from the host and process |
 | `WORKER_MAX_CONCURRENT_ATTEMPTS` | Optional. Overrides `maxConcurrentAttempts` |
 | `PLATFORM_SHUTDOWN_GRACE_MS` | The host's shutdown grace, which `drainGraceMs` is derived from. Required by `WORKER_MODE=live`; optional otherwise |
 | `WORKER_DRAIN_GRACE_MS` | Optional. Overrides the derived `drainGraceMs` |
+| `WORKER_GIT_SHA` | Optional. The commit each attempt records it ran; the image sets it, and it is unset locally |
 | `CACHE_DB_CONNECTION_STRING` | Optional. Points the categorization cache's reads and suggestions at another database than `DB_CONNECTION_STRING`'s — see [below](#the-categorization-cache). Production leaves it unset |
 
 `createWorkerConfig` in [`src/config.ts`](src/config.ts) is the only way to obtain a checked
@@ -66,19 +64,10 @@ person verifies in Supabase Studio before any run uses it.
 Without the string, you can load a CSV copy of the cache into your local database with the
 [temporary go-live import](../../packages/db/scripts/temporary-go-live-cache-import/README.md).
 
-### `WORKER_MODE`
+### Timings
 
-[`src/modes.ts`](src/modes.ts) resolves `WORKER_MODE` into which child to spawn and, since a
-fast local loop needs different timings than production, which config profile to run it under.
-For what each mode gives you and when to pick it, see the root
-[`README.md`](../../README.md#analysis-modes).
-
-| `WORKER_MODE` | Analysis | Runs | Timings |
-| --- | --- | --- | --- |
-| `mock-llm` | Real, with a keyword list instead of OpenAI | `python -m worker_child.mock_llm` | Production |
-| `live` | Real, categorized by OpenAI; what production runs | `python -m worker_child` | Production |
-| `stubbed` | Fake, finishing in seconds | `python -m worker_child.testing` | Fast, so `!hang` is killed while you watch |
-| `off` | None | Nothing | — |
+[`src/modes.ts`](src/modes.ts) runs `WORKER_MODE=stubbed` under a fast config profile, so `!hang`
+is killed while you watch; every other mode uses production's timings.
 
 ## Layout
 
@@ -147,5 +136,6 @@ child?", and a parent whose clock is skewed poisons every other worker's livenes
 [`worker.test.ts`](src/worker.test.ts) runs the whole thing end to end against a real spawned
 child (faked via [`src/testing/fake-child.ts`](src/testing/fake-child.ts)) and real breakable
 database/blob-store proxies. `directive.test.ts`, `verdict.test.ts`, `config.test.ts`, and
-`modes.test.ts` cover their own modules' decision tables with no database, no child, and no
-clock, which is what lets `worker.test.ts` skip re-testing any of them.
+`modes.test.ts` cover their own modules' decision tables with no child and no clock, and all but
+`config.test.ts` with no database, which is what lets `worker.test.ts` skip re-testing any of
+them.
