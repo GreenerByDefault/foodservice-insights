@@ -15,7 +15,7 @@ A caller says what happened; it never says what the email looks like. For the GB
 does not choose the recipient either.
 
 ```ts
-await sendEmail(emailer, { kind: 'analysis-failed', to, organizationId, reportId, reason });
+await sendEmail(emailer, { kind: 'analysis-failed', to, organizationSlug, reportId, reason });
 ```
 
 Every function takes an `Emailer` as its first parameter, so callers stay testable. Build one with
