@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import NamedTuple, Protocol
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -61,6 +61,12 @@ _TABLE_BBOX = Bbox.from_bounds(0.03, 0.06, 0.94, 0.84)
 # ---------------------------------------------------------------------------
 
 
+class PdfSink(Protocol):
+    """All the page writers need of ``PdfPages``, so a test can record pages instead."""
+
+    def savefig(self, figure: Figure, /) -> None: ...
+
+
 def _new_text_figure(fig_size: tuple[float, float] = LETTER_PORTRAIT) -> tuple[Figure, plt.Axes]:
     """Create a blank figure, with its single axes turned off, for rendering text or tables."""
     fig, ax = plt.subplots(figsize=fig_size)
@@ -69,7 +75,7 @@ def _new_text_figure(fig_size: tuple[float, float] = LETTER_PORTRAIT) -> tuple[F
 
 
 def create_title_page(
-    pdf: PdfPages,
+    pdf: PdfSink,
     client: str,
     subtitle: str,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
@@ -209,7 +215,7 @@ def new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]
 
 
 def create_executive_summary_page(
-    pdf: PdfPages,
+    pdf: PdfSink,
     narrative: ExecutiveNarrative,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
@@ -335,7 +341,7 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
 
 
 def create_text_page(
-    pdf: PdfPages,
+    pdf: PdfSink,
     title: str,
     content_lines: list[str],
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
@@ -390,7 +396,7 @@ def create_text_page(
 
 
 def create_category_template_pages(
-    pdf: PdfPages,
+    pdf: PdfSink,
     template: pd.DataFrame,
     fig_size: tuple[float, float] = LETTER_LANDSCAPE,
 ) -> None:
@@ -423,7 +429,7 @@ def create_category_template_pages(
         )
 
 
-def create_animal_intensity_page(pdf: PdfPages, intensity: pd.DataFrame) -> None:
+def create_animal_intensity_page(pdf: PdfSink, intensity: pd.DataFrame) -> None:
     _draw_table_page(
         pdf,
         "Animal Emissions Intensity",
@@ -434,7 +440,7 @@ def create_animal_intensity_page(pdf: PdfPages, intensity: pd.DataFrame) -> None
     )
 
 
-def create_substitution_scenarios_page(pdf: PdfPages, scenarios: pd.DataFrame) -> None:
+def create_substitution_scenarios_page(pdf: PdfSink, scenarios: pd.DataFrame) -> None:
     display_df = _display_table(_format_substitution_scenarios_for_pdf(scenarios))
     display_df["Scenario"] = display_df["Scenario"].map(
         lambda value: textwrap.fill(value, width=24, break_long_words=False, break_on_hyphens=False)
@@ -504,7 +510,7 @@ def _pack_columns(widths: list[float], available_width: float) -> list[list[int]
 
 
 def _draw_table_page(
-    pdf: PdfPages,
+    pdf: PdfSink,
     heading: str,
     display_df: pd.DataFrame,
     *,
@@ -577,7 +583,7 @@ def _draw_table_page(
 
 
 def create_decision_kpis_page(
-    pdf: PdfPages,
+    pdf: PdfSink,
     concentration: AnimalEmissionsConcentration,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:

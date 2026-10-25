@@ -14,7 +14,6 @@ import pytest
 from gbd_foodservice_insights import analysis
 from gbd_foodservice_insights.analysis import (
     LB_TO_KG,
-    AnalysisRequest,
     CachedCategorization,
     CategorizationSummary,
     InputSummary,
@@ -26,7 +25,6 @@ from gbd_foodservice_insights.analysis import (
     ReportSummary,
     StageFinished,
     Telemetry,
-    UnitSystem,
     UnusableDataError,
     UpstreamApiError,
     analyze,
@@ -38,9 +36,11 @@ from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import Headcounts, quality_status_from_findings
 from gbd_foodservice_insights.testing import (
     KEYWORD_PRODUCTS,
+    SAMPLE_COUNTS,
     SAMPLE_MONTHS,
     UNKNOWN_PRODUCTS,
     KeywordLlmClient,
+    a_request,
     input_csv_text,
     sample_input_csv,
 )
@@ -49,33 +49,6 @@ from matplotlib.figure import Figure
 # ----------------------------------------------------------------------
 # Shared fixtures
 # ----------------------------------------------------------------------
-
-
-# Not a `dict`: `worker_child` hands over a read-only view.
-SAMPLE_COUNTS = MonthlyCounts("people", MappingProxyType(dict.fromkeys(SAMPLE_MONTHS, 1000)))
-
-
-def _request(
-    tmp_path: Path,
-    *,
-    counts: MonthlyCounts | None = SAMPLE_COUNTS,
-    unit_system: UnitSystem = "kg",
-    site_name: str | None = None,
-    categorization_cache: tuple[CachedCategorization, ...] = (),
-) -> AnalysisRequest:
-    output_directory = tmp_path / "output"
-    output_directory.mkdir(exist_ok=True)
-    return AnalysisRequest(
-        run_id="test-run",
-        input_csv=tmp_path / "input.csv",
-        output_directory=output_directory,
-        report_name=None,
-        site_name=site_name,
-        organization_name="Acme Foodservice",
-        counts=counts,
-        unit_system=unit_system,
-        categorization_cache=categorization_cache,
-    )
 
 
 FAKE_REPORT_SUMMARY = ReportSummary(
@@ -137,7 +110,7 @@ def fake_report(monkeypatch: pytest.MonkeyPatch) -> FakeReport:
 
 
 def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(sample_input_csv())
     llm = KeywordLlmClient()
     progress_calls = 0
@@ -180,7 +153,7 @@ def test_analyze_writes_a_real_report_end_to_end(tmp_path: Path) -> None:
 def test_analyze_without_counts_writes_a_totals_only_report(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    request = _request(tmp_path, counts=None)
+    request = a_request(tmp_path, counts=None)
     request.input_csv.write_text(sample_input_csv())
     chart_titles: list[list[str]] = []
     write_report_pdf = analysis.write_report_pdf
@@ -219,7 +192,7 @@ class NaIsCheeseLlmClient(KeywordLlmClient):
 
 
 def test_a_product_named_like_a_missing_value_survives(tmp_path: Path) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(sample_input_csv(("NA", *KEYWORD_PRODUCTS)))
 
     outcome = analyze(request, llm=NaIsCheeseLlmClient())
@@ -229,7 +202,7 @@ def test_a_product_named_like_a_missing_value_survives(tmp_path: Path) -> None:
 
 
 def test_a_product_bought_at_zero_weight_still_reports(tmp_path: Path) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(
         input_csv_text(
             (product, f"{month}-15", 0.0 if product == "Pork Loin" else 10.0)
@@ -245,7 +218,7 @@ def test_a_product_bought_at_zero_weight_still_reports(tmp_path: Path) -> None:
 
 
 def test_identical_lines_each_count_toward_the_report(tmp_path: Path) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     rows = [
         (product, f"{month}-15", 10.0) for month in SAMPLE_MONTHS for product in KEYWORD_PRODUCTS
     ]
@@ -270,7 +243,7 @@ def _headcount_finding(
 ) -> Finding:
     """The headcount finding `analyze()` hands the PDF, buying `weight_by_month[month]` of every
     product each month."""
-    request = _request(tmp_path, counts=MonthlyCounts("people", MappingProxyType(counts)))
+    request = a_request(tmp_path, counts=MonthlyCounts("people", MappingProxyType(counts)))
     request.input_csv.write_text(
         input_csv_text(
             (product, f"{month}-15", weight)
@@ -334,7 +307,7 @@ def test_a_mistyped_count_reports_with_a_headcount_warning(
 def test_every_pdf_page_is_letter_even_with_a_product_name_at_the_webs_cap(
     tmp_path: Path,
 ) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     long_name = "Cheddar Cheese Sharp Yellow Shredded Fancy " * 5
     request.input_csv.write_text(sample_input_csv((long_name[:200], *KEYWORD_PRODUCTS)))
 
@@ -382,7 +355,7 @@ def test_analyze_golden_deliverables(tmp_path: Path, monkeypatch: pytest.MonkeyP
     baseline = pd.read_csv(Path(__file__).parent / "data" / "aggregated_baseline.csv")
     baseline = baseline[baseline["category"].notna() & (baseline["category"] != "No Matches Found")]
     cached = baseline.drop_duplicates("product")
-    request = _request(
+    request = a_request(
         tmp_path,
         counts=MonthlyCounts(
             "people", MappingProxyType({"2023-10": 900, "2023-11": 1000, "2023-12": 1100})
@@ -454,7 +427,7 @@ def test_analyze_golden_deliverables(tmp_path: Path, monkeypatch: pytest.MonkeyP
 def test_hands_the_report_the_categorized_rows_and_drops_unknowns(
     tmp_path: Path, fake_report: FakeReport
 ) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(sample_input_csv(("Cheddar Cheese", "Dish Soap", "Chicken Thigh")))
 
     analyze(request, llm=KeywordLlmClient())
@@ -480,7 +453,7 @@ def test_hands_the_report_the_categorized_rows_and_drops_unknowns(
 
 
 def test_converts_pounds_to_kilograms(tmp_path: Path, fake_report: FakeReport) -> None:
-    request = _request(tmp_path, unit_system="lb")
+    request = a_request(tmp_path, unit_system="lb")
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
 
     reported: list[Telemetry] = []
@@ -520,7 +493,7 @@ def test_hands_the_report_the_forms_answers(
     headcounts: Headcounts | None,
     client: str,
 ) -> None:
-    request = _request(tmp_path, counts=counts, site_name=site_name)
+    request = a_request(tmp_path, counts=counts, site_name=site_name)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
 
     def report_progress() -> None:
@@ -555,7 +528,7 @@ def test_the_default_llm_reports_its_calls_as_telemetry(
         return KeywordLlmClient()
 
     monkeypatch.setattr(analysis.OpenAiLlmClient, "from_env", from_env)
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
     reported: list[Telemetry] = []
 
@@ -565,7 +538,7 @@ def test_the_default_llm_reports_its_calls_as_telemetry(
 
 
 def test_a_passed_llm_reports_no_calls(tmp_path: Path, fake_report: FakeReport) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
     reported: list[Telemetry] = []
 
@@ -584,7 +557,7 @@ class MysteryMeatLlmClient(KeywordLlmClient):
 def test_reports_each_stages_summary_and_time_in_order(
     tmp_path: Path, fake_report: FakeReport
 ) -> None:
-    request = _request(
+    request = a_request(
         tmp_path,
         categorization_cache=(
             CachedCategorization("House Blend 7", "Cheese", "house blend"),
@@ -639,7 +612,7 @@ def _without_times(reported: Sequence[Telemetry]) -> list[Telemetry]:
 
 
 def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: FakeReport) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
     llm = KeywordLlmClient()
     progress: list[int] = []
@@ -653,7 +626,7 @@ def test_reports_progress_after_every_llm_call(tmp_path: Path, fake_report: Fake
 
 
 def test_a_cached_product_skips_the_llm(tmp_path: Path, fake_report: FakeReport) -> None:
-    request = _request(
+    request = a_request(
         tmp_path,
         categorization_cache=(CachedCategorization("House Blend 7", "Cheese", "house blend"),),
     )
@@ -671,7 +644,7 @@ def test_a_cached_product_skips_the_llm(tmp_path: Path, fake_report: FakeReport)
 def test_hands_back_exactly_the_products_the_llm_categorized(
     tmp_path: Path, fake_report: FakeReport
 ) -> None:
-    request = _request(
+    request = a_request(
         tmp_path,
         categorization_cache=(CachedCategorization("House Blend 7", "Cheese", "house blend"),),
     )
@@ -694,7 +667,7 @@ def test_hands_back_exactly_the_products_the_llm_categorized(
 
 
 def test_hands_back_the_warnings_the_pdf_lists(tmp_path: Path) -> None:
-    request = _request(tmp_path, counts=None)
+    request = a_request(tmp_path, counts=None)
     request.input_csv.write_text(
         input_csv_text(
             (product, f"{month}-15", 10.0)
@@ -725,7 +698,7 @@ def test_hands_back_the_warnings_the_pdf_lists(tmp_path: Path) -> None:
 
 
 def test_rejects_input_that_breaks_the_contract_before_any_llm_call(tmp_path: Path) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text("product,date,weight\nCheese,01/15/2025,1\n")
     llm = KeywordLlmClient()
 
@@ -740,7 +713,7 @@ def test_rejects_input_that_breaks_the_contract_before_any_llm_call(tmp_path: Pa
 def test_data_with_almost_no_recognizable_products_is_unusable_and_reports_why(
     tmp_path: Path,
 ) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(sample_input_csv(UNKNOWN_PRODUCTS))
     reported: list[Telemetry] = []
 
@@ -765,7 +738,7 @@ def test_data_with_almost_no_recognizable_products_is_unusable_and_reports_why(
 
 
 def test_data_whose_recognizable_products_weigh_nothing_is_unusable(tmp_path: Path) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(
         input_csv_text(
             (product, f"{month}-15", 10.0 if product in UNKNOWN_PRODUCTS else 0.0)
@@ -787,7 +760,7 @@ class UnreachableLlmClient:
 
 
 def test_an_upstream_failure_propagates(tmp_path: Path) -> None:
-    request = _request(tmp_path)
+    request = a_request(tmp_path)
     request.input_csv.write_text(sample_input_csv(KEYWORD_PRODUCTS))
 
     with pytest.raises(UpstreamApiError, match="OpenAI failed 5 times"):

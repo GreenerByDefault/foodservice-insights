@@ -4,7 +4,6 @@ from pathlib import Path
 import pytest
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
-    AnalysisRequest,
     LlmCall,
     Telemetry,
     UnusableDataError,
@@ -16,37 +15,24 @@ from gbd_foodservice_insights.testing import (
     PDF_MAGIC_BYTES,
     XLSX_MAGIC_BYTES,
     KeywordLlmClient,
+    a_request,
     stub_analysis,
 )
 
 
-def _request(tmp_path: Path) -> AnalysisRequest:
-    return AnalysisRequest(
-        run_id="test-run",
-        input_csv=tmp_path / "input.csv",
-        output_directory=tmp_path,
-        report_name=None,
-        site_name=None,
-        organization_name="Acme Foodservice",
-        counts=None,
-        unit_system="lb",
-        categorization_cache=(),
-    )
-
-
 def test_stub_analysis_writes_exactly_what_it_declares(tmp_path: Path) -> None:
-    outcome = stub_analysis(_request(tmp_path))
+    outcome = stub_analysis(a_request(tmp_path))
     assert outcome.pdf.read_bytes() == PDF_MAGIC_BYTES
     assert outcome.xlsx.read_bytes() == XLSX_MAGIC_BYTES
 
 
 def test_stub_analysis_can_omit_the_pdf(tmp_path: Path) -> None:
-    outcome = stub_analysis(_request(tmp_path), write_pdf=False)
+    outcome = stub_analysis(a_request(tmp_path), write_pdf=False)
     assert not outcome.pdf.exists()
 
 
 def test_stub_analysis_can_omit_the_xlsx(tmp_path: Path) -> None:
-    outcome = stub_analysis(_request(tmp_path), write_xlsx=False)
+    outcome = stub_analysis(a_request(tmp_path), write_xlsx=False)
     assert not outcome.xlsx.exists()
 
 
@@ -57,7 +43,7 @@ def test_stub_analysis_reports_progress_the_requested_number_of_times(tmp_path: 
         nonlocal calls
         calls += 1
 
-    stub_analysis(_request(tmp_path), report_progress=count, progress_calls=3)
+    stub_analysis(a_request(tmp_path), report_progress=count, progress_calls=3)
 
     assert calls == 3
 
@@ -65,7 +51,7 @@ def test_stub_analysis_reports_progress_the_requested_number_of_times(tmp_path: 
 @pytest.mark.parametrize("error", [UpstreamApiError, UnusableDataError])
 def test_stub_analysis_can_raise_on_demand(tmp_path: Path, error: type[AnalysisError]) -> None:
     with pytest.raises(error):
-        stub_analysis(_request(tmp_path), raises=error)
+        stub_analysis(a_request(tmp_path), raises=error)
 
 
 @pytest.mark.parametrize("raises", [None, UpstreamApiError])
@@ -88,16 +74,17 @@ def test_stub_analysis_reports_its_telemetry_even_when_it_raises(
 
     with pytest.raises(raises) if raises is not None else contextlib.nullcontext():
         stub_analysis(
-            _request(tmp_path), report_telemetry=reported.append, telemetry=[call], raises=raises
+            a_request(tmp_path), report_telemetry=reported.append, telemetry=[call], raises=raises
         )
 
     assert reported == [call]
 
 
 def test_stub_analysis_writes_nothing_when_it_raises(tmp_path: Path) -> None:
+    request = a_request(tmp_path)
     with pytest.raises(UpstreamApiError):
-        stub_analysis(_request(tmp_path), raises=UpstreamApiError)
-    assert list(tmp_path.iterdir()) == []
+        stub_analysis(request, raises=UpstreamApiError)
+    assert list(request.output_directory.iterdir()) == []
 
 
 def test_keyword_table_names_only_gbd_categories() -> None:

@@ -23,12 +23,6 @@ from matplotlib.ft2font import FT2Font
 from matplotlib.patches import Rectangle
 
 
-@pytest.fixture(autouse=True)
-def cleanup_plt():
-    yield
-    plt.close("all")
-
-
 def test_setup_gbd_fonts_registers_title_and_body_fonts():
     setup_gbd_fonts()
     registered_names = {f.name for f in font_manager.fontManager.ttflist}

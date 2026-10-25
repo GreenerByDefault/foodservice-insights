@@ -436,11 +436,3 @@ class TestPlotPlantAnimalSplit:
         fig = plot_plant_animal_split(plant_pcts, figsize=(12, 4))
         assert isinstance(fig, plt.Figure)
         plt.close(fig)
-
-
-# Clean up matplotlib
-@pytest.fixture(autouse=True)
-def cleanup_plt():
-    """Clean up matplotlib figures after each test."""
-    yield
-    plt.close("all")

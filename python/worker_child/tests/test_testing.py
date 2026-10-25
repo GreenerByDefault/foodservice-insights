@@ -7,13 +7,12 @@ from pathlib import Path
 import pytest
 from gbd_foodservice_insights.analysis import (
     AnalysisError,
-    AnalysisRequest,
     InvalidInputError,
-    MonthlyCounts,
     ReportSummary,
     UnusableDataError,
     UpstreamApiError,
 )
+from gbd_foodservice_insights.testing import a_request
 from worker_child.contract import layout, names
 from worker_child.testing import (
     HANG_TICK_SECONDS,
@@ -27,25 +26,6 @@ from worker_child.testing import (
     main,
     parse_scenario,
 )
-
-COUNTS = MonthlyCounts("meals", {"2025-01": 12040})
-
-
-def _request(
-    tmp_path: Path, report_name: str | None, counts: MonthlyCounts | None = COUNTS
-) -> AnalysisRequest:
-    return AnalysisRequest(
-        run_id="test-run",
-        input_csv=tmp_path / "input.csv",
-        output_directory=tmp_path,
-        report_name=report_name,
-        site_name=None,
-        organization_name="Acme Foodservice",
-        counts=counts,
-        unit_system="lb",
-        categorization_cache=(),
-    )
-
 
 # ----------------------------------------------------------------------------------------------
 # the grammar
@@ -88,7 +68,9 @@ def test_the_happy_path_reports_progress_twice_and_writes_both_files(tmp_path: P
         nonlocal calls
         calls += 1
 
-    outcome = build_analyze()(_request(tmp_path, "Q1 2026 dining"), report_progress=count)
+    outcome = build_analyze()(
+        a_request(tmp_path, report_name="Q1 2026 dining"), report_progress=count
+    )
 
     assert calls == 2
     assert outcome.pdf.exists()
@@ -113,7 +95,9 @@ def test_the_stub_findings_are_the_warnings_and_errors_its_telemetry_counts() ->
 def test_slow_defaults_to_sixty_seconds(tmp_path: Path) -> None:
     ticks: list[float] = []
 
-    build_analyze(sleep=ticks.append)(_request(tmp_path, "!slow"), report_progress=lambda: None)
+    build_analyze(sleep=ticks.append)(
+        a_request(tmp_path, report_name="!slow"), report_progress=lambda: None
+    )
 
     assert len(ticks) == math.ceil(SLOW_DEFAULT_SECONDS / SLOW_TICK_SECONDS)
     assert all(tick == SLOW_TICK_SECONDS for tick in ticks)
@@ -127,7 +111,7 @@ def test_slow_with_an_argument_reports_progress_every_tick_then_succeeds(tmp_pat
         calls += 1
 
     outcome = build_analyze(sleep=lambda _seconds: None)(
-        _request(tmp_path, "!slow:8"), report_progress=count
+        a_request(tmp_path, report_name="!slow:8"), report_progress=count
     )
 
     assert calls == math.ceil(8 / SLOW_TICK_SECONDS)
@@ -136,12 +120,12 @@ def test_slow_with_an_argument_reports_progress_every_tick_then_succeeds(tmp_pat
 
 def test_slow_rejects_a_non_numeric_argument(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="whole number of seconds"):
-        build_analyze()(_request(tmp_path, "!slow:soon"), report_progress=lambda: None)
+        build_analyze()(a_request(tmp_path, report_name="!slow:soon"), report_progress=lambda: None)
 
 
 def test_slow_rejects_a_non_positive_argument(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="must be positive"):
-        build_analyze()(_request(tmp_path, "!slow:0"), report_progress=lambda: None)
+        build_analyze()(a_request(tmp_path, report_name="!slow:0"), report_progress=lambda: None)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -158,7 +142,7 @@ def test_hang_reports_progress_once_and_then_never_returns(tmp_path: Path) -> No
 
     thread = threading.Thread(
         target=build_analyze(),
-        args=(_request(tmp_path, "!hang"),),
+        args=(a_request(tmp_path, report_name="!hang"),),
         kwargs={"report_progress": count},
         daemon=True,
     )
@@ -176,7 +160,7 @@ def test_hang_reports_progress_once_and_then_never_returns(tmp_path: Path) -> No
 
 def test_crash_raises_a_bare_runtime_error(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="!crash"):
-        build_analyze()(_request(tmp_path, "!crash"), report_progress=lambda: None)
+        build_analyze()(a_request(tmp_path, report_name="!crash"), report_progress=lambda: None)
 
 
 def test_every_scenario_reports_the_stub_telemetry_first(tmp_path: Path) -> None:
@@ -184,7 +168,7 @@ def test_every_scenario_reports_the_stub_telemetry_first(tmp_path: Path) -> None
 
     with pytest.raises(RuntimeError):
         build_analyze()(
-            _request(tmp_path, "!crash"),
+            a_request(tmp_path, report_name="!crash"),
             report_progress=lambda: None,
             report_telemetry=reported.append,
         )
@@ -197,7 +181,7 @@ def test_a_run_without_counts_reports_no_per_head_figure(tmp_path: Path) -> None
 
     with pytest.raises(RuntimeError):
         build_analyze()(
-            _request(tmp_path, "!crash", counts=None),
+            a_request(tmp_path, report_name="!crash", counts=None),
             report_progress=lambda: None,
             report_telemetry=reported.append,
         )
@@ -227,19 +211,23 @@ def test_fail_raises_the_named_reason(
     tmp_path: Path, reason: str, error: type[AnalysisError]
 ) -> None:
     with pytest.raises(error):
-        build_analyze()(_request(tmp_path, f"!fail:{reason}"), report_progress=lambda: None)
+        build_analyze()(
+            a_request(tmp_path, report_name=f"!fail:{reason}"), report_progress=lambda: None
+        )
 
 
 def test_fail_without_a_reason_raises(tmp_path: Path) -> None:
     # `parse_scenario` alone accepts a bare "!fail"; the missing reason is only caught once
     # `analyze()` tries to act on it.
     with pytest.raises(ValueError, match="reason must be one of"):
-        build_analyze()(_request(tmp_path, "!fail"), report_progress=lambda: None)
+        build_analyze()(a_request(tmp_path, report_name="!fail"), report_progress=lambda: None)
 
 
 def test_fail_with_an_unknown_reason_raises(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="reason must be one of"):
-        build_analyze()(_request(tmp_path, "!fail:bogus"), report_progress=lambda: None)
+        build_analyze()(
+            a_request(tmp_path, report_name="!fail:bogus"), report_progress=lambda: None
+        )
 
 
 # ----------------------------------------------------------------------------------------------
@@ -248,7 +236,9 @@ def test_fail_with_an_unknown_reason_raises(tmp_path: Path) -> None:
 
 
 def test_missing_pdf_omits_only_the_pdf(tmp_path: Path) -> None:
-    outcome = build_analyze()(_request(tmp_path, "!missing-pdf"), report_progress=lambda: None)
+    outcome = build_analyze()(
+        a_request(tmp_path, report_name="!missing-pdf"), report_progress=lambda: None
+    )
 
     assert not outcome.pdf.exists()
     assert outcome.xlsx.exists()

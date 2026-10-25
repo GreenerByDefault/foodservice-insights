@@ -1,15 +1,8 @@
 from collections.abc import Callable
 
-import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.plots import panels
-
-
-@pytest.fixture(autouse=True)
-def cleanup_plt():
-    yield
-    plt.close("all")
 
 
 @pytest.fixture

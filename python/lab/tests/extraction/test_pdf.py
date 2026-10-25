@@ -18,7 +18,7 @@ from gbd_foodservice_insights_lab.extraction.pdf import (
     plot_rowcount_against_pagenum,
     sample_files_and_rows,
 )
-from PyPDF2 import PdfWriter
+from pypdf import PdfWriter
 
 matplotlib.use("Agg")
 
