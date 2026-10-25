@@ -18,7 +18,7 @@ does not choose the recipient either.
 await sendEmail(emailer, {
   kind: 'analysis-failed',
   to,
-  organizationId,
+  organizationSlug,
   reportId,
   reportName,
   reason,

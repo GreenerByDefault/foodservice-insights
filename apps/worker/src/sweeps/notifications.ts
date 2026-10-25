@@ -19,7 +19,6 @@ import type {
   AnalysisFailureReason,
   Database,
   DatabaseExecutor,
-  OrganizationId,
   ReportId,
   ResultFileId,
   ResultFileKind,
@@ -56,7 +55,7 @@ type NotifiableAttemptsExpressionBuilder = ExpressionBuilder<
 type NotifiableAttemptCommon = {
   id: AnalysisAttemptId;
   reportId: ReportId;
-  organizationId: OrganizationId;
+  organizationSlug: string;
   reportName: string;
   /** How many sends this row has now had, counting this one. */
   notificationAttempts: number;
@@ -195,6 +194,7 @@ async function loadNotifiableAttempts(
   const rows = await db
     .selectFrom('analysisAttempt')
     .innerJoin('report', 'report.id', 'analysisAttempt.reportId')
+    .innerJoin('organization', 'organization.id', 'report.organizationId')
     .innerJoin('appUser', 'appUser.id', 'analysisAttempt.requestedByUserId')
     // `app_user` mirrors `auth.users` but carries no email of its own, hence this second join.
     .innerJoin('auth.users', 'auth.users.id', 'appUser.id')
@@ -204,7 +204,7 @@ async function loadNotifiableAttempts(
       'analysisAttempt.status',
       'analysisAttempt.failureReason',
       'analysisAttempt.notificationAttempts',
-      'report.organizationId',
+      'organization.slug as organizationSlug',
       'report.name as reportName',
       'auth.users.email as to',
       resultFileId(eb, 'pdf').as('pdfFileId'),
@@ -218,7 +218,7 @@ async function loadNotifiableAttempts(
     const common = {
       id: row.id,
       reportId: row.reportId,
-      organizationId: row.organizationId,
+      organizationSlug: row.organizationSlug,
       reportName: row.reportName,
       notificationAttempts: row.notificationAttempts,
       // Every requester in this app signs in by email; `auth.users.email` is only nullable in
@@ -331,7 +331,7 @@ export function emailForNotifiableAttempt(attempt: NotifiableAttempt): EmailMess
     return {
       kind: 'analysis-failed',
       to: attempt.to,
-      organizationId: attempt.organizationId,
+      organizationSlug: attempt.organizationSlug,
       reportId: attempt.reportId,
       reportName: attempt.reportName,
       reason: attempt.failureReason,
@@ -341,7 +341,7 @@ export function emailForNotifiableAttempt(attempt: NotifiableAttempt): EmailMess
   return {
     kind: 'analysis-succeeded',
     to: attempt.to,
-    organizationId: attempt.organizationId,
+    organizationSlug: attempt.organizationSlug,
     reportId: attempt.reportId,
     reportName: attempt.reportName,
     pdfFileId: attempt.pdfFileId,

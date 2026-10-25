@@ -40,7 +40,7 @@ describe('render', () => {
     const otherEmailer = recordingEmailer({ siteUrl: 'https://staging.example.test' }).service;
     const succeeded = anAnalysisSucceeded({ to: RECIPIENT });
     expect(render(otherEmailer, succeeded).text).toContain(
-      reportUrl(otherEmailer, succeeded.organizationId, succeeded.reportId),
+      reportUrl(otherEmailer, succeeded.organizationSlug, succeeded.reportId),
     );
   });
 

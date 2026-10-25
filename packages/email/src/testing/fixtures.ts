@@ -1,4 +1,4 @@
-import type { OrganizationId, ReportId, ResultFileId } from '@gbd/db';
+import type { ReportId, ResultFileId } from '@gbd/db';
 import type { AnalysisFailed, AnalysisSucceeded } from '../messages/analysis.ts';
 import type {
   GbdOrganizationCreated,
@@ -8,7 +8,7 @@ import type {
 import type { EmailMessage } from '../messages/index.ts';
 import type { OrganizationInvite } from '../messages/invite.ts';
 
-export const SAMPLE_ORGANIZATION_ID = '0199c4d1-0000-7000-8000-000000000001' as OrganizationId;
+export const SAMPLE_ORGANIZATION_SLUG = 'ridgeview-schools';
 export const SAMPLE_REPORT_ID = '0199c4d1-0000-7000-8000-000000000002' as ReportId;
 const SAMPLE_PDF_ID = '0199c4d1-0000-7000-8000-000000000003' as ResultFileId;
 const SAMPLE_XLSX_ID = '0199c4d1-0000-7000-8000-000000000004' as ResultFileId;
@@ -17,7 +17,7 @@ export function anAnalysisSucceeded(overrides: Partial<AnalysisSucceeded> = {}):
   return {
     kind: 'analysis-succeeded',
     to: 'alice@example.test',
-    organizationId: SAMPLE_ORGANIZATION_ID,
+    organizationSlug: SAMPLE_ORGANIZATION_SLUG,
     reportId: SAMPLE_REPORT_ID,
     reportName: 'Q1 procurement',
     pdfFileId: SAMPLE_PDF_ID,
@@ -30,7 +30,7 @@ export function anAnalysisFailed(overrides: Partial<AnalysisFailed> = {}): Analy
   return {
     kind: 'analysis-failed',
     to: 'alice@example.test',
-    organizationId: SAMPLE_ORGANIZATION_ID,
+    organizationSlug: SAMPLE_ORGANIZATION_SLUG,
     reportId: SAMPLE_REPORT_ID,
     reportName: 'Q1 procurement',
     reason: 'upstream_api',

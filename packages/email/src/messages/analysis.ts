@@ -6,7 +6,6 @@
 import {
   ANALYSIS_FAILURE_EXPLANATIONS,
   type AnalysisFailureReason,
-  type OrganizationId,
   type ReportId,
   type ResultFileId,
 } from '@gbd/db';
@@ -17,7 +16,7 @@ import { reportUrl, resultFileUrl, supportMailtoUrl } from './links.ts';
 export type AnalysisSucceeded = {
   kind: 'analysis-succeeded';
   to: string;
-  organizationId: OrganizationId;
+  organizationSlug: string;
   reportId: ReportId;
   reportName: string;
   pdfFileId: ResultFileId;
@@ -27,7 +26,7 @@ export type AnalysisSucceeded = {
 export type AnalysisFailed = {
   kind: 'analysis-failed';
   to: string;
-  organizationId: OrganizationId;
+  organizationSlug: string;
   reportId: ReportId;
   reportName: string;
   reason: AnalysisFailureReason;
@@ -44,7 +43,7 @@ export function renderAnalysisSucceeded(
       {
         block: 'action',
         label: 'View your report',
-        url: reportUrl(context, message.organizationId, message.reportId),
+        url: reportUrl(context, message.organizationSlug, message.reportId),
       },
       {
         block: 'links',
@@ -71,7 +70,7 @@ export function renderAnalysisFailed(context: EmailContext, message: AnalysisFai
         ? {
             block: 'action',
             label: 'Try again',
-            url: reportUrl(context, message.organizationId, message.reportId),
+            url: reportUrl(context, message.organizationSlug, message.reportId),
           }
         : { block: 'action', label: 'Contact us', url: contactUrl },
       ...(offerRetry

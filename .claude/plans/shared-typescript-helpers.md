@@ -94,7 +94,7 @@ What is worth a single copy:
     the HTML that did arrive" error.
   - *A `runResourceName`/`isStaleRunResource` pair.* Two consumers share the scheme; the other
     two do not (above).
-  - *Moving route builders into `@gbd/core`.* See [`result-email-links.md`](result-email-links.md).
+  - *Moving route builders into `@gbd/core`.* `@gbd/email` cannot depend on the app, and splitting one route's composition across packages would not make drift a type error (slug and id are both `string`); the system e2e follows the emailed report link instead.
   - *The web app's env mapping versus the packages' `env.ts`* (S3's five fields twice, the
     emailer's six twice, the database's thrice). The Vite/Node split is documented on each
     `env.ts`, and a reader-function helper would still leave two call sites per package to
