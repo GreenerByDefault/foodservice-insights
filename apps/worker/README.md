@@ -1,8 +1,8 @@
 # @gbd/worker
 
 The worker parent process: claims analysis attempts off the queue, spawns Python children to run
-them, and writes results back to the database and blob store. For how it fits the wider system —
-the queue contract, the parent ↔ child run directory, deployments and draining — see
+them, and writes results back to the database and blob store. Its design is [below](#design); for
+the seams it shares with the rest of the system — the queue, reaping, canceling and deploys — see
 [`docs/architecture.md`](../../docs/architecture.md#worker).
 
 ## Running it
@@ -94,6 +94,53 @@ For what each mode gives you and when to pick it, see the root
 | [`db.ts`](src/db.ts) | Owns the worker's own database handle. |
 | [`clock.ts`](src/clock.ts) | The only source of "now" the worker reads — the seam that lets a test move time without a real sleep. |
 | [`failures.ts`](src/failures.ts) | The six named rules every failure path here obeys — read it before touching any error handling. [`retry.ts`](src/retry.ts) is the one-retry-layer rule's implementation. |
+
+## Design
+
+Catching a hung or crashed analysis means answering two different questions — is the *child*
+still making progress, and does the *parent* still get to act on it — and each has to keep
+working when the other's machinery is down. They are **two independent axes**, and mixing them
+forfeits what each is for:
+
+| | Axis A — child liveness | Axis B — supervisor authority |
+| --- | --- | --- |
+| Medium | the filesystem | Postgres |
+| Signal | `progress.json` `sequence` → parent's `lastProgressAt` | the guarded `UPDATE` |
+| Clock | the parent's, only ever as a difference | the database's, on both write and read |
+| Answers | should I kill this child? | may I still write this attempt's verdict, and is anyone still watching it? |
+| Survives a DB outage | **yes, by design** | no |
+| Survives losing the container | no | **yes, that is its whole job** |
+
+Because Axis B reads and writes the *database's* `now()`, cross-worker liveness never depends on
+worker clocks agreeing. Because Axis A only ever subtracts the *parent's* clock, it keeps working
+through a total database outage.
+
+One rule resolves the two axes into one design:
+
+> **A worker renews the lease on an attempt if and only if it has just checked that attempt's
+> child and will still reach a verdict for it.**
+
+Child progress is an *input* to the renewal decision, never the value written. "Has someone taken
+this attempt?" is the renewal's *answer*. "Tell other parents I am alive" is its *effect*.
+[`failures.ts`](src/failures.ts) holds what follows from it when a check or a write fails.
+
+Four layered defenses, because a hung analysis has to be caught even if the process that should
+notice it is itself hung:
+
+1. **The child reports progress** to a file between API calls, and the parent kills it as hung
+   after `killAfterNoProgressMs` without any ([`config.ts`](src/config.ts)).
+2. **The parent hard-kills** a child after `killAfterTotalRuntimeMs`, however healthy it looks
+   ([`config.ts`](src/config.ts)).
+3. **A claim held past `claimedCeilingMs` is reaped**, whatever its lease says. This catches a
+   parent that renews forever but never finishes, which the first two cannot, since both watch
+   the child ([`sweeps/converge.ts`](src/sweeps/converge.ts)).
+4. **Other workers reap an expired lease**, for a container that died with its attempts claimed
+   ([`sweeps/converge.ts`](src/sweeps/converge.ts)). The parent is PID 1, so its children die
+   with it; the reaper exists for the row, not the processes.
+
+*Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
+onto one medium: a parent whose database is down stops being able to answer "should I kill this
+child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
 
 ## Testing
 

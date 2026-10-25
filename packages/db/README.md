@@ -110,7 +110,7 @@ A migration reaches production before the code that needs it, and runs against a
 
 `analysis_attempt.status` is the coordination point between the web app and the workers. Its
 constraints are what keep the reaping race in
-[`docs/architecture.md`](../../docs/architecture.md#progress-leases-and-reaping) safe: a worker that hangs
+[`docs/architecture.md`](../../docs/architecture.md#reaping) safe: a worker that hangs
 must not be able to overwrite a verdict another worker already reached. Code that writes to an
 attempt follows three rules:
 

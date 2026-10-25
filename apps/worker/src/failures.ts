@@ -9,7 +9,7 @@
  * Two architectural facts hold all six up: retrying an attempt is a *user* action, so nothing here
  * may quietly re-run one; and the cross-worker reaper converges any attempt whose lease expires, so
  * letting go of an attempt is always safe
- * ([`docs/architecture.md`](../../../docs/architecture.md#progress-leases-and-reaping)).
+ * ([`docs/architecture.md`](../../../docs/architecture.md#reaping)).
  *
  * - **only-zero-rows-means-lost.** Losing an attempt has exactly one signal: a guarded update that
  *   matches no rows. A *thrown* error is not that signal — it leaves ownership exactly as unknown

@@ -7,15 +7,11 @@ guide and the architecture doc was partly a spec. The product is now built and c
 The root README is already a front door with a map, and the TypeScript guide is
 `docs/typescript.md`; what remains no longer fits:
 
-- **`docs/architecture.md` (587 lines) carries detail one component owns, and that copy has drifted.**
-  § Worker opens with "The detail in this section moves to `apps/worker/README.md` when that
-  package lands", long after it landed, while `apps/worker/README.md` points back at it. Most of
-  § Worker and § Progress, leases, and reaping restates `apps/worker/src/failures.ts`,
-  `config.ts` and `sweeps/converge.ts` nearly verbatim, and the copies are now wrong in places:
-  "whenever a child fails in any way, the parent marks the attempt failed" (a cancel kill gives
-  `canceled`, a fenced one writes nothing, `attempt/verdict.ts`), "probably 2 workers"
-  (`.do/worker.yaml` runs 1), and `submission.ts` "is imported by the browser" (it is not;
-  `inspect-file.ts` is).
+- **`docs/architecture.md` still carries detail one package owns, and that copy has drifted.**
+  § Worker already keeps only the seams, its design now in `apps/worker/README.md` § Design. But
+  § Auth, § Input file upload and validation, § Email and § Secrets management each restate one
+  package's code, and the copies are wrong in places: `submission.ts` "is imported by the
+  browser" (it is not; `inspect-file.ts` is).
 - **`docs/requirements.md` has drifted from the product** it now describes: the server "sends requests
   to a Python worker" (it enqueues; the worker pulls), "CSRF protection tokens" (SvelteKit's origin
   check), `HttpOnly` cookies (deliberately not, per docs/architecture.md § Auth), an audit list missing
@@ -66,54 +62,13 @@ code.
   `production-sign-in.md` and `email-provider.md` make that true within days, and `.do/README.md`
   already says so. Likewise § Alerts, § Logs and § Hosting, which `alerts.md`, `better-stack.md`
   and `custom-domain.md` rewrite: their headings stay, and this plan does not restructure them.
-- **Order.** PRs 1–2 and PR 3 are independent; PR 1 precedes PR 2 (both edit
-  `docs/architecture.md`), and PR 4 goes last (it edits `apps/worker/README.md` after PR 1).
+- **Order.** The three PRs touch different files and can land in any order.
 - *Rejected: `docs/python.md` beside `docs/typescript.md`.* Symmetric, but it moves the Python
   guide out of the only directory that holds Python.
 - *Rejected: keeping ARCHITECTURE.md and REQUIREMENTS.md at the root.* Updating references is
   mechanical, and with them in `docs/` the folder has an obvious charter.
 
-## PR 1 — Worker detail moves out of docs/architecture.md
-
-**`docs/architecture.md` § Worker keeps the seams**, about 40 lines where there are 160:
-
-- Only the parent touches the database and blob store; the child reads and writes a run directory,
-  whose contract is `contract/`.
-- The result email comes from a separate sweep (`sweeps/notifications.ts`), and a canceled
-  attempt gets none.
-- The reaping race, and that every write to an attempt tolerates it (`packages/db/README.md`
-  § The analysis attempt state machine), kept as is.
-- § Canceling, kept: it spans web, worker, database and every reader of `status`.
-  Name the pending-attempt sweep correctly (`sweeps/converge.ts`).
-- § Concurrency and scaling shrinks to the API-load product and its database-connection cost,
-  naming `maxConcurrentAttempts` and `WORKER_INSTANCES` (`packages/db/src/budget.ts`) rather than
-  "up to 3" and "probably 2 workers".
-
-**`apps/worker/README.md` gains § Design**: what no code comment holds yet. The two-axes table
-(child liveness on the filesystem and the parent's clock; supervisor authority in Postgres and
-the database's clock), the one renewal rule, the four defenses as a list naming where each lives
-(`config.ts`, `sweeps/converge.ts`), and *Rejected: writing the child's progress timestamp into
-the database*. Its opening stops pointing at ARCHITECTURE for the design.
-
-**Cut rather than moved**, because the code already says it: the parent lifecycle steps (the
-headers of `attempt/lifecycle.ts`, `contract/layout.ts`, `attempt/verdict.ts`), the renewal
-corollaries and thrown-renewal cases (`failures.ts`), and the reaper's own-`worker_id` rejection
-(`sweeps/converge.ts`).
-
-**Fixed on the way:**
-
-- `apps/worker/src/config.ts:43` says `directIntervalMs` mirrors "child progress into the
-  database", against the rejected design; it renews the lease.
-- *Rejected: `asyncio` inside `gbd_foodservice_insights`* moves onto `LLM_CONCURRENCY` in
-  `python/insights/gbd_foodservice_insights/categorization/llm.py`, beside the concurrency comment
-  already there.
-- § Worker deploys only on demand gains the seam it never names: `WORKER_CONTRACT_VERSION` and
-  `required_contract_version` (`apps/worker/src/attempt/queue.ts`) are how a newer web app keeps an
-  older worker from claiming work it cannot do.
-- § Worker queue says "workers wait `queuePollIntervalMs` after a poll that starts nothing"
-  instead of "every 1–2 seconds". Heading unchanged.
-
-## PR 2 — The rest of docs/architecture.md keeps to cross-component facts
+## PR 1 — The rest of docs/architecture.md keeps to cross-component facts
 
 Each section whose subject is one package moves to that package's doc, leaving a line and a
 pointer; nothing in § Alerts, § Logs or § Hosting changes.
@@ -145,7 +100,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   § The model is the fuller copy.
 - **§ File links**: drop "we can add download metrics later".
 
-## PR 3 — docs/requirements.md matches the product
+## PR 2 — docs/requirements.md matches the product
 
 - § Processing: the server enqueues an attempt and a worker pulls it.
 - § File upload: a workbook may have many sheets; `apps/web/src/lib/reports/excel/sheets.ts`
@@ -166,7 +121,7 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
 - The opening's spec-era instruction ("When implementing … replace these docs with a link")
   becomes the standing rule: a limit lives in code, and this file names its constant.
 
-## PR 4 — Package docs, and the code their errors pointed at
+## PR 3 — Package docs, and the code their errors pointed at
 
 - `python/lab/test_data/README.md`: rewrite to about 20 lines. What the dataset is and how it was
   anonymized, which lab step (by `python/lab/README.md`'s numbering) each file feeds, safe to
@@ -208,8 +163,8 @@ pointer; nothing in § Alerts, § Logs or § Hosting changes.
   name (`ARCHITECTURE.md` and `REQUIREMENTS.md` now appear only in frozen SQL and the check's
   own tests).
 - **Gates.** Every PR: `just lint`, since ruff formats Markdown repo-wide and it runs the doc
-  check. PRs that touch TypeScript or package scripts (1, 4): `pnpm lint && pnpm check &&
-  pnpm test`, in the background. PRs that touch Python (1, 4): `just lint && just check && just
-  test`, and for PR 4's marker removal, `--strict-markers` passing confirms nothing used them.
+  check. PRs that touch TypeScript or package scripts (1, 3): `pnpm lint && pnpm check &&
+  pnpm test`, in the background. PRs that touch Python (3): `just lint && just check && just
+  test`, and for its marker removal, `--strict-markers` passing confirms nothing used them.
 - **Read-through.** Each moved section reads correctly where it landed, with no dangling "above"
   or "below".

@@ -826,7 +826,7 @@ describe('analysis_attempt', () => {
           await reap(reaper.transaction, attempt);
 
           // The `WHERE status = 'processing' AND workerId = ...` guard is the pattern
-          // [Progress, leases, and reaping](../../../docs/architecture.md#progress-leases-and-reaping)
+          // [Reaping](../../../docs/architecture.md#reaping)
           // prescribes for a worker finishing up after it may have been reaped.
           const blocked = await sendBlockingStatement(DATABASE, original, reaper, (transaction) =>
             transaction

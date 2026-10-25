@@ -1,6 +1,6 @@
 /** Two sweeps, each converging a row nothing else will finish: `reapExpiredAttempts` for an
- * expired `processing` attempt (the reaping defense from
- * [`docs/architecture.md`](../../../../docs/architecture.md#progress-leases-and-reaping)), and
+ * expired `processing` attempt (the reaping defenses in
+ * [`apps/worker/README.md`](../../README.md#design)), and
  * `cancelRequestedPendingAttempts` for a `pending` attempt somebody has asked to cancel. */
 
 import type {
