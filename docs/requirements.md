@@ -3,9 +3,8 @@
 What the product must do. For *how* it is built and why, see
 [`docs/architecture.md`](architecture.md).
 
-This file is the source of truth for product rules, including the numeric limits. When
-implementing, each value should live in exactly one place in code and be referenced from there,
-then replace these docs with a link to them. See the `writing-docs` skill.
+This file is the source of truth for product rules. A numeric limit lives in exactly one place
+in code, and this file names that constant rather than copying its value.
 
 ## Product capabilities
 
@@ -13,7 +12,9 @@ then replace these docs with a link to them. See the `writing-docs` skill.
 
 A user can upload a CSV or XLSX file matching a predefined column format.
 
-- Single sheet with these columns:
+- A workbook may have many sheets;
+  [`apps/web/src/lib/reports/excel/sheets.ts`](../apps/web/src/lib/reports/excel/sheets.ts)
+  picks which one is read. That sheet, or the CSV, has these columns:
   - product name: text
   - date ordered: date
   - weight: number
@@ -27,7 +28,7 @@ A user can upload a CSV or XLSX file matching a predefined column format.
 
 ### Processing
 
-The server sends requests to a Python worker that runs the analysis library
+The server enqueues an analysis attempt, and a worker pulls it and runs the analysis library
 (`gbd_foodservice_insights`) to process the data and generate a PDF and an XLSX file.
 
 A report never frames a shift from beef or lamb to chicken or fish as a win — not in its wording,
@@ -120,9 +121,9 @@ The user receives an email when the analysis completes.
 A user can see historical reports, sorted by upload date. Additional requests can be submitted
 while an analysis is still running.
 
-### Landing page
+### Marketing page
 
-A marketing page when signed out. The GBD comms person will provide language and design in the future.
+A marketing page when signed out.
 
 ## Auth
 
@@ -147,6 +148,7 @@ Within each org, a user has a role. Admins have every member permission plus the
 | Upload a new report | ✅ | ✅ |
 | Read all org reports | ✅ | ✅ |
 | Cancel their own reports | ✅ | ✅ |
+| Retry their own reports | ✅ | ✅ |
 | Delete their own reports | ✅ | ✅ |
 | Leave an organization | ✅ | ✅ |
 | Create a new organization | ✅ | ✅ |
@@ -154,6 +156,7 @@ Within each org, a user has a role. Admins have every member permission plus the
 | Change their email | ✅ | ✅ |
 | Delete their account | ✅ | ✅ |
 | Cancel any report in the org | — | ✅ |
+| Retry any report in the org | — | ✅ |
 | Delete any report in the org | — | ✅ |
 | Invite a new user to the org | — | ✅ |
 | Remove a user from the org | — | ✅ |
@@ -167,7 +170,8 @@ that would violate this.
 
 ### Superadmin
 
-Users are set to superadmin by hand, in the Supabase SQL editor. Superadmins are automatically
+Users are set to superadmin by hand, in the Supabase SQL editor through the write guard — see the
+runbook "Write to the database by hand". Superadmins are automatically
 admins for *all* organizations.
 
 - The UI does not show the superadmin in an organization's membership management.
@@ -199,7 +203,8 @@ Email OTP (one-time passcode).
 - On login, a user with a live invite for their email lands on an accept/decline screen, also
   reachable any time from the account menu as "Invitations".
 - An invite past `expires_at` shows there as expired, until the user dismisses it — which is what
-  records the expiry. It does not redirect on login by itself.
+  records the expiry. Login redirects to it only for a user who belongs to no organization, who
+most likely signed up through that invite.
 - Only the person who controls the invited email address can accept. Forwarding the link does
   not grant access.
 - Invites expire after `INVITE_LIFETIME_DAYS` days
@@ -219,8 +224,9 @@ above.
 
 ### Audit trail
 
-Authentication and audit events are logged in the database: report deletion, organization
-deletion, invites, membership changes, and role changes. Logins are *not* recorded — too noisy.
+The database records who changed what anyone can see or do, and every destructive action;
+[`apps/web/src/lib/server/audit.ts`](../apps/web/src/lib/server/audit.ts) lists the events. No
+authentication events are recorded, logins included — too noisy.
 
 ### Data deletion
 
@@ -248,7 +254,9 @@ deletion, invites, membership changes, and role changes. Logins are *not* record
 ### Account recovery
 
 A user who needs to change their email but is locked out of the original must contact GBD, who
-verifies them and then changes the email with a script or in the Supabase UI (TBD which approach).
+verifies them and then changes the email.
+
+**Open:** whether that is a script or the Supabase UI, and its runbook.
 
 ## Non-functional
 
@@ -275,9 +283,10 @@ Follow security best practices for web development.
 - Regularly audit and patch dependencies.
 - Implement a Content Security Policy (CSP).
 - Enforce HTTPS via HTTP Strict Transport Security (HSTS).
-- Implement CSRF protection tokens.
+- Protect against CSRF with SvelteKit's origin check.
 - Sanitize and encode user inputs to prevent XSS.
-- Configure secure cookie attributes (`HttpOnly`, `Secure`, `SameSite`).
+- Set cookies `Secure` and `SameSite`. The session cookie is not `HttpOnly`, for the reason in
+  [`docs/architecture.md` § Auth](architecture.md#auth).
 
 ### Abuse limits
 
@@ -324,8 +333,8 @@ See [`docs/architecture.md`](architecture.md#failure-modes) for the failure-mode
 - Analysis attempt time: time in queue, time to process, total.
 - Analysis cost, via AI metrics.
 - Number of failed analysis attempts.
-- Country of users: a nice-to-have, not a requirement, and only in a privacy-preserving form, a
-  country per account with no IP address kept or sent to a third party for it.
+- Country of users, only in a privacy-preserving form: a country per account, with no IP address
+  kept or sent to a third party for it.
 
 ### Maintainability
 

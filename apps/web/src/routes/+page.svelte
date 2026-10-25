@@ -28,8 +28,7 @@ const steps = [
   >
 </svelte:head>
 
-<!-- The marketing page, and the only path `static/robots.txt` lets a crawler have. The copy is our
-     draft; GBD comms will supply the real language and design (docs/requirements.md § Landing page). -->
+<!-- The marketing page, and the only path `static/robots.txt` lets a crawler have. -->
 <div class="flex min-h-svh flex-col">
   <PublicHeader>
     {#snippet actions()}
