@@ -8,7 +8,7 @@
 
 import { type Kysely, type RawBuilder, sql } from 'kysely';
 import type { Database, DatabaseExecutor } from '../../src/schema.ts';
-import type { EntreeClassificationRow, ProductCategorizationRow, UnitWeightRow } from './clean.ts';
+import type { EntreeClassificationRow, ProductCategorizationRow } from './clean.ts';
 
 export type UpsertCounts = { inserted: number; promoted: number; alreadyVerified: number };
 
@@ -17,7 +17,6 @@ export type ImportCounts = UpsertCounts & { deleted: number };
 const KYSELY_TABLE_NAMES = {
   product_categorization: 'productCategorization',
   entree_classification: 'entreeClassification',
-  unit_weight: 'unitWeight',
 } as const;
 
 export type TableImport = {
@@ -121,32 +120,6 @@ export async function upsertEntreeClassifications(
             suggestedBy: eb.ref('excluded.suggestedBy'),
           }))
           .where('entreeClassification.isVerified', '=', false),
-      )
-      .returning(wasInserted().as('inserted'))
-      .execute(),
-  );
-}
-
-export async function upsertUnitWeights(
-  db: DatabaseExecutor,
-  rows: readonly UnitWeightRow[],
-  suggestedBy: string,
-): Promise<UpsertCounts> {
-  return await inChunks(rows, (chunk) =>
-    db
-      .insertInto('unitWeight')
-      .values(chunk.map((row) => ({ ...row, isVerified: true, suggestedBy })))
-      .onConflict((conflict) =>
-        conflict
-          .column('originalUnit')
-          .doUpdateSet((eb) => ({
-            cleanedUnit: eb.ref('excluded.cleanedUnit'),
-            extractedWeight: eb.ref('excluded.extractedWeight'),
-            exampleProducts: eb.ref('excluded.exampleProducts'),
-            isVerified: true,
-            suggestedBy: eb.ref('excluded.suggestedBy'),
-          }))
-          .where('unitWeight.isVerified', '=', false),
       )
       .returning(wasInserted().as('inserted'))
       .execute(),

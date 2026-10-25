@@ -11,11 +11,9 @@ import {
   categoryVocabulary,
   cleanEntreeClassifications,
   cleanProductCategorizations,
-  cleanUnitWeights,
   type EntreeColumn,
   NO_MATCHES_FOUND,
   type ProductColumn,
-  type UnitColumn,
 } from './clean.ts';
 import type { CsvRecord } from './csv.ts';
 
@@ -224,86 +222,6 @@ describe('cleanEntreeClassifications', () => {
 
     expect(cleaned.refused).toEqual([
       { line: 2, reason: `unknown classification ${JSON.stringify(label)}` },
-    ]);
-  });
-});
-
-describe('cleanUnitWeights', () => {
-  function unit(
-    originalUnit: string,
-    weight: string,
-    { cleanedUnit = 'lb', exampleProducts = '' } = {},
-  ): Record<UnitColumn, string> {
-    return {
-      original_unit: originalUnit,
-      llm_cleaned_unit: cleanedUnit,
-      llm_extracted_weight: weight,
-      example_products: exampleProducts,
-    };
-  }
-
-  test('keeps the unit verbatim and imports a blank weight or example as null', () => {
-    const cleaned = cleanUnitWeights(
-      records(unit(' 12 LB ', '12.0', { exampleProducts: 'HOT DOG' }), unit('EA', ' ')),
-    );
-
-    expect(cleaned).toEqual({
-      rows: [
-        {
-          originalUnit: ' 12 LB ',
-          cleanedUnit: 'lb',
-          extractedWeight: 12,
-          exampleProducts: 'HOT DOG',
-        },
-        { originalUnit: 'EA', cleanedUnit: 'lb', extractedWeight: null, exampleProducts: null },
-      ],
-      skipped: [],
-      rewritten: [],
-      refused: [],
-    });
-  });
-
-  test('skips a blank unit and a blank cleaned unit, and keeps the last of a repeat', () => {
-    const cleaned = cleanUnitWeights(
-      records(
-        unit(' ', '1'),
-        unit('CS', '1', { cleanedUnit: ' ' }),
-        unit('6 LB', '6'),
-        unit('6 LB', '6.0'),
-        unit('2 LB', '2'),
-        unit('2 LB', '3'),
-      ),
-    );
-
-    expect(cleaned).toEqual({
-      rows: [
-        { originalUnit: '6 LB', cleanedUnit: 'lb', extractedWeight: 6, exampleProducts: null },
-        { originalUnit: '2 LB', cleanedUnit: 'lb', extractedWeight: 3, exampleProducts: null },
-      ],
-      skipped: [
-        { line: 2, reason: 'blank unit' },
-        { line: 3, reason: 'blank cleaned unit' },
-        { line: 4, reason: 'repeated later with the same weight' },
-        { line: 6, reason: 'repeated later with a different weight' },
-      ],
-      rewritten: [],
-      refused: [],
-    });
-  });
-
-  test.each(['0', '-2', 'NaN', 'Infinity', 'twelve'])('refuses the weight %j', (weight) => {
-    const cleaned = cleanUnitWeights(records(unit('CS', weight)));
-
-    expect(cleaned.refused).toEqual([
-      { line: 2, reason: `weight ${JSON.stringify(weight)} is not a positive number` },
-    ]);
-  });
-
-  test('refuses an over-long unit', () => {
-    const cleaned = cleanUnitWeights(records(unit(OVER_LONG_KEY, '1')));
-
-    expect(cleaned.refused).toEqual([
-      { line: 2, reason: `key of 2001 bytes, over the ${MAX_CACHE_KEY_BYTES}-byte limit` },
     ]);
   });
 });

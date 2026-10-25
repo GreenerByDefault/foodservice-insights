@@ -73,12 +73,8 @@ UNITS_COL = "pack_size"
 
 
 # %%
-# expand_historical_weight_classifications(weights)
-
-
-# %%
 # df = df.merge(weights, how="left", left_on=PACK_SIZE_COL, right_on="original_unit")
-# df.drop(columns=["original_unit", "example_products", "previously_classified"], inplace=True)
+# df.drop(columns=["original_unit", "example_products"], inplace=True)
 # df.head()
 
 

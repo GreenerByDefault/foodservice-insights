@@ -2,7 +2,7 @@
 Cache Sync
 ==========
 
-Pulls the verified rows of the database's three caches into the CSV files the lab's loaders read,
+Pulls the verified rows of the database's two caches into the CSV files the lab's loaders read,
 so every loader, runscript and notebook reads the database's answers unchanged, and offline.
 
 The database is `CACHE_DB_CONNECTION_STRING`'s, the variable a developer's worker reads too: as
@@ -27,7 +27,6 @@ from dotenv import find_dotenv, load_dotenv
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict
 
-from gbd_foodservice_insights_lab import clean_product_weights
 from gbd_foodservice_insights_lab.categorization import entree_cache, product_cache
 
 logger = logging.getLogger(__name__)
@@ -74,16 +73,6 @@ CACHE_TABLES: Final = (
             "cleaned_name": "cleaned_item_names",
         },
         path=lambda: entree_cache.get_previously_classified_entrees_location(),
-    ),
-    CacheTable(
-        table="unit_weight",
-        columns={
-            "original_unit": "original_unit",
-            "cleaned_unit": "llm_cleaned_unit",
-            "extracted_weight": "llm_extracted_weight",
-            "example_products": "example_products",
-        },
-        path=lambda: clean_product_weights.get_previously_classified_weights_location(),
     ),
 )
 

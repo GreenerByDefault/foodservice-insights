@@ -11,30 +11,25 @@ from typing import Any
 import pandas as pd
 import psycopg
 import pytest
-from gbd_foodservice_insights_lab import cache_sync, clean_product_weights
+from gbd_foodservice_insights_lab import cache_sync
 from gbd_foodservice_insights_lab.categorization import entree_cache, product_cache
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     get_previously_classified_entrees,
 )
 from gbd_foodservice_insights_lab.categorization.product_cache import load_categorization_cache
-from gbd_foodservice_insights_lab.clean_product_weights import get_previously_classified_weights
 from psycopg import sql
 
 VARIABLE = cache_sync.CONNECTION_STRING_VARIABLE
 
 
 @pytest.fixture
-def cache_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Path, Path, Path]:
-    """Points the three loaders, and so `pull`, at `tmp_path` instead of the real files."""
+def cache_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[Path, Path]:
+    """Points the two loaders, and so `pull`, at `tmp_path` instead of the real files."""
     products = tmp_path / "previously_categorized_items.csv"
     entrees = tmp_path / "previously_classified_entrees.csv"
-    weights = tmp_path / "previously_classified_weights.csv"
     monkeypatch.setattr(product_cache, "categorization_cache_path", lambda: products)
     monkeypatch.setattr(entree_cache, "get_previously_classified_entrees_location", lambda: entrees)
-    monkeypatch.setattr(
-        clean_product_weights, "get_previously_classified_weights_location", lambda: weights
-    )
-    return products, entrees, weights
+    return products, entrees
 
 
 def _insert(
@@ -65,7 +60,7 @@ def _fake_connection() -> Any:
 
 
 def test_pull_writes_the_verified_rows_for_the_loaders_to_read(
-    test_database: psycopg.Connection, cache_files: tuple[Path, Path, Path]
+    test_database: psycopg.Connection, cache_files: tuple[Path, Path]
 ) -> None:
     prefix = f"pull-{uuid.uuid4()}"
     awkward = f'{prefix} Bacon, "thick"\ncut'
@@ -89,16 +84,6 @@ def test_pull_writes_the_verified_rows_for_the_loaders_to_read(
             (f"{prefix} unverified", "entree", "taco", False),
         ],
     )
-    _insert(
-        test_database,
-        "unit_weight",
-        ("original_unit", "cleaned_unit", "extracted_weight", "example_products", "is_verified"),
-        [
-            (f" {prefix} 4/5 LBS ", "lb", 2.5, "Chicken, thighs; Rice", True),
-            (f"{prefix} EA", "each", None, None, True),
-            (f"{prefix} unverified", "kg", 1.0, None, False),
-        ],
-    )
     test_database.execute("SET LOCAL ROLE cache_client")
 
     cache_sync.pull(test_database)
@@ -115,31 +100,19 @@ def test_pull_writes_the_verified_rows_for_the_loaders_to_read(
             "cleaned_item_names": None,
         },
     ]
-    assert _rows_containing(get_previously_classified_weights(), "original_unit", prefix) == [
-        {
-            "original_unit": f" {prefix} 4/5 LBS ",
-            "llm_cleaned_unit": "lb",
-            "llm_extracted_weight": 2.5,
-            "example_products": "Chicken, thighs; Rice",
-        },
-        {
-            "original_unit": f"{prefix} EA",
-            "llm_cleaned_unit": "each",
-            "llm_extracted_weight": None,
-            "example_products": None,
-        },
-    ]
 
 
 def test_pull_writes_no_file_when_a_query_fails(
-    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path, Path]
+    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path]
 ) -> None:
     for path in cache_files:
         path.write_text("as it was\n")
 
     def _fetch_verified(_connection: object, cache: cache_sync.CacheTable) -> pd.DataFrame:
-        if cache.table == "unit_weight":
-            raise psycopg.errors.InsufficientPrivilege("permission denied for table unit_weight")
+        if cache.table == "entree_classification":
+            raise psycopg.errors.InsufficientPrivilege(
+                "permission denied for table entree_classification"
+            )
         return pd.DataFrame(columns=list(cache.columns.values()))
 
     monkeypatch.setattr(cache_sync, "_fetch_verified", _fetch_verified)
@@ -147,11 +120,11 @@ def test_pull_writes_no_file_when_a_query_fails(
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         cache_sync.pull(_fake_connection())
 
-    assert [path.read_text() for path in cache_files] == ["as it was\n"] * 3
+    assert [path.read_text() for path in cache_files] == ["as it was\n"] * 2
 
 
 def test_pull_of_no_verified_rows_leaves_files_the_loaders_read_as_empty(
-    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path, Path]
+    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path]
 ) -> None:
     for path in cache_files:
         path.write_text("stale\n")
@@ -169,17 +142,12 @@ def test_pull_of_no_verified_rows_leaves_files_the_loaders_read_as_empty(
         True,
         ["product", "entree_classification", "cleaned_item_names"],
     )
-    weights = get_previously_classified_weights()
-    assert (weights.empty, list(weights.columns)) == (
-        True,
-        ["original_unit", "llm_cleaned_unit", "llm_extracted_weight", "example_products"],
-    )
 
 
 def test_pull_that_fails_mid_write_keeps_the_file_and_leaves_no_temporary(
-    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path, Path]
+    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path]
 ) -> None:
-    products, _, _ = cache_files
+    products, _ = cache_files
     products.write_text("as it was\n")
 
     class _DiskFull:
@@ -200,14 +168,14 @@ def test_pull_that_fails_mid_write_keeps_the_file_and_leaves_no_temporary(
 def test_unset_warns_with_each_files_age(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
-    cache_files: tuple[Path, Path, Path],
+    cache_files: tuple[Path, Path],
     unset: str | None,
 ) -> None:
     if unset is None:
         monkeypatch.delenv(VARIABLE, raising=False)
     else:
         monkeypatch.setenv(VARIABLE, unset)
-    products, entrees, _ = cache_files
+    products, entrees = cache_files
     for path, days in ((products, 3), (entrees, 1)):
         path.write_text("header\n")
         modified = time.time() - days * 86_400 - 60
@@ -222,15 +190,14 @@ def test_unset_warns_with_each_files_age(
             logging.WARNING,
             "CACHE_DB_CONNECTION_STRING is not set, so this run uses the cache files on disk as "
             "they are: previously_categorized_items.csv is 3 days old; "
-            "previously_classified_entrees.csv is 1 day old; "
-            "previously_classified_weights.csv is missing. "
+            "previously_classified_entrees.csv is 1 day old. "
             "See python/lab/README.md § Working on a client.",
         )
     ]
 
 
 def test_set_but_unreachable_stops_naming_the_variable(
-    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path, Path]
+    monkeypatch: pytest.MonkeyPatch, cache_files: tuple[Path, Path]
 ) -> None:
     monkeypatch.setenv(VARIABLE, "postgresql://nobody@127.0.0.1:1/x")
 

@@ -6,10 +6,7 @@ import numpy as np
 import pandas as pd
 from gbd_foodservice_insights.utils import print_progress
 
-from gbd_foodservice_insights_lab import PACKAGE_DIR
 from gbd_foodservice_insights_lab.extraction.llm import clean_units_llm, extract_weight_llm
-
-logger = logging.getLogger(__name__)
 
 
 def _is_extraction_failed(row: pd.Series) -> bool:
@@ -78,23 +75,20 @@ def extract_weight_units_pipeline(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Clean unit strings and extract weights using an LLM, returning a mapping table and stats.
 
-    Each unique unit string is processed only once, and units already in the historical
-    classifications skip the LLM. Where extraction from the unit string fails, it falls back to
-    a product name from `product_name_column`. `units_column` holds strings like "16 oz",
-    "1 lb 4 oz", or "500ml bottle". `weight_extraction_instructions` of None uses the default
-    prompt from file.
+    Each unique unit string is processed only once. Where extraction from the unit string fails,
+    it falls back to a product name from `product_name_column`. `units_column` holds strings like
+    "16 oz", "1 lb 4 oz", or "500ml bottle". `weight_extraction_instructions` of None uses the
+    default prompt from file.
 
     Returns a mapping table (not `df` with merged columns) with columns `original_unit`,
-    `llm_cleaned_unit` (e.g. "oz", "lb", "ml"), `llm_extracted_weight`, `example_products` (up
-    to 5), and `previously_classified`. The table is sorted for review, with new units first.
-    The stats dict has `total_units`, `nan_units`, `unknown_units` ("Unknown or unusable unit"),
-    `nan_weights`, `previously_classified`, and `success_rate` (a percentage).
+    `llm_cleaned_unit` (e.g. "oz", "lb", "ml"), `llm_extracted_weight`, and `example_products`
+    (up to 5), sorted for review. The stats dict has `total_units`, `nan_units`, `unknown_units`
+    ("Unknown or unusable unit"), `nan_weights`, and `success_rate` (a percentage).
 
     Typical workflow:
         >>> weights, stats = extract_weight_units_pipeline(df, "pack_size", client)
         >>> # Optionally save to CSV, hand-fix errors, and reload.
         >>> df = df.merge(weights, left_on="pack_size", right_on="original_unit")
-        >>> expand_historical_weight_classifications(weights)  # Reuse on future runs.
     """
     # Validate input parameters to catch common errors early
     if units_column not in df.columns:
@@ -119,18 +113,14 @@ def extract_weight_units_pipeline(
     )
 
     # Step 3: Sort the mapping table for better readability and debugging
-    # Sort by: previously_classified (False first), then cleaned unit, then original_unit
     unit_mapping_sorted = unit_mapping.sort_values(
-        by=["previously_classified", "llm_cleaned_unit", "original_unit"],
-        ascending=[True, True, True],
-        na_position="first",
+        by=["llm_cleaned_unit", "original_unit"], na_position="first"
     ).reset_index(drop=True)
 
     # Step 4: Generate extraction summary statistics
     n_nan_units = unit_mapping_sorted["llm_cleaned_unit"].isna().sum()
     n_nan_weights = unit_mapping_sorted["llm_extracted_weight"].isna().sum()
     n_unknown_units = (unit_mapping_sorted["llm_cleaned_unit"] == "Unknown or unusable unit").sum()
-    n_previously_classified = unit_mapping_sorted["previously_classified"].sum()
     success_rate = (
         ((len(unique_units) - n_nan_weights) / len(unique_units) * 100)
         if len(unique_units) > 0
@@ -142,7 +132,6 @@ def extract_weight_units_pipeline(
         "nan_units": n_nan_units,
         "unknown_units": n_unknown_units,
         "nan_weights": n_nan_weights,
-        "previously_classified": n_previously_classified,
         "success_rate": success_rate,
     }
 
@@ -152,9 +141,6 @@ def extract_weight_units_pipeline(
     print(f"  - Units marked as 'Unknown or unusable': {summary_stats['unknown_units']}")
     print(f"  - Weights with NaN extracted values: {summary_stats['nan_weights']}")
     print(f"  - Success rate: {summary_stats['success_rate']:.1f}%")
-
-    if n_previously_classified == len(unique_units):
-        print("\n✓ All units were found in historical data. No new classifications needed.")
 
     return unit_mapping_sorted, summary_stats
 
@@ -179,8 +165,7 @@ def _build_unit_mapping(
     """Builds a mapping from original units to cleaned units and extracted weights using an LLM.
 
     `df` is the original DataFrame, sampled for product names. The result has columns
-    'original_unit', 'llm_cleaned_unit', 'llm_extracted_weight', 'example_products', and
-    'previously_classified'.
+    'original_unit', 'llm_cleaned_unit', 'llm_extracted_weight', and 'example_products'.
     """
     # Validate input columns
     if units_column not in df.columns:
@@ -193,33 +178,6 @@ def _build_unit_mapping(
     )  # make a blank dfto hold the data
     unit_mapping["original_unit"] = unique_units
 
-    # First, try to classify using historical data
-    print("\n" + "=" * 60)
-    print("CHECKING HISTORICAL WEIGHT CLASSIFICATIONS")
-    print("=" * 60)
-    unit_mapping, overlap_stats = classify_units_using_historical_weights(unit_mapping)
-
-    # Print overlap statistics
-    print("\nDataset Overview:")
-    print(f"  • Total unique units in current dataset: {overlap_stats['total_units']}")
-    print(
-        f"  • Units found in historical data: {overlap_stats['matched_units']} "
-        f"({overlap_stats['match_percentage']:.1f}%)"
-    )
-    print(
-        f"  • Units requiring LLM processing: {overlap_stats['unmatched_units']} "
-        f"({overlap_stats['unmatch_percentage']:.1f}%)"
-    )
-    print("=" * 60 + "\n")
-
-    # Count how many units still need processing
-    mask_needs_processing = unit_mapping["llm_cleaned_unit"].isna()
-    num_to_process = mask_needs_processing.sum()
-    print(
-        f"Processing {num_to_process} out of {len(unique_units)} units using LLM "
-        "(rest found in historical data)"
-    )
-
     # Process all units to get example products
     for progress_index, (idx, row) in enumerate(unit_mapping.iterrows(), start=1):
         # Print progress for all units
@@ -227,13 +185,8 @@ def _build_unit_mapping(
 
         unit = row["original_unit"]
 
-        # Get example products for all units (both historical and new)
         example_products = _get_example_products(df, units_column, unit, product_name_column)
         unit_mapping.loc[idx, "example_products"] = example_products
-
-        # Skip LLM processing if already classified historically
-        if row["previously_classified"]:
-            continue
 
         if pd.isna(unit):
             # If unit data is missing we can't extract anything so just set it all to na and
@@ -538,175 +491,6 @@ def convert_products_to_kilograms(
         )
 
     return df
-
-
-# ----------------------------------------------------------------------
-# Historical weight classification functions
-# ----------------------------------------------------------------------
-
-
-def classify_units_using_historical_weights(
-    unit_mapping_df: pd.DataFrame,
-) -> tuple[pd.DataFrame, dict[str, int | float]]:
-    """Classifies unit strings using a historical list of weight classifications.
-
-    Returns a copy of `unit_mapping_df` with 'llm_cleaned_unit' and 'llm_extracted_weight' filled
-    from the historical data by 'original_unit', plus a 'previously_classified' column that is
-    True where the unit was found. The stats dict has 'total_units', 'matched_units',
-    'unmatched_units', 'match_percentage', and 'unmatch_percentage'.
-    """
-    # Validate input columns
-    if "original_unit" not in unit_mapping_df.columns:
-        raise ValueError("Column 'original_unit' not found in DataFrame")
-
-    total_units = len(unit_mapping_df)
-
-    previously_classified_weights = get_previously_classified_weights()
-
-    # Select only the relevant columns for merging
-    historical_weights = previously_classified_weights[
-        ["original_unit", "llm_cleaned_unit", "llm_extracted_weight"]
-    ].drop_duplicates()
-
-    # Merge with historical data
-    unit_mapping_df = unit_mapping_df.merge(
-        historical_weights, on="original_unit", how="left", suffixes=("", "_historical")
-    )
-
-    # Determine which column has the historical data based on what existed in input
-    # If input had llm_cleaned_unit, historical will be in llm_cleaned_unit_historical
-    # If input didn't have it, historical will be in llm_cleaned_unit
-    if "llm_cleaned_unit_historical" in unit_mapping_df.columns:
-        historical_unit_col = "llm_cleaned_unit_historical"
-    else:
-        historical_unit_col = "llm_cleaned_unit"
-
-    # If there are historical matches, use them; otherwise keep original values
-    unit_mapping_df["previously_classified"] = unit_mapping_df[historical_unit_col].notna()
-
-    # Calculate statistics
-    matched_units = unit_mapping_df["previously_classified"].sum()
-    unmatched_units = total_units - matched_units
-    match_percentage = (matched_units / total_units * 100) if total_units > 0 else 0
-    unmatch_percentage = (unmatched_units / total_units * 100) if total_units > 0 else 0
-
-    overlap_stats = {
-        "total_units": total_units,
-        "matched_units": matched_units,
-        "unmatched_units": unmatched_units,
-        "match_percentage": match_percentage,
-        "unmatch_percentage": unmatch_percentage,
-    }
-
-    # Fill in historical values where available
-    if "llm_cleaned_unit_historical" in unit_mapping_df.columns:
-        # Input had existing values, merge from _historical columns
-        unit_mapping_df.loc[unit_mapping_df["previously_classified"], "llm_cleaned_unit"] = (
-            unit_mapping_df.loc[
-                unit_mapping_df["previously_classified"], "llm_cleaned_unit_historical"
-            ]
-        )
-        unit_mapping_df.loc[unit_mapping_df["previously_classified"], "llm_extracted_weight"] = (
-            unit_mapping_df.loc[
-                unit_mapping_df["previously_classified"], "llm_extracted_weight_historical"
-            ]
-        )
-    # else: values are already in llm_cleaned_unit and llm_extracted_weight columns from merge
-
-    # Post-processing: Convert any legacy "10 can" entries to "oz" for consistency
-    # This handles old historical data that was saved before the conversion logic was added
-    mask_10can_historical = (
-        unit_mapping_df["llm_cleaned_unit"].astype(str).str.upper().str.strip() == "10 CAN"
-    )
-    if mask_10can_historical.any():
-        num_converted = mask_10can_historical.sum()
-        print(
-            f"  ⚠ Converting {num_converted} legacy '10 can' entries from historical data to 'oz'"
-        )
-        unit_mapping_df.loc[mask_10can_historical, "llm_cleaned_unit"] = "oz"
-
-    # Clean up the temporary columns
-    unit_mapping_df = unit_mapping_df.drop(
-        columns=["llm_cleaned_unit_historical", "llm_extracted_weight_historical"], errors="ignore"
-    )
-
-    return unit_mapping_df, overlap_stats
-
-
-def expand_historical_weight_classifications(df: pd.DataFrame) -> None:
-    """Expands the historical weight classifications file with new data from a DataFrame.
-
-    `df` needs 'original_unit', 'llm_cleaned_unit', and 'llm_extracted_weight'; only its columns
-    that the historical file already has are kept. Rows are de-duplicated on 'original_unit',
-    so entries from `df` overwrite historical ones, and the CSV is overwritten in place.
-    """
-    # Validate input columns
-    required_cols = ["original_unit", "llm_cleaned_unit", "llm_extracted_weight"]
-    for col in required_cols:
-        if col not in df.columns:
-            raise ValueError(f"Column '{col}' not found in DataFrame")
-
-    previously_classified_weights = get_previously_classified_weights()
-    # Ensure df_filtered only contains columns that are also in previously_classified_weights
-    # to prevent adding new, unexpected columns to the historical file.
-    df_filtered = df[previously_classified_weights.columns.intersection(df.columns)]
-
-    previously_classified_weights_expanded = pd.concat(
-        [previously_classified_weights, df_filtered], ignore_index=True
-    )
-    previously_classified_weights_expanded = previously_classified_weights_expanded.drop_duplicates(
-        subset=["original_unit"], keep="last"
-    )
-    print(
-        "Unique weight units after expansion:",
-        previously_classified_weights_expanded["original_unit"].nunique(),
-    )
-    previously_classified_weights_expanded.to_csv(
-        get_previously_classified_weights_location(), index=False
-    )
-
-
-def get_previously_classified_weights_location() -> Path:
-    """Returns the path of data_files/previously_classified_weights.csv in this package."""
-    historical_weight_classifications_filepath = (
-        PACKAGE_DIR / "data_files" / "previously_classified_weights.csv"
-    )
-
-    return historical_weight_classifications_filepath
-
-
-def _empty_previously_classified_weights() -> pd.DataFrame:
-    """Return an empty DataFrame with the previously-classified-weights schema."""
-    return pd.DataFrame(
-        columns=["original_unit", "llm_cleaned_unit", "llm_extracted_weight", "example_products"]
-    )
-
-
-def get_previously_classified_weights() -> pd.DataFrame:
-    """Loads and returns the previously classified weights from the CSV file."""
-    path = get_previously_classified_weights_location()
-    if not path.exists():
-        logger.warning(
-            "Previously classified weights cache not found at %s (see data_files/README.md); "
-            "every unit will go to the LLM.",
-            path,
-        )
-        return _empty_previously_classified_weights()
-
-    # Only an empty cell is missing, so a unit of `N/A` or `null` stays one rather than matching
-    # every unit-less row, and a unit of `12` stays text.
-    previously_classified_weights = pd.read_csv(
-        path,
-        dtype={"original_unit": str, "llm_extracted_weight": float},
-        keep_default_na=False,
-        na_values=[""],
-    )
-
-    print(
-        "previously_classified_weights file has: "
-        f"{previously_classified_weights.shape[0]} weight units in it"
-    )
-    return previously_classified_weights
 
 
 def _extract_weight_unit_from_product_name(

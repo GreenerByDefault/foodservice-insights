@@ -3,17 +3,18 @@
 ## Where this stands (2026-10-18)
 
 The product side is done and live. `packages/db/migrations/002_caches.ts` created
-`product_categorization`, `entree_classification`, `unit_weight` and the `cache_client` role.
+`product_categorization`, `entree_classification` and the `cache_client` role (`unit_weight` too,
+since dropped by `016_drop_unit_weight.ts` when GBD retired the weights cache).
 The worker reads the verified product rows on every claim and inserts what its LLM categorized
 as unverified suggestions. Production runs `live` on the interim copy of GBD's caches, loaded by
 the temporary import. A developer's `live` worker reads and suggests to the hosted cache through
 `CACHE_DB_CONNECTION_STRING` (`apps/worker/README.md` § The categorization cache).
 
-The lab pulls. `gbd_foodservice_insights_lab/cache_sync.py` overwrites the lab's three cache
+The lab pulls. `gbd_foodservice_insights_lab/cache_sync.py` overwrites the lab's two cache
 files with the verified rows whenever step 1 starts with `CACHE_DB_CONNECTION_STRING` set, and on
 `just pull-caches`; unset, step 1 runs on the files on disk and warns how old they are. Nobody in
-the lab holds the string yet, so the lab still reads hand-copied files and writes its entree and
-weight files locally.
+the lab holds the string yet, so the lab still reads hand-copied files and writes its entree file
+locally.
 
 What's left is the lab's pushes and the final import:
 
@@ -28,14 +29,13 @@ Whichever of PRs 1 and 2 lands last deletes this plan.
 
 ## Context
 
-**The lab's three caches**, gitignored CSVs in `python/lab/gbd_foodservice_insights_lab/data_files/`,
+**The lab's two caches**, gitignored CSVs in `python/lab/gbd_foodservice_insights_lab/data_files/`,
 which a pull overwrites:
 
 | Table | File | Loader | Written today by |
 | --- | --- | --- | --- |
 | `product_categorization` | `previously_categorized_items.csv` | `load_categorization_cache()` (`categorization/product_cache.py`) | nothing; copies are handed out |
 | `entree_classification` | `previously_classified_entrees.csv` | `get_previously_classified_entrees()` (`categorization/entree_cache.py`), serving mode only | step 1, appending Gemini's unreviewed labels (`save_historical_entree_classifications`) |
-| `unit_weight` | `previously_classified_weights.csv` | `get_previously_classified_weights()` (`clean_product_weights.py`) | a data scientist, by hand (`expand_historical_weight_classifications`) |
 
 - **`cache_sync.py` describes each cache once**, in `CACHE_TABLES`: its table, its table-to-CSV
   column mapping (key first), and the loader's own path function. The pushes map columns back
@@ -51,7 +51,7 @@ which a pull overwrites:
   stack, and runs on a migration change too.
 - **The tables are the source of truth for their rules.** `002_caches.ts` holds the columns,
   the CHECKs every writer must satisfy, and `cache_client`'s grants; `tests/caches.test.ts`
-  asserts each. In short: `cache_client` can `SELECT` the three tables and `INSERT` only the
+  asserts each. In short: `cache_client` can `SELECT` the two tables and `INSERT` only the
   key, value and `suggested_by` columns, so every row it writes lands unverified. It has a
   60-second idle-in-transaction timeout, a 10-minute idle-session timeout, and 10 connections
   (`packages/db/src/budget.ts`). One rejected row fails its whole `INSERT`.
@@ -85,27 +85,25 @@ which a pull overwrites:
   disk.* A rotated password or a typo in the string would go unnoticed for weeks behind one line
   in step 1's long log, while every run quietly paid for LLM calls a fresh cache would have
   answered.
-- **Pull writes the verified rows to the three files the loaders read**, so the loaders,
+- **Pull writes the verified rows to the two files the loaders read**, so the loaders,
   runscripts and notebooks never touch the database, and runs work offline. Push is the only
   other place the lab talks to it. *Rejected: loaders that query the database directly.* Every
   run would need the network and a credential, and the gitignored notebooks that call the loaders
   would change behaviour.
 - **Push inserts new rows unverified, and the lab's local cache writes go away.** Step 1 pushes
-  `new_categorizations` and, for serving data, Gemini's entree labels; the weights step pushes
-  instead of rewriting its file. All three are verified in Studio, by whoever holds dashboard
+  `new_categorizations` and, for serving data, Gemini's entree labels. Both are verified in Studio, by whoever holds dashboard
   access. *Rejected: pushing a hand-reviewed `_for_human_review.csv`.* First suggestion wins, so
   a correction made in the file is silently dropped whenever the product is already in the
   table.
 - **The data scientists get the string the day PR 1 lands, and not before.** Each half is a loss
   without the other. The string alone: every step 1 pull overwrites the entree file the lab still
-  appends to and the weights file a data scientist expands by hand, before anything can push
-  either. PR 1 without the string: it ends those local writes, so a repeat serving run re-asks
+  appends to, before anything can push it. PR 1 without the string: it ends those local writes, so a repeat serving run re-asks
   Gemini for every product the file would have gained. So PR 1 merges when the strings are ready
   to hand out.
 - **`psycopg` is a lab dependency only.** The analysis library never touches the database.
 - *Rejected: a role per person.* Revoking one person means `ALTER ROLE cache_client PASSWORD`
   and re-handing the string to everyone else, which is acceptable for a role that can only read
-  three tables and suggest rows.
+  two tables and suggest rows.
 - **Open:** who verifies. On Free and Pro plans every dashboard role that can see data can also
   run any SQL, so the reviewer is a human decision, not a role this plan can create.
 - **Open:** a reviewer's category typo in Studio is today only a WARNING in the run that skips
@@ -116,13 +114,13 @@ which a pull overwrites:
 Merges when the strings are ready to hand out. Rehearse it beforehand against the dev stack as
 `postgres`.
 
-- `cache_sync.py`: `push_product_categorizations(connection, frame, suggested_by)`,
-  `push_entree_classifications` and `push_unit_weights`.
+- `cache_sync.py`: `push_product_categorizations(connection, frame, suggested_by)` and
+  `push_entree_classifications`.
   - Each runs `INSERT … ON CONFLICT DO NOTHING` in chunks, maps the columns back through
     `CACHE_TABLES`, and names only the columns `cache_client` may insert.
   - Before sending anything, each makes the rows pass the tables' CHECKs: products stripped as
-    Python's `str.strip` does, and failing loudly over `MAX_CACHE_KEY_BYTES` in UTF-8; units kept
-    verbatim, since the lab joins on them exactly; blank values and `NaN` weights as null.
+    Python's `str.strip` does, and failing loudly over `MAX_CACHE_KEY_BYTES` in UTF-8; blank
+    values as null.
 - `spreadsheet.py`:
   - Step 1 pushes `categorized.new_categorizations` through `push_product_categorizations`. For
     serving data, it also pushes the Gemini-labelled products through
@@ -136,8 +134,6 @@ Merges when the strings are ready to hand out. Rehearse it beforehand against th
   - `entrees.py`: `build_entree_human_review_table` and the `_entree_for_human_review.csv` it
     feeds, for the same reason the product one is gone. The backfill script and
     `build_entree_cleaned_name_reuse_index` are unchanged.
-- `clean_product_weights.py`: `expand_historical_weight_classifications` pushes instead of
-  rewriting the file. Rename the 1.5 runscript's commented call to match.
 - Tests:
   - The row mappers and validators.
   - A database round trip through `test_database`, as `cache_client`: a push lands unverified,
@@ -202,6 +198,6 @@ the hosted project. A CSV that turns up later can be loaded by restoring the scr
 PR 1: `just lint && just check && just test && TEST_DB=1 just test-lab`. PR 2:
 `pnpm lint && pnpm check && pnpm test`.
 
-By hand, once PR 1 is in and the string is out: `just pull-caches` writes three files whose row
+By hand, once PR 1 is in and the string is out: `just pull-caches` writes two files whose row
 counts match the verified counts in Studio; a step 1 run's new categorizations appear in Studio
 unverified as `lab:<user>`; a second run of the same file adds nothing.

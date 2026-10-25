@@ -19,16 +19,9 @@ export const CATEGORIES_YAML_PATH =
 
 export const PRODUCT_COLUMNS = ['product', 'category', 'cleaned_item_names'] as const;
 export const ENTREE_COLUMNS = ['product', 'entree_classification', 'cleaned_item_names'] as const;
-export const UNIT_COLUMNS = [
-  'original_unit',
-  'llm_cleaned_unit',
-  'llm_extracted_weight',
-  'example_products',
-] as const;
 
 export type ProductColumn = (typeof PRODUCT_COLUMNS)[number];
 export type EntreeColumn = (typeof ENTREE_COLUMNS)[number];
-export type UnitColumn = (typeof UNIT_COLUMNS)[number];
 
 export type ProductCategorizationRow = {
   product: string;
@@ -39,12 +32,6 @@ export type EntreeClassificationRow = {
   product: string;
   classification: EntreeClassificationLabel;
   cleanedName: string | null;
-};
-export type UnitWeightRow = {
-  originalUnit: string;
-  cleanedUnit: string;
-  extractedWeight: number | null;
-  exampleProducts: string | null;
 };
 
 export type Note = { line: number; reason: string };
@@ -135,39 +122,6 @@ export function cleanEntreeClassifications(
   return collect(outcomes, 'classification');
 }
 
-export function cleanUnitWeights(
-  records: readonly CsvRecord<UnitColumn>[],
-): Cleaned<UnitWeightRow> {
-  const outcomes = records.map(({ line, values }): Outcome<UnitWeightRow> => {
-    // Verbatim, unlike a product: the lab joins on the unit exactly as an upload spells it.
-    const originalUnit = values.original_unit;
-    const cleanedUnit = values.llm_cleaned_unit;
-    if (originalUnit.trim() === '') return { kind: 'skip', line, reason: 'blank unit' };
-    if (cleanedUnit.trim() === '') return { kind: 'skip', line, reason: 'blank cleaned unit' };
-    const keyProblem = checkKey(originalUnit);
-    if (keyProblem) return { kind: 'refuse', line, reason: keyProblem };
-
-    const extractedWeight = parseWeight(values.llm_extracted_weight);
-    if (extractedWeight === 'invalid') {
-      const reason = `weight ${JSON.stringify(values.llm_extracted_weight)} is not a positive number`;
-      return { kind: 'refuse', line, reason };
-    }
-    return {
-      kind: 'row',
-      line,
-      key: originalUnit,
-      value: `${extractedWeight} ${cleanedUnit}`,
-      row: {
-        originalUnit,
-        cleanedUnit,
-        extractedWeight,
-        exampleProducts: nullIfBlank(values.example_products),
-      },
-    };
-  });
-  return collect(outcomes, 'weight');
-}
-
 type Outcome<Row> =
   | {
       kind: 'row';
@@ -234,13 +188,6 @@ function nullIfBlank(value: string): string | null {
 
 function rewriteNote(column: string, from: string, to: string): string {
   return `${column} ${JSON.stringify(from)} imported as ${JSON.stringify(to)}`;
-}
-
-/** pandas writes a missing weight as an empty field. */
-function parseWeight(raw: string): number | null | 'invalid' {
-  if (raw.trim() === '') return null;
-  const weight = Number(raw);
-  return Number.isFinite(weight) && weight > 0 ? weight : 'invalid';
 }
 
 const SIDE_ADD_ON_SPELLINGS = new Set([

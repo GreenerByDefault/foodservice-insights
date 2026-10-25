@@ -12,11 +12,9 @@ import {
   categoryVocabulary,
   cleanEntreeClassifications,
   cleanProductCategorizations,
-  cleanUnitWeights,
   ENTREE_COLUMNS,
   type Note,
   PRODUCT_COLUMNS,
-  UNIT_COLUMNS,
 } from './clean.ts';
 import { readCsv } from './csv.ts';
 import {
@@ -32,7 +30,6 @@ import {
   type TableImport,
   upsertEntreeClassifications,
   upsertProductCategorizations,
-  upsertUnitWeights,
 } from './upsert.ts';
 
 type PlannedImport = TableImport & {
@@ -45,7 +42,6 @@ const { values: args } = parseArgs({
   options: {
     products: { type: 'string' },
     entrees: { type: 'string' },
-    units: { type: 'string' },
     write: { type: 'boolean', default: false },
     production: { type: 'boolean', default: false },
     mirror: { type: 'boolean', default: false },
@@ -57,7 +53,7 @@ async function main(): Promise<number> {
   const target: Target = args.production ? 'production' : 'local';
   const imports = planImports();
   if (imports.length === 0) {
-    console.error('Pass at least one of --products, --entrees and --units.');
+    console.error('Pass at least one of --products and --entrees.');
     return 1;
   }
   for (const planned of imports) printCleaning(planned);
@@ -137,19 +133,6 @@ function planImports(): PlannedImport[] {
       recordCount: records.length,
       cleaned,
       upsert: (db) => upsertEntreeClassifications(db, cleaned.rows, suggestedBy(path)),
-    });
-  }
-
-  if (args.units) {
-    const path = resolveFromInvocation(args.units);
-    const records = readCsv(readFileSync(path, 'utf8'), UNIT_COLUMNS);
-    const cleaned = cleanUnitWeights(records);
-    imports.push({
-      table: 'unit_weight',
-      path,
-      recordCount: records.length,
-      cleaned,
-      upsert: (db) => upsertUnitWeights(db, cleaned.rows, suggestedBy(path)),
     });
   }
 

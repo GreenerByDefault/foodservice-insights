@@ -48,7 +48,7 @@ Classify a failure with `isTransientDatabaseError` or `isPermanentDatabaseError`
 
 - **Identity.** `app_user` mirrors GoTrue's `auth.users`. A user belongs to an `organization`
   through `organization_member`, and is invited to one through `organization_invite`.
-- **Caches.** `product_categorization`, `entree_classification` and `unit_weight` hold answers the
+- **Caches.** `product_categorization` and `entree_classification` hold answers the
   analysis would otherwise ask an LLM for, with no foreign keys to the rest. The `cache_client`
   role is how the lab and developers' local workers reach them.
 - **Telemetry.** `analysis_attempt_telemetry`, with `analysis_attempt_llm_usage` and

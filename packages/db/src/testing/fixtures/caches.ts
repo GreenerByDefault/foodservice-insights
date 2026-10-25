@@ -6,7 +6,6 @@ import type {
   NewProductCategorization,
   ProductCategorization,
 } from '../../generated/public/ProductCategorization.ts';
-import type { NewUnitWeight, UnitWeight } from '../../generated/public/UnitWeight.ts';
 import type { DatabaseExecutor } from '../../schema.ts';
 
 export async function insertProductCategorization(
@@ -27,22 +26,6 @@ export async function insertEntreeClassification(
   return await database
     .insertInto('entreeClassification')
     .values({ product: `Product ${crypto.randomUUID()}`, classification: 'entree', ...overrides })
-    .returningAll()
-    .executeTakeFirstOrThrow();
-}
-
-export async function insertUnitWeight(
-  database: DatabaseExecutor,
-  overrides: Partial<NewUnitWeight> = {},
-): Promise<UnitWeight> {
-  return await database
-    .insertInto('unitWeight')
-    .values({
-      originalUnit: `${crypto.randomUUID()} LB`,
-      cleanedUnit: 'lb',
-      extractedWeight: 12,
-      ...overrides,
-    })
     .returningAll()
     .executeTakeFirstOrThrow();
 }
