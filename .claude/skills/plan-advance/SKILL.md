@@ -54,7 +54,7 @@ changelog, not the old plan with strikethrough. Concretely:
 4. **Renumber what's left starting at PR 1.** The reader implementing the next PR shouldn't have
    to know three PRs used to precede it.
 5. **Keep the plan's existing density and prose style** — this file is closer to a design doc than
-   a checklist (see how `## Decisions` reads: `Accepted: ...`, `Considered, not done: ...`). Match
+   a checklist (see how `## Decisions` reads: `*Rejected: ...*`, `Considered, not done: ...`). Match
    that register in whatever you add or reword; don't flatten it into bullet-point terseness.
 6. **Update `## Verification`** if it named steps specific to the landed PR (e.g. a manual QA step
    for UI that PR built) — drop what's now covered by the merged PR's own tests, keep what still

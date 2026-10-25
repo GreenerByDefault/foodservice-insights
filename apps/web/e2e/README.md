@@ -57,6 +57,12 @@ Keep the set curated. The unit to weigh is a *screen*, not an image — adding o
 per viewport, and every one of them is CI minutes and a file a reviewer has to look at on any
 visual change. Capture screens that carry real visual risk, not every route.
 
+The PNGs are committed as ordinary blobs, not Git LFS. In October 2026 they were about 52 MB of a
+60 MB pack. *Rejected: Git LFS, for its bandwidth quotas, the setup it adds to every CI checkout,
+and because it cannot shrink history already committed.* Revisit when a clone gets noticeably
+slow or the pack passes about 500 MB. A redesign regenerates every image, so prune the set to
+screens with real visual risk before one.
+
 An `<img>` whose `src` redirects to a signed storage URL cannot render in the browser container.
 The signed URL names `127.0.0.1`, which is the container's own loopback, and the Host is part of
 the signature, so it cannot be rewritten; nor can `page.route()` intercept the redirected leg.

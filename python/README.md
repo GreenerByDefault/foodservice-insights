@@ -1,6 +1,7 @@
 # Python
 
-The AI analysis library, the worker's child process, and the data-science lab. This file is
+The AI analysis library ([`insights/README.md`](insights/README.md)), the worker's child process,
+and the data-science lab ([`lab/README.md`](lab/README.md)). This file is
 the Python counterpart to [`docs/typescript.md`](../docs/typescript.md). The root
 [`README.md`](../README.md) has running the app, the local databases, and the docs map, and
 [`.claude/rules/python.md`](../.claude/rules/python.md) has how we write Python.
@@ -38,7 +39,7 @@ Run these from anywhere in the repo.
 | `just lint` | Ruff: lint rules, import sorting, and a formatting check; `nbstripout` fails on a notebook with outputs |
 | `just fmt` | Ruff, applying fixes; `nbstripout`, stripping notebook outputs |
 | `just check` | ty: typechecking |
-| `just test` | Tests for the two packages we ship |
+| `just test` | Tests for the two packages we ship, and for `scripts/ci/` |
 | `just test-lab` | Tests for the lab |
 
 For anything one-off, prefix it with `uv run`: `uv run python`, `uv run pytest -k categorize -x`.
@@ -61,5 +62,12 @@ Add it to `[project.dependencies]` of the package that imports it, then `just sy
 
 ### API keys
 
-The analysis library reads `OPENAI_API_KEY`. Set it in the repo root's `.env`; see
-[`../.env.example`](../.env.example). The lab reads two more; see [`lab/README.md`](lab/README.md).
+The analysis library reads `OPENAI_API_KEY` from the process environment. Set it in the repo
+root's `.env` ([`../.env.example`](../.env.example)), which only the worker parent and the lab load:
+to call `analyze()` from a shell, export it first. The lab reads two more; see
+[`lab/README.md`](lab/README.md).
+
+### Measure before optimizing
+
+`uv run python scripts/profile_report.py` profiles building a report at the row cap; its docstring
+says what it covers.
