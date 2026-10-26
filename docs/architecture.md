@@ -253,8 +253,7 @@ kills the old container outright. Two mitigations, both required:
   push. One consequence follows from that asymmetry: the deployed worker is always the side running
   behind schema and web app, never ahead, so the web ↔ worker and app ↔ schema contracts must stay
   backwards compatible for as long as an old worker might still be running. `deploy.yml` deploys
-  the worker at the commit the web runs, so only a rollback from the host's dashboard can leave the
-  worker ahead.
+  the worker at the commit the web runs, which is what keeps it behind.
 
   When a change cannot stay compatible, an attempt says so: a worker claims only attempts whose
   `required_contract_version` is at most its own `WORKER_CONTRACT_VERSION`
@@ -275,8 +274,11 @@ second one used only under pressure. It also keeps migrations simple: every depl
 forward, so nothing has to decide when to skip one. CI refuses a revert that deletes a migration;
 undo one with a new migration instead.
 
-When an outage can't wait for CI, the hosting provider's own rollback redeploys an earlier image.
-Land the revert before the next worker deploy, which would otherwise run ahead of the web.
+A deploy that fails needs no undo: the old app keeps running, and each step's comment in
+`deploy.yml` says what its failure means.
+*Rejected: the hosting provider's dashboard rollback,* which restores that deployment's old
+secrets, pins the app against the next deploy, and can leave the worker ahead of the web, all to
+save one CI run.
 
 ### Hosting
 
