@@ -7,7 +7,7 @@ export type CsvRecord<Column extends string> = {
   values: Record<Column, string>;
 };
 
-/** Read an RFC 4180 CSV by column name. An `optional` column the header lacks reads as `''`.
+/** Read an RFC 4180 CSV by column name.
  *
  * Throws on malformed quoting and on a record whose field count differs from the header's. A
  * blank line is not a record, as for Python's `csv` module and pandas.
@@ -18,14 +18,13 @@ export type CsvRecord<Column extends string> = {
 export function readCsv<Column extends string>(
   text: string,
   columns: readonly Column[],
-  optional: readonly Column[] = [],
 ): CsvRecord<Column>[] {
   const [header, ...records] = parseCsv(text);
   if (header === undefined) throw new Error('The CSV is empty');
 
   const indexes = columns.map((column) => {
     const index = header.fields.indexOf(column);
-    if (index === -1 && !optional.includes(column)) {
+    if (index === -1) {
       throw new Error(`The CSV has no '${column}' column. Its header is: ${header.fields}`);
     }
     return [column, index] as const;
@@ -37,9 +36,7 @@ export function readCsv<Column extends string>(
         `Line ${line} has ${fields.length} fields, but the header has ${header.fields.length}`,
       );
     }
-    const values = Object.fromEntries(
-      indexes.map(([column, index]) => [column, index === -1 ? '' : fields[index]]),
-    );
+    const values = Object.fromEntries(indexes.map(([column, index]) => [column, fields[index]]));
     return { line, values: values as Record<Column, string> };
   });
 }

@@ -38,12 +38,6 @@ describe('readCsv', () => {
     ]);
   });
 
-  test('reads an absent optional column as empty', () => {
-    expect(readCsv('product\nSteak', ['product', 'category'], ['category'])).toEqual([
-      { line: 2, values: { product: 'Steak', category: '' } },
-    ]);
-  });
-
   test.each([
     ['an empty file', '', 'The CSV is empty'],
     ['a missing column', 'product\nSteak', "The CSV has no 'category' column"],

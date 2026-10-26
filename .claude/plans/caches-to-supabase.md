@@ -136,8 +136,8 @@ Merges when the strings are ready to hand out. Rehearse it beforehand against th
 - These go:
   - `entree_cache.py`: `save_historical_entree_classifications`.
   - `entrees.py`: `build_entree_human_review_table` and the `_entree_for_human_review.csv` it
-    feeds, for the same reason the product one is gone. The backfill script and
-    `build_entree_cleaned_name_reuse_index` are unchanged.
+    feeds, for the same reason the product one is gone. `build_entree_cleaned_name_reuse_index`
+    is unchanged.
 - Tests:
   - The row mappers and validators.
   - A database round trip through `test_database`, as `cache_client`: a push lands unverified,

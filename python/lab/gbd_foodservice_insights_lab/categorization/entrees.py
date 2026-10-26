@@ -14,7 +14,10 @@ from typing import Any
 
 import pandas as pd
 from gbd_foodservice_insights.categories import category_names
-from gbd_foodservice_insights.categorization.cache import normalize_product_name
+from gbd_foodservice_insights.categorization.cache import (
+    CategorizationCache,
+    normalize_product_name,
+)
 from gbd_foodservice_insights.utils import print_progress
 
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
@@ -250,6 +253,7 @@ def _print_entree_summary(products_to_check: pd.DataFrame) -> None:
 def classify_entrees_using_historical_classifications(
     classified_products: pd.DataFrame,
     historical_df: pd.DataFrame | None = None,
+    product_cache: CategorizationCache | None = None,
 ) -> pd.DataFrame:
     """
     Match products against historical entree classifications.
@@ -280,11 +284,11 @@ def classify_entrees_using_historical_classifications(
     )
 
     # Second lookup: reuse labels for recognised cleaned names (mirrors the
-    # category pipeline's cleaned-name reuse step). Only runs when cleaned names are present
-    # both on the rows and in the historical cache; unanimous matches only.
+    # category pipeline's cleaned-name reuse step). Only runs when the rows carry
+    # cleaned names; unanimous matches only.
     n_cleaned_matched = 0
     if "cleaned_item_names" in classified_products.columns:
-        reuse_index = build_entree_cleaned_name_reuse_index(historical_df)
+        reuse_index = build_entree_cleaned_name_reuse_index(historical_df, product_cache)
         mask_unmatched = classified_products["entree_classification"].isna()
         if reuse_index and mask_unmatched.any():
             normalized = classified_products.loc[mask_unmatched, "cleaned_item_names"].map(
@@ -341,6 +345,7 @@ def run_entree_detector(
     gemini_client: Any,
     historical_entree_classifications: pd.DataFrame | None = None,
     review_sheet_path: Path = Path("classified_products_with_entree.csv"),
+    product_cache: CategorizationCache | None = None,
 ) -> pd.DataFrame:
     """
     Classify GBD-category products as entree or side/add-on.
@@ -372,6 +377,7 @@ def run_entree_detector(
     products_to_check = classify_entrees_using_historical_classifications(
         products_to_check,
         historical_df=historical_entree_classifications,
+        product_cache=product_cache,
     )
     products_to_check["entree_first_pass_classification"] = pd.NA
     products_to_check["entree_used_pro_model"] = False

@@ -70,7 +70,6 @@ CACHE_TABLES: Final = (
         columns={
             "product": "product",
             "classification": "entree_classification",
-            "cleaned_name": "cleaned_item_names",
         },
         path=lambda: entree_cache.get_previously_classified_entrees_location(),
     ),

@@ -18,7 +18,7 @@ export const CATEGORIES_YAML_PATH =
   'python/insights/gbd_foodservice_insights/data_files/GBD_categories.yaml';
 
 export const PRODUCT_COLUMNS = ['product', 'category', 'cleaned_item_names'] as const;
-export const ENTREE_COLUMNS = ['product', 'entree_classification', 'cleaned_item_names'] as const;
+export const ENTREE_COLUMNS = ['product', 'entree_classification'] as const;
 
 export type ProductColumn = (typeof PRODUCT_COLUMNS)[number];
 export type EntreeColumn = (typeof ENTREE_COLUMNS)[number];
@@ -31,7 +31,6 @@ export type ProductCategorizationRow = {
 export type EntreeClassificationRow = {
   product: string;
   classification: EntreeClassificationLabel;
-  cleanedName: string | null;
 };
 
 export type Note = { line: number; reason: string };
@@ -117,7 +116,7 @@ export function cleanEntreeClassifications(
       line,
       key: product,
       value: classification,
-      row: { product, classification, cleanedName: nullIfBlank(values.cleaned_item_names) },
+      row: { product, classification },
       rewrites: [
         keyRewrite,
         classification === raw ? undefined : rewriteNote('classification', raw, classification),

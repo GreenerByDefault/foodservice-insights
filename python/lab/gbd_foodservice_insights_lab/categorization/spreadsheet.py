@@ -139,11 +139,8 @@ def categorize_spreadsheet_to_csvs(
     df = df.assign(product=df["product"].astype(str))
     df = clean_weight_column(parse_and_validate_date_column(df, date_format=date_format), "weight")
 
-    categorized = categorize_unique_products(
-        df=df,
-        llm=llm,
-        cache=load_categorization_cache(),
-    )
+    product_cache = load_categorization_cache()
+    categorized = categorize_unique_products(df=df, llm=llm, cache=product_cache)
     df_result = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
     counts = MergeCounts.between(categorized.cleaned_df, df_result)
 
@@ -157,6 +154,7 @@ def categorize_spreadsheet_to_csvs(
             review_sheet_path=output_filepath.with_stem(
                 output_filepath.stem + "_classified_with_entree"
             ),
+            product_cache=product_cache,
         )
         entree_review_df = build_entree_human_review_table(
             original_df=categorized.cleaned_df,

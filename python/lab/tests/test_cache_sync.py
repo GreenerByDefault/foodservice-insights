@@ -77,11 +77,11 @@ def test_pull_writes_the_verified_rows_for_the_loaders_to_read(
     _insert(
         test_database,
         "entree_classification",
-        ("product", "classification", "cleaned_name", "is_verified"),
+        ("product", "classification", "is_verified"),
         [
-            (awkward, "side/add-on", "bacon", True),
-            (f"{prefix} taco", "entree", None, True),
-            (f"{prefix} unverified", "entree", "taco", False),
+            (awkward, "side/add-on", True),
+            (f"{prefix} taco", "entree", True),
+            (f"{prefix} unverified", "entree", False),
         ],
     )
     test_database.execute("SET LOCAL ROLE cache_client")
@@ -93,12 +93,8 @@ def test_pull_writes_the_verified_rows_for_the_loaders_to_read(
         {"product": f"{prefix} yogurt", "category": "Yogurt", "cleaned_item_names": ""},
     ]
     assert _rows_containing(get_previously_classified_entrees(), "product", prefix) == [
-        {"product": awkward, "entree_classification": "side/add-on", "cleaned_item_names": "bacon"},
-        {
-            "product": f"{prefix} taco",
-            "entree_classification": "entree",
-            "cleaned_item_names": None,
-        },
+        {"product": awkward, "entree_classification": "side/add-on"},
+        {"product": f"{prefix} taco", "entree_classification": "entree"},
     ]
 
 
@@ -138,10 +134,7 @@ def test_pull_of_no_verified_rows_leaves_files_the_loaders_read_as_empty(
 
     assert load_categorization_cache().products.empty
     entrees = get_previously_classified_entrees()
-    assert (entrees.empty, list(entrees.columns)) == (
-        True,
-        ["product", "entree_classification", "cleaned_item_names"],
-    )
+    assert (entrees.empty, list(entrees.columns)) == (True, ["product", "entree_classification"])
 
 
 def test_pull_that_fails_mid_write_keeps_the_file_and_leaves_no_temporary(

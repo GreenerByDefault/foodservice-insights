@@ -4,6 +4,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.categorization.cache import CACHE_COLUMNS, CategorizationCache
 from gbd_foodservice_insights_lab.categorization import entrees
 from gbd_foodservice_insights_lab.categorization.entrees import (
     assign_serving_sizes_from_entree_classification,
@@ -52,15 +53,20 @@ def test_classify_entrees_using_historical_classifications_cleaned_name_reuse():
             "cleaned_item_names": ["chicken sandwich"],
         }
     )
-    historical_df = pd.DataFrame(
-        {
-            "product": ["OLD_RAW"],
-            "entree_classification": ["entree"],
-            "cleaned_item_names": ["Chicken Sandwich"],
-        }
+    historical_df = pd.DataFrame({"product": ["OLD_RAW"], "entree_classification": ["entree"]})
+    product_cache = CategorizationCache.from_frame(
+        pd.DataFrame(
+            {
+                "product": ["OLD_RAW"],
+                "category": ["Poultry (Chicken & Turkey)"],
+                "cleaned_item_names": ["Chicken Sandwich"],
+            }
+        )
     )
 
-    result = classify_entrees_using_historical_classifications(classified_products, historical_df)
+    result = classify_entrees_using_historical_classifications(
+        classified_products, historical_df, product_cache
+    )
 
     assert result.set_index("product")["entree_classification"].to_dict() == {"NEW_RAW": "entree"}
     assert result.set_index("product")["previously_entree_classified"].to_dict() == {
@@ -181,6 +187,7 @@ def test_run_entree_detector_uses_historical_before_llm(tmp_path):
             gemini_client=object(),
             historical_entree_classifications=historical_df,
             review_sheet_path=tmp_path / "classified_products_with_entree.csv",
+            product_cache=CategorizationCache.from_frame(pd.DataFrame(columns=list(CACHE_COLUMNS))),
         )
 
     assert len(gemini_calls) == 1

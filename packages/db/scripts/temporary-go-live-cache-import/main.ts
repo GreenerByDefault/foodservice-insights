@@ -124,8 +124,7 @@ function planImports(): PlannedImport[] {
 
   if (args.entrees) {
     const path = resolveFromInvocation(args.entrees);
-    // Files from before the lab recorded cleaned names have no such column.
-    const records = readCsv(readFileSync(path, 'utf8'), ENTREE_COLUMNS, ['cleaned_item_names']);
+    const records = readCsv(readFileSync(path, 'utf8'), ENTREE_COLUMNS);
     const cleaned = cleanEntreeClassifications(records);
     imports.push({
       table: 'entree_classification',

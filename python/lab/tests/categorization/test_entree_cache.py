@@ -1,9 +1,10 @@
 from unittest.mock import patch
 
 import pandas as pd
-from gbd_foodservice_insights_lab.categorization import entree_cache, product_cache
+from gbd_foodservice_insights.categorization.cache import CategorizationCache
+from gbd_foodservice_insights_lab.categorization import entree_cache
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
-    backfill_entree_cleaned_names,
+    build_entree_cleaned_name_reuse_index,
     get_previously_classified_entrees,
     save_historical_entree_classifications,
 )
@@ -23,7 +24,7 @@ def test_get_previously_classified_entrees_returns_empty_when_missing(tmp_path, 
         result = get_previously_classified_entrees()
 
     assert result.empty
-    assert list(result.columns) == ["product", "entree_classification", "cleaned_item_names"]
+    assert list(result.columns) == ["product", "entree_classification"]
     assert "not found" in caplog.text
 
 
@@ -33,10 +34,12 @@ def test_save_historical_entree_classifications_uses_main_labels(tmp_path):
         historical_csv_path, index=False
     )
 
+    # The run's other columns, a cleaned name among them, are not the cache's.
     new_df = pd.DataFrame(
         {
             "product": ["apple", "banana", "carrot"],
             "entree_classification": ["not entree", pd.NA, "entree"],
+            "cleaned_item_names": ["apple", "banana", "carrot"],
         }
     )
 
@@ -48,27 +51,15 @@ def test_save_historical_entree_classifications_uses_main_labels(tmp_path):
         save_historical_entree_classifications(new_df)
 
     saved = pd.read_csv(historical_csv_path).sort_values("product").reset_index(drop=True)
-    assert saved["product"].tolist() == ["apple", "carrot"]
-    assert saved["entree_classification"].tolist() == ["side/add-on", "entree"]
-    # Schema migration: the entree cache now carries a cleaned-name column.
-    assert "cleaned_item_names" in saved.columns
+    assert saved.to_dict("list") == {
+        "product": ["apple", "carrot"],
+        "entree_classification": ["side/add-on", "entree"],
+    }
 
 
-def test_get_previously_classified_entrees_backfills_missing_cleaned_column(tmp_path):
-    """Loading a pre-migration 2-column entree cache adds an empty cleaned-name column."""
-    entree_path = tmp_path / "entree.csv"
-    pd.DataFrame({"product": ["apple"], "entree_classification": ["entree"]}).to_csv(
-        entree_path, index=False
-    )
-
-    with patch.object(
-        entree_cache, "get_previously_classified_entrees_location", return_value=entree_path
-    ):
-        df = get_previously_classified_entrees()
-    assert "cleaned_item_names" in df.columns
-
-
-def test_get_previously_classified_entrees_keeps_null_like_products(tmp_path):
+def test_get_previously_classified_entrees_keeps_null_like_products_and_drops_cleaned_names(
+    tmp_path,
+):
     entree_path = tmp_path / "entree.csv"
     entree_path.write_text(
         "product,entree_classification,cleaned_item_names\nNA,entree,\nNone,side/add-on,none\n"
@@ -79,56 +70,37 @@ def test_get_previously_classified_entrees_keeps_null_like_products(tmp_path):
     ):
         df = get_previously_classified_entrees()
 
-    assert df.astype(object).where(df.notna(), None).to_dict("records") == [
-        {"product": "NA", "entree_classification": "entree", "cleaned_item_names": None},
-        {"product": "None", "entree_classification": "side/add-on", "cleaned_item_names": "none"},
+    assert df.to_dict("records") == [
+        {"product": "NA", "entree_classification": "entree"},
+        {"product": "None", "entree_classification": "side/add-on"},
     ]
 
 
-def test_save_historical_entree_classifications_persists_cleaned_names(tmp_path):
-    entree_path = tmp_path / "entree.csv"
-    pd.DataFrame(
-        {"product": ["apple"], "entree_classification": ["entree"], "cleaned_item_names": ["apple"]}
-    ).to_csv(entree_path, index=False)
-    new_df = pd.DataFrame(
+def test_build_entree_cleaned_name_reuse_index_takes_cleaned_names_from_the_product_cache():
+    historical_df = pd.DataFrame(
         {
-            "product": ["banana"],
-            "entree_classification": ["entree"],
-            "cleaned_item_names": ["banana sandwich"],
+            "product": [
+                "CHKN SAND",
+                "Chicken Sandwich Deluxe",
+                "Fries Large",
+                "Fries Small",
+                "Garden Salad",
+            ],
+            "entree_classification": ["entree", "entree", "side/add-on", "entree", "entree"],
         }
     )
+    product_cache = CategorizationCache.from_frame(
+        pd.DataFrame(
+            {
+                "product": ["CHKN SAND", "Chicken Sandwich Deluxe", "Fries Large", "Fries Small"],
+                "category": ["Poultry (Chicken & Turkey)"] * 2 + ["No Matches Found"] * 2,
+                "cleaned_item_names": ["chicken sandwich", "Chicken Sandwich", "fries", "fries"],
+            }
+        )
+    )
 
-    with patch.object(
-        entree_cache, "get_previously_classified_entrees_location", return_value=entree_path
-    ):
-        save_historical_entree_classifications(new_df)
+    index = build_entree_cleaned_name_reuse_index(historical_df, product_cache)
 
-    saved = pd.read_csv(entree_path).set_index("product")
-    assert saved.loc["banana", "cleaned_item_names"] == "banana sandwich"
-    assert saved.loc["apple", "cleaned_item_names"] == "apple"
-
-
-def test_backfill_entree_cleaned_names_borrows_from_category_cache(tmp_path):
-    """Backfill borrows cleaned names from the category cache and falls back to the product."""
-    entree_path = tmp_path / "entree.csv"
-    category_path = tmp_path / "category.csv"
-    pd.DataFrame(
-        {"product": ["apple", "mystery"], "entree_classification": ["entree", "side/add-on"]}
-    ).to_csv(entree_path, index=False)
-    pd.DataFrame(
-        {"product": ["apple"], "category": ["Cheese"], "cleaned_item_names": ["green apple"]}
-    ).to_csv(category_path, index=False)
-
-    with (
-        patch.object(
-            entree_cache, "get_previously_classified_entrees_location", return_value=entree_path
-        ),
-        patch.object(product_cache, "categorization_cache_path", return_value=category_path),
-    ):
-        summary = backfill_entree_cleaned_names()
-
-    saved = pd.read_csv(entree_path).set_index("product")["cleaned_item_names"].to_dict()
-    assert saved["apple"] == "green apple"  # borrowed from the category cache
-    assert saved["mystery"] == "mystery"  # absent from category cache -> fallback to product
-    assert summary["n_borrowed"] == 1
-    assert summary["n_fallback"] == 1
+    # The fries disagree, so neither is reused; the salad has no row there, so its own name is
+    # its key.
+    assert index == {"chicken sandwich": "entree", "garden salad": "entree"}

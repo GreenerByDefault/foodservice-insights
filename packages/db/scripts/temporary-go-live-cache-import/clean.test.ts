@@ -208,28 +208,15 @@ describe('cleanProductCategorizations', () => {
 });
 
 describe('cleanEntreeClassifications', () => {
-  function entree(
-    product: string,
-    entreeClassification: string,
-    cleanedItemNames = '',
-  ): Record<EntreeColumn, string> {
-    return {
-      product,
-      entree_classification: entreeClassification,
-      cleaned_item_names: cleanedItemNames,
-    };
+  function entree(product: string, entreeClassification: string): Record<EntreeColumn, string> {
+    return { product, entree_classification: entreeClassification };
   }
 
-  test('strips the product and imports a blank cleaned name as null', () => {
-    const cleaned = cleanEntreeClassifications(
-      records(entree(' Burger ', 'entree', 'burger'), entree('Fries', 'side/add-on')),
-    );
+  test('strips the product', () => {
+    const cleaned = cleanEntreeClassifications(records(entree(' Burger ', 'entree')));
 
     expect(cleaned).toEqual({
-      rows: [
-        { product: 'Burger', classification: 'entree', cleanedName: 'burger' },
-        { product: 'Fries', classification: 'side/add-on', cleanedName: null },
-      ],
+      rows: [{ product: 'Burger', classification: 'entree' }],
       skipped: [],
       rewritten: [],
       refused: [],
@@ -239,9 +226,7 @@ describe('cleanEntreeClassifications', () => {
   test('removes invisible characters from the product', () => {
     const cleaned = cleanEntreeClassifications(records(entree('Chilli Con Carne\u200b', 'entree')));
 
-    expect(cleaned.rows).toEqual([
-      { product: 'Chilli Con Carne', classification: 'entree', cleanedName: null },
-    ]);
+    expect(cleaned.rows).toEqual([{ product: 'Chilli Con Carne', classification: 'entree' }]);
     expect(cleaned.rewritten).toEqual([
       { line: 2, reason: 'removed invisible U+200B from product' },
     ]);
@@ -265,7 +250,7 @@ describe('cleanEntreeClassifications', () => {
     );
 
     expect(cleaned).toEqual({
-      rows: [{ product: 'Burger', classification: 'entree', cleanedName: null }],
+      rows: [{ product: 'Burger', classification: 'entree' }],
       skipped: [
         { line: 2, reason: 'blank product' },
         { line: 3, reason: 'repeated later with a different classification' },
