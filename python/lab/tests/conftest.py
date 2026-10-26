@@ -54,6 +54,13 @@ def mock_whisper_client():
 # ----------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _no_cache_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    """On a developer's laptop `CACHE_DB_CONNECTION_STRING` may point at production, where step 1
+    would push whatever a test categorized. A test that wants it set sets it."""
+    monkeypatch.delenv("CACHE_DB_CONNECTION_STRING", raising=False)
+
+
 @pytest.fixture
 def test_database() -> Iterator[psycopg.Connection]:
     """`postgres` on the migrated test stack, inside a transaction that always rolls back: the

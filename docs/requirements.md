@@ -263,7 +263,8 @@ verifies them and then changes the email.
 ### Product categorization cache
 
 The AI code uses a cache of product categorizations from earlier runs. New runs add to the cache,
-but **new entries go through human review first.**
+but **new entries go through human review first.** The lab's entree-classification cache
+follows the same rule.
 
 ### Design and accessibility
 

@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 from gbd_foodservice_insights.categorization.pipeline import CategorizedProducts
 from gbd_foodservice_insights.testing import KeywordLlmClient
+from gbd_foodservice_insights_lab import cache_sync
 from gbd_foodservice_insights_lab.categorization import product_cache, spreadsheet
 from gbd_foodservice_insights_lab.categorization.spreadsheet import (
     MergeCounts,
@@ -201,3 +202,31 @@ def test_merge_summary_avoids_division_by_zero_with_no_rows_before():
             "rows_eliminated_uncategorized_pct": 0,
         },
     }
+
+
+def test_categorize_spreadsheet_to_csvs_pushes_procurement_categorizations_without_entrees(
+    tmp_path,
+):
+    input_path = tmp_path / "input.csv"
+    pd.DataFrame(
+        {"product": ["Chicken Breast Boneless"], "date": ["2025-01-01"], "weight": [1.0]}
+    ).to_csv(input_path, index=False)
+    pushed = []
+
+    with patch.object(
+        cache_sync, "push_suggestions_if_configured", side_effect=lambda *push: pushed.append(push)
+    ):
+        categorize_spreadsheet_to_csvs(input_filepath=input_path, llm=KeywordLlmClient())
+
+    [(products, entrees)] = pushed
+    pd.testing.assert_frame_equal(
+        products,
+        pd.DataFrame(
+            {
+                "product": ["Chicken Breast Boneless"],
+                "category": ["Poultry (Chicken & Turkey)"],
+                "cleaned_item_names": ["chicken breast boneless"],
+            }
+        ),
+    )
+    assert entrees is None

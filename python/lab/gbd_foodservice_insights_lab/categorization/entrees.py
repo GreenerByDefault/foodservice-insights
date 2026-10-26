@@ -23,6 +23,7 @@ from gbd_foodservice_insights.categorization.cache import (
 from gbd_foodservice_insights.utils import print_progress
 
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
+    ENTREE_CACHE_COLUMNS,
     ENTREE_LABEL_ENTREE,
     ENTREE_LABEL_SIDE_ADDON,
     ENTREE_LABEL_UNSURE,
@@ -567,51 +568,11 @@ def filter_to_entrees(
     return entrees, n_rows_non_entree
 
 
-def build_entree_human_review_table(
-    original_df: pd.DataFrame,
-    unique_products_df: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Build a product-level human-review table for newly LLM-classified entree rows.
-    """
-    required_original_cols = {"product"}
-    required_unique_cols = {
-        "product",
-        "category",
-        "entree_classification",
-        "previously_entree_classified",
-    }
-
-    missing_original = required_original_cols - set(original_df.columns)
-    if missing_original:
-        raise ValueError(f"original_df missing required columns: {sorted(missing_original)}")
-
-    missing_unique = required_unique_cols - set(unique_products_df.columns)
-    if missing_unique:
-        raise ValueError(f"unique_products_df missing required columns: {sorted(missing_unique)}")
-
-    product_counts = (
-        original_df["product"]
-        .value_counts()
-        .rename("occurrence_count")
-        .to_frame()
-        .reset_index()
-        .rename(columns={"index": "product"})
+def new_entree_classifications(classified_products: pd.DataFrame) -> pd.DataFrame:
+    """The products Gemini labelled this run, in the entree cache's columns, as suggestions for
+    it. Cleaned-name reuse hits are left out, as `new_categorizations` leaves them out."""
+    labelled = (
+        ~classified_products["previously_entree_classified"]
+        & classified_products["entree_classification"].notna()
     )
-
-    llm_only = unique_products_df.loc[
-        (~unique_products_df["previously_entree_classified"].fillna(False))
-        & unique_products_df["entree_classification"].notna(),
-        ["entree_classification", "product", "category"],
-    ].copy()
-
-    review_df = llm_only.merge(product_counts, on="product", how="left")
-    review_df["occurrence_count"] = review_df["occurrence_count"].fillna(0).astype(int)
-
-    review_df = review_df[["entree_classification", "product", "category", "occurrence_count"]]
-    review_df = review_df.sort_values(
-        by=["entree_classification", "occurrence_count", "product"],
-        ascending=[True, False, True],
-    ).reset_index(drop=True)
-
-    return review_df
+    return classified_products.loc[labelled, list(ENTREE_CACHE_COLUMNS)].reset_index(drop=True)
