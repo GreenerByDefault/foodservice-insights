@@ -4,12 +4,12 @@
 
 Some operations happen by hand in a vendor's dashboard or from a maintainer's shell, and nothing
 in the code records how. Three such procedures sit in `.claude/plans/runbooks.md` today, with an
-**Open** on where runbooks belong and in what form. `better-stack.md` and `caches-to-supabase.md`
-promise entries into that file, `README.md:112` and `docs/architecture.md:78` point at it, and the
-database's write guard names one entry by title in its error hint (`012_write_guard.ts:67`). The
-repo is public, maintained by a contractor through AI agents, and about to be run part-time by a
-technical staff member. The runbooks exist to save that person time on the procedures whose traps
-the internet does not know, not to document everything.
+**Open** on where runbooks belong and in what form. `better-stack.md` promises an entry into that
+file, `README.md:112` and `docs/architecture.md:78` point at it, and the database's write guard
+names one entry by title in its error hint (`012_write_guard.ts:67`). The repo is public, maintained by a
+contractor through AI agents, and about to be run part-time by a technical staff member. The
+runbooks exist to save that person time on the procedures whose traps the internet does not know,
+not to document everything.
 
 This plan supersedes `.claude/plans/runbooks.md`: adopt it under that name, replacing the file.
 PR 1 recovers the three existing entries with `git show origin/main:.claude/plans/runbooks.md`.
@@ -40,9 +40,7 @@ Facts from the tree (2026-10-20) that shape the design:
   Supabase (`.claude/settings.json`). A runbook is run by a person from their own shell or a
   vendor's dashboard.
 - **House skills never run scripts, and rules are path-scoped pointers**: `db.md` points at
-  `packages/db/README.md`, and `web.md` at `apps/web/README.md`. The one
-  production-touching script (`temporary-go-live-cache-import/`) is TTY-only, prompts for the
-  credential, and `caches-to-supabase.md` PR 2 deletes it, so nothing may link it.
+  `packages/db/README.md`, and `web.md` at `apps/web/README.md`.
 - **`cache_client`'s one password is shared** by every developer and data scientist holding
   `CACHE_DB_CONNECTION_STRING`; `metrics_reader`'s rotation is already written on
   `apps/grafana/scripts/deploy.ts:11-14`; `ALTER ROLE` passes the write guard
@@ -54,7 +52,7 @@ Facts from the tree (2026-10-20) that shape the design:
   audit row.
 - **Open items this plan closes:** `runbooks.md`'s own **Open**; `docs/architecture.md:510` (no
   rotation process for suspected leaks); `docs/requirements.md:248-251` (account recovery "TBD");
-  the draft token entry's "a fixed expiration rather than none"; `caches-to-supabase.md:69-70`.
+  the draft token entry's "a fixed expiration rather than none".
 
 ## Decisions
 
@@ -153,7 +151,7 @@ since it is rotated the same way though it never touches the Environment.
 | `deploy-the-worker.md` | The one deploy that is by hand, and when it is due |
 | `roll-back-a-deploy.md` | Env restored, app pinned, worker must not run ahead; a failed deploy's two lines |
 | `write-to-the-database-by-hand.md` | Named by the guard's error hint |
-| `review-cache-suggestions.md` | The three UI steps; the rules stay in `caches-to-supabase.md` and the guard |
+| `review-cache-suggestions.md` | The three UI steps; the rules stay in `002_caches.ts`, `product-categorization.ts` and the guard |
 | `rotate-a-secret.md` | Every credential, where it is minted, what else moves |
 | `a-credential-leaked.md` | Closes `docs/architecture.md:510` |
 | `offboard-a-person.md` | Crosses every vendor team and two rotations |
@@ -165,7 +163,7 @@ since it is rotated the same way though it never touches the Environment.
 - `better-stack.md`'s entry already covers the path from a failed attempt's row to its log lines,
   so there is no separate triage file. `email-provider.md` today plans its two support lines into
   architecture § Email; PR 1 redirects it here, and that PR adds Postmark's rows to the vendor
-  table and to `rotate-a-secret.md`. `caches-to-supabase.md` links `review-cache-suggestions.md`.
+  table and to `rotate-a-secret.md`.
   `alerts.md` adds nothing: the README's one sentence, "an alert's own rule says what firing
   means, then the logs runbook", is the whole of "when an alert fires".
 - *Left out:* generic vendor how-tos an agent or a search answers; the hosted project's settings,
@@ -197,8 +195,9 @@ Branch off `main`. Recover the three entries first:
 - **`write-to-the-database-by-hand.md`**, verbatim. **`review-cache-suggestions.md`**, cut to the
   three UI steps the code cannot say: filter `is_verified = false` by `created_at`, with
   `suggested_by` saying where a row came from; fix in place and tick; bulk-verify with an
-  `UPDATE` in the SQL editor; one line links `caches-to-supabase.md` § Decisions for the rules,
-  which that plan's last PR moves here when it deletes itself.
+  `UPDATE` in the SQL editor; one line for the rules, which the code enacts: only verified
+  rows are used and the first suggestion wins, so to reject a suggestion leave it unverified,
+  and to have it suggested again delete it.
 - **`rotate-a-secret.md`**: the shared steps (absorbing `.do/README.md:16-17`, which becomes a
   pointer) and one section, the DigitalOcean token, from the draft with three changes: a first
   line naming the triggers; step 1 says a GBD staff login creates it, and why; step 3 says no
@@ -207,7 +206,7 @@ Branch off `main`. Recover the three entries first:
   `docs/architecture.md:78-79` (link the file; "needs no runbook" becomes a link to
   `review-cache-suggestions.md`); `.do/README.md:16-17`. The guard's hint is unchanged.
 - **Other plans, one line each:** `better-stack.md:56,118` →
-  `docs/runbooks/trace-a-problem-through-the-logs.md`; `caches-to-supabase.md:69-70`;
+  `docs/runbooks/trace-a-problem-through-the-logs.md`;
   `email-provider.md:278-281` → `docs/runbooks/a-user-did-not-get-an-email.md`, plus its rows.
 - `/plan-advance` removes this section.
 
@@ -245,12 +244,11 @@ Branch off `main`. Recover the three entries first:
     linked.
   - The site password, while placeholder mode lasts: at or above `site-password.ts`' minimum;
     signs every browser out. `production-sign-in.md` PR 2 removes the section.
-  - `cache_client`, absorbing `caches-to-supabase.md:154-159` before that plan is deleted: compose
-    the string in `.env.example`'s form, check it with `psql`, hand it over privately; each holder
-    sets `CACHE_DB_CONNECTION_STRING` and runs `just pull-caches` once. Rotate with
-    `ALTER ROLE cache_client PASSWORD` in the SQL editor, then re-hand it; until a holder updates,
-    their `live` worker and the lab's step 1 refuse to start, by design. That plan's hand-out
-    section becomes a pointer.
+  - `cache_client`: compose the string in `.env.example`'s form, check it with `psql`, hand it
+    over privately, and allow the holder's address if the project ever turns on network
+    restrictions; each holder sets `CACHE_DB_CONNECTION_STRING` and runs `just pull-caches` once.
+    Rotate with `ALTER ROLE cache_client PASSWORD` in the SQL editor, then re-hand it; until a
+    holder updates, their `live` worker and the lab's step 1 refuse to start, by design.
   - The deploy tags SSH key, `DEPLOY_TAGS_SSH_KEY`: the private half of a write deploy key, which
     the `deploy tags` tag ruleset lets alone move `deploy/*`, so it decides what the worker
     deploys. Mint with `ssh-keygen -t ed25519 -N '' -C deploy-tags -f deploy-tags` in a scratch

@@ -55,7 +55,6 @@
 
       "Bash(pnpm *truncate*)",
       "Bash(pnpm *db:clean*)",
-      "Bash(pnpm *temporary-go-live-cache-import*)",
       "Bash(scripts/supabase * --no-backup*)",
       "Bash(just pull-caches*)",
 
