@@ -23,7 +23,7 @@ function refusal(operation: string) {
   return {
     code: POSTGRES_CODE_INSUFFICIENT_PRIVILEGE,
     message: `${operation} refused: only the apps write to this database`,
-    hint: 'See the runbook "Write to the database by hand". AI agents: stop and ask a human.',
+    hint: 'See the runbook "Write to the database by hand", https://github.com/GreenerByDefault/foodservice-insights/blob/main/docs/runbooks/write-to-the-database-by-hand.md. AI agents: stop and ask a human.',
   };
 }
 

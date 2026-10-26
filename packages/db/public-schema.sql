@@ -561,7 +561,7 @@ CREATE OR REPLACE FUNCTION "public"."require_marked_writer"("operation" "text") 
       IF session_user = 'postgres' AND coalesce(current_setting('gbd.writer', true), '') = '' THEN
         RAISE EXCEPTION '% refused: only the apps write to this database', operation
           USING ERRCODE = 'insufficient_privilege',
-                HINT = 'See the runbook "Write to the database by hand". AI agents: stop and ask a human.';
+                HINT = 'See the runbook "Write to the database by hand", https://github.com/GreenerByDefault/foodservice-insights/blob/main/docs/runbooks/write-to-the-database-by-hand.md. AI agents: stop and ask a human.';
       END IF;
     END;
     $$;

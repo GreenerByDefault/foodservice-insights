@@ -10,8 +10,8 @@ on the procedures whose traps the internet does not know, not to document everyt
 [`docs/runbooks/`](../../docs/runbooks/README.md) exists: its README holds the vendor table
 (§ Where things are), the index (§ The runbooks) and the conventions (§ Writing one), and
 [`.claude/rules/runbooks.md`](../rules/runbooks.md) loads on the folder. Three runbooks are in:
-`write-to-the-database-by-hand.md`, whose title the write guard's hint names byte-for-byte with no
-path (`012_write_guard.ts:58-59`); `review-cache-suggestions.md`; and `rotate-a-secret.md`, which
+`write-to-the-database-by-hand.md`, whose title and GitHub URL the write guard's hint names
+(`019_write_guard_hint_links_runbook.ts`), so moving it needs a migration; `review-cache-suggestions.md`; and `rotate-a-secret.md`, which
 holds the steps every rotation shares and one section, the DigitalOcean token. The root README
 links the folder from § Documentation and from § Signing in for real; architecture and
 `.do/README.md` link the files. Each PR below adds its file's line to the README's § The runbooks.
@@ -38,8 +38,8 @@ Facts from the tree (2026-10-20) that shape the design:
   the Grafana stack hostname out "of the repo, which is public", and `alerts.md` keeps alert
   addresses in an Environment variable for the same reason.
 - **Agents are denied the hosted CLIs**: `doctl`, `gcx`, `gh secret`, `gh workflow run`, hosted
-  Supabase (`.claude/settings.json`). A runbook is run by a person from their own shell or a
-  vendor's dashboard.
+  Supabase (`.claude/settings.json`). A runbook is run by a person in a vendor's dashboard, so
+  nobody has to set up a CLI to follow one.
 - **House skills never run scripts, and rules are path-scoped pointers**: `db.md` points at
   `packages/db/README.md`, and `web.md` at `apps/web/README.md`.
 - **`cache_client`'s one password is shared** by every developer and data scientist holding
@@ -94,10 +94,11 @@ under the file name this plan reserves, so there is one owner per entry.
 ### Markdown, not scripts or skills
 
 A person runs these; agents are denied the hosted CLIs by design, so there is nothing for a
-skill to execute. Each entry is a few dashboard steps plus at most one shell line. The one
+skill to execute. Each entry is a few dashboard steps, with a shell line only where no
+dashboard can do the step. The one
 candidate for a script, the marked transaction in "Write to the database by hand", is better as
 prose: a script would put the guard's opt-in in committed code, which the hint deliberately
-avoids so that an agent stops (`012_write_guard.ts:58-59`).
+avoids so that an agent stops (`012_write_guard.ts`, the comment above `require_marked_writer`).
 
 - **Revisit when** an entry passes about ten shell steps, or someone has run one wrong twice.
   Then the form is the import's: `--production`, refuses without a TTY, prompts for the
@@ -105,12 +106,22 @@ avoids so that an agent stops (`012_write_guard.ts:58-59`).
 
 ### Every credential, one file, one shape
 
-`rotate-a-secret.md` opens with the steps every rotation shares (mint; `gh secret set`, which
-prompts; redeploy *both* apps; only then delete the old value; a rollback restores the old one).
-Then one section per credential, in the same shape: *minted at*, *also moves*, *then*. The DigitalOcean token's section is longer only because
-its scopes are a decision made here, not a copy of anything. `cache_client` is a section too,
-since it is rotated the same way though it never touches the Environment.
+`rotate-a-secret.md` opens with the steps every rotation shares (mint, leaving the old one
+working; paste it into the Environment in GitHub's settings; redeploy *both* apps, or for a secret
+only CI uses, check it instead; only then delete the old value; a rollback restores the old one).
+Each credential then gets only what differs from those steps:
 
+- **A table row** where the shared steps fit unchanged: *secret*, *minted at*, *then* (what else
+  moves, and the check for a CI-only secret). The OpenAI key, the S3 pair, the Better Stack token,
+  the Grafana token, `metrics_reader` (a link to `deploy.ts`' header), the site password, and
+  Postmark's token.
+- **A section** where the steps themselves differ, or a decision is made here: the DigitalOcean
+  token (scopes, who mints it, no expiry); the deploy tags SSH key (minted locally, multi-line,
+  the old key kept until a tag moves); `cache_client` (never in the Environment; a handoff in
+  place of a redeploy); and the `postgres` password only if Supabase's reset kills the old one at
+  once, which breaks step 1. **Open, check while writing.**
+- *Rejected: a section per credential.* Seven of them would be three lines each repeating the
+  shape, and the four that differ would not stand out.
 - *Rejected: a file per credential.* Eight files of three lines each, and the shared steps copied
   into each or linked from each.
 - *Rejected: a page per vendor.* It would mix reference (where, who owns it) with procedure; the
@@ -181,7 +192,8 @@ instead adds a migration dropping the enum value.
 
 ## PR 2 — Secrets and people
 
-- **`rotate-a-secret.md`** gains its remaining sections, each *minted at / also moves / then*:
+- **`rotate-a-secret.md`** gains its table and remaining sections, per Decisions § Every
+  credential, one file, one shape:
   - The `postgres` password: Supabase → Project Settings → Database → reset; the Connect dialog's
     string changes with it, and so does what CI migrates with.
   - The Storage S3 key pair: Supabase → Storage → S3 access keys; a new pair, swap, delete the old.
@@ -203,9 +215,8 @@ instead adds a migration dropping the enum value.
     the `deploy tags` tag ruleset lets alone move `deploy/*`, so it decides what the worker
     deploys. Mint with `ssh-keygen -t ed25519 -N '' -C deploy-tags -f deploy-tags` in a scratch
     directory; add the `.pub` under Settings → Deploy keys with write access, beside the old key so
-    a running deploy can still move its tag; set the secret from the file, since the key is
-    multi-line: `gh secret set DEPLOY_TAGS_SSH_KEY --env production < deploy-tags`; delete both
-    files. No app holds it, so nothing
+    a running deploy can still move its tag; paste the whole private key file, every line, as
+    the secret; delete both files. No app holds it, so nothing
     redeploys: delete the old key once the next deploy's "Move the deploy/… tag" step succeeds.
     The ruleset bypasses every deploy key, so no other deploy key gets write access.
   - Variables are not secrets; they change only when the resource they name does.
@@ -248,8 +259,8 @@ Docs only, so the gates pass trivially. Per PR, by hand:
 
 - **Links resolve.** `python3 scripts/ci/check_doc_links.py`, which CI also runs.
 - **The guard's hint still matches.** `git grep -n 'Write to the database by hand'` shows the
-  file's title, the hint in `012_write_guard.ts`, `public-schema.sql` and `write-guard.test.ts`,
-  all spelled the same.
+  file's title, the hint in `019_write_guard_hint_links_runbook.ts`, `public-schema.sql` and
+  `write-guard.test.ts`, all spelled the same, and the hint's URL still opens the file.
 - **PR 2:** each vendor page named was opened while writing; any that could not be checked is
   marked **Open** in the entry. The DigitalOcean no-expiry option and token ownership are
   confirmed in its UI, and `rotate-a-secret.md`'s token section is corrected if either is wrong.
