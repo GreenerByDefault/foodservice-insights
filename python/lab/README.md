@@ -39,12 +39,18 @@ editing lab code, restart the kernel, or run `%load_ext autoreload` and `%autore
 The lab reads three keys from `.env`: `OPENAI_API_KEY`, `GEMINI_API_KEY`, and
 `LLM_WHISPERER_API_KEY` (PDF extraction only). See [`.env.example`](../../.env.example).
 
-The categorization and entree caches live in the database. Ask GBD for the
-`cache_client` connection string, and put it in `.env` as `CACHE_DB_CONNECTION_STRING`, in the
-form [`.env.example`](../../.env.example) shows. Step 1 then pulls the verified rows into the
-[lab's cache files](gbd_foodservice_insights_lab/data_files/README.md) before it calls any LLM,
-and stops if it cannot. `just pull-caches` pulls on demand. **A pull overwrites both files,
-hand edits included.**
+The categorization and entree caches live in the database. To use them:
+
+1. Ask GBD for the `cache_client` connection string, and treat it like `OPENAI_API_KEY`. It can
+   only read the caches and suggest rows to them.
+2. Put it in `.env` as `CACHE_DB_CONNECTION_STRING`, in the form
+   [`.env.example`](../../.env.example) shows: its `sslrootcert` is the absolute path to the
+   repo's `supabase-ca.crt`. Never put it in `DB_CONNECTION_STRING`.
+3. Run `just pull-caches`. It logs how many verified rows it pulled into each of the
+   [lab's cache files](gbd_foodservice_insights_lab/data_files/README.md), or why it could not.
+
+From then on, step 1 pulls before it calls any LLM, and stops if it cannot. **A pull overwrites
+both files, hand edits included.**
 
 Step 1 suggests its new categorizations and entree labels back to the database. A suggestion is
 used by no run until someone verifies it in Supabase Studio; the next pull then brings it down.

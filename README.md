@@ -70,7 +70,7 @@ page checks for a result.
 | `WORKER_MODE` | What you get | Use it for |
 | --- | --- | --- |
 | `mock-llm` (default) | The real analysis, with a real PDF and workbook. A keyword list categorizes products instead of OpenAI, so products it does not recognize are left uncategorized. No API key needed. | Demos with the sample data, and most development |
-| `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. Point it at [production's cache](apps/worker/README.md#the-categorization-cache). | Real procurement data |
+| `live` | The real analysis, categorized by OpenAI. Needs `OPENAI_API_KEY` in `.env`, and every report is billed to that key. Your local cache starts empty, so every product goes to OpenAI; optionally, set `CACHE_DB_CONNECTION_STRING` to [reuse production's verified answers](apps/worker/README.md#the-categorization-cache). | Real procurement data |
 | `stubbed` | A fake analysis that finishes in seconds. Its PDF and workbook are placeholders that will not open. The report name drives failure scenarios such as `!slow` and `!fail:<reason>`; see [`testing.py`](python/worker_child/worker_child/testing.py) for the full list. | Working on the report lifecycle and its error states |
 | `off` | No worker, so reports stay queued. | UI work that doesn't need a result |
 

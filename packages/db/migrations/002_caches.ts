@@ -59,7 +59,9 @@ async function cacheClientRole(database: Kysely<any>): Promise<void> {
   // notebook kernel left open, would otherwise hold one of the role's connections indefinitely.
   //
   // No password: it is set by hand on the hosted project, and the local stacks never log in as
-  // this role.
+  // this role. Everyone who reaches the caches shares it, so revoking one person means a new
+  // password for the rest. *Rejected: a role per person.* That cost is acceptable for a role
+  // that can only read two tables and suggest rows.
   await sql`
     DO $$ BEGIN
       CREATE ROLE cache_client LOGIN NOINHERIT CONNECTION LIMIT 10;
