@@ -13,8 +13,7 @@ worker deploys only on demand (`docs/architecture.md` § Worker deploys only on 
   Platform's own bindable variables, such as `${APP_URL}`.
   *Rejected: committing DigitalOcean's encrypted `EV[…]` values,* which would give runtime
   secrets a second home, in a public repo.
-- **To rotate a secret**, change it in the Environment and redeploy. The web redeploys on the next
-  push to `main`; the worker only when you dispatch `deploy.yml`.
+- **To rotate a secret**, follow [`docs/runbooks/rotate-a-secret.md`](../docs/runbooks/rotate-a-secret.md).
 - **To roll back**, use the app's dashboard. A rollback restores that deployment's env too, so it
   undoes any secret rotated since. If the next deploy is refused because the rollback pinned the
   app, commit or revert the rollback in the dashboard.

@@ -52,8 +52,8 @@ probably be the first support question.
 
 A view is a filter made in a few clicks over three days of data, so it is kept where it is used,
 and a copy in the repo would drift from it. What the UI cannot hold is a procedure that crosses
-systems, such as going from a user's report to the row and then to the lines. That is one entry in
-[`runbooks.md`](runbooks.md).
+systems, such as going from a user's report to the row and then to the lines. That is one runbook,
+`docs/runbooks/trace-a-problem-through-the-logs.md`, following [its conventions](../../docs/runbooks/README.md#writing-one).
 
 The views, each one condition on top of the whole stream:
 
@@ -115,7 +115,7 @@ Production serves traffic, so nothing waits. Everything but the docs is by hand.
 - Live tail's view shows `message_json.msg` as the line.
 - Every team member invited, as Telemetry members.
 - The saved views, the dashboard, the monitor and the alert, as far as the free plan allows.
-- [`runbooks.md`](runbooks.md): an entry, *Trace a problem through the logs*. From a user's report,
+- `docs/runbooks/trace-a-problem-through-the-logs.md`, with a line in its README's § The runbooks. From a user's report,
   the `X-Request-Id` or the time and their `userId`. From a failed attempt, `failure_reason` on its
   row, then its `attemptId`. Lines older than three days are gone.
 - `docs/architecture.md`:
