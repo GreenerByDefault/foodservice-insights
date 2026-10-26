@@ -74,6 +74,39 @@ def test_classify_entrees_using_historical_classifications_cleaned_name_reuse():
     }
 
 
+def test_classify_entrees_using_historical_classifications_matches_another_spelling():
+    classified_products = pd.DataFrame(
+        {
+            "product": ["BEEF STEW, RS", "Fries", "fries", "Cake"],
+            "category": ["Beef"] * 4,
+        }
+    )
+    historical_df = pd.DataFrame(
+        {
+            "product": ["Beef Stew RS", "Fries", "FRIES!"],
+            "entree_classification": ["entree", "side/add-on", "entree"],
+        }
+    )
+
+    result = classify_entrees_using_historical_classifications(
+        classified_products, historical_df
+    ).set_index("product")
+
+    # "fries" is left to the LLM: the spellings it could reuse disagree.
+    assert result["entree_classification"].fillna("<none>").to_dict() == {
+        "BEEF STEW, RS": "entree",
+        "Fries": "side/add-on",
+        "fries": "<none>",
+        "Cake": "<none>",
+    }
+    assert result["previously_entree_classified"].to_dict() == {
+        "BEEF STEW, RS": True,
+        "Fries": True,
+        "fries": False,
+        "Cake": False,
+    }
+
+
 # ----------------------------------------------------------------------
 # run_entree_detector
 # ----------------------------------------------------------------------

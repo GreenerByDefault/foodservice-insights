@@ -9,6 +9,7 @@ assignment, and review-sheet construction.
 
 import logging
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization.cache import (
     CategorizationCache,
     normalize_product_name,
+    unanimous_index,
 )
 from gbd_foodservice_insights.utils import print_progress
 
@@ -247,6 +249,14 @@ def _print_entree_summary(products_to_check: pd.DataFrame) -> None:
     logger.info("=" * 60)
 
 
+def _fill_labels_from_index(
+    labels: pd.Series, names: pd.Series, index: Mapping[str, str]
+) -> tuple[pd.Series, int]:
+    """Fill each missing label with `index`'s label for the normalized name; count the fills."""
+    filled = labels.fillna(names.map(normalize_product_name).map(index))
+    return filled, int(filled.notna().sum() - labels.notna().sum())
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -283,32 +293,40 @@ def classify_entrees_using_historical_classifications(
         how="left",
     )
 
-    # Second lookup: reuse labels for recognised cleaned names (mirrors the
+    # Second lookup: the same product spelled with other casing, spacing or punctuation. Without
+    # it, such a variant reaches the cache only if the LLM cleans its name to the cached product's
+    # cleaned name. It fills only rows the exact match missed, so a spelling whose variants
+    # disagree never overrides an exact hit.
+    labels, n_spelling_matched = _fill_labels_from_index(
+        classified_products["entree_classification"],
+        classified_products["product"],
+        unanimous_index(historical_subset, key_col="product", value_col="entree_classification"),
+    )
+
+    # Third lookup: reuse labels for recognised cleaned names (mirrors the
     # category pipeline's cleaned-name reuse step). Only runs when the rows carry
     # cleaned names; unanimous matches only.
     n_cleaned_matched = 0
     if "cleaned_item_names" in classified_products.columns:
-        reuse_index = build_entree_cleaned_name_reuse_index(historical_df, product_cache)
-        mask_unmatched = classified_products["entree_classification"].isna()
-        if reuse_index and mask_unmatched.any():
-            normalized = classified_products.loc[mask_unmatched, "cleaned_item_names"].map(
-                normalize_product_name
-            )
-            reused = normalized.map(reuse_index)
-            hit_index = reused.dropna().index
-            classified_products.loc[hit_index, "entree_classification"] = reused.loc[hit_index]
-            n_cleaned_matched = len(hit_index)
+        labels, n_cleaned_matched = _fill_labels_from_index(
+            labels,
+            classified_products["cleaned_item_names"],
+            build_entree_cleaned_name_reuse_index(historical_df, product_cache),
+        )
 
-    classified_products["previously_entree_classified"] = classified_products[
-        "entree_classification"
-    ].notna()
+    classified_products = classified_products.assign(
+        entree_classification=labels,
+        previously_entree_classified=labels.notna(),
+    )
 
     n_matched = int(classified_products["previously_entree_classified"].sum())
     n_total = len(classified_products)
     logger.info(
-        "Historical entree classification match: %d/%d products found (%d via cleaned-name reuse).",
+        "Historical entree classification match: %d/%d products found (%d via another spelling, "
+        "%d via cleaned-name reuse).",
         n_matched,
         n_total,
+        n_spelling_matched,
         n_cleaned_matched,
     )
 
