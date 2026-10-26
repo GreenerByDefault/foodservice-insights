@@ -6,7 +6,6 @@ from gbd_foodservice_insights_lab.categorization import entree_cache
 from gbd_foodservice_insights_lab.categorization.entree_cache import (
     build_entree_cleaned_name_reuse_index,
     get_previously_classified_entrees,
-    save_historical_entree_classifications,
 )
 
 
@@ -26,35 +25,6 @@ def test_get_previously_classified_entrees_returns_empty_when_missing(tmp_path, 
     assert result.empty
     assert list(result.columns) == ["product", "entree_classification"]
     assert "not found" in caplog.text
-
-
-def test_save_historical_entree_classifications_uses_main_labels(tmp_path):
-    historical_csv_path = tmp_path / "historical_entree.csv"
-    pd.DataFrame({"product": ["apple"], "entree_classification": ["entree"]}).to_csv(
-        historical_csv_path, index=False
-    )
-
-    # The run's other columns, a cleaned name among them, are not the cache's.
-    new_df = pd.DataFrame(
-        {
-            "product": ["apple", "banana", "carrot"],
-            "entree_classification": ["not entree", pd.NA, "entree"],
-            "cleaned_item_names": ["apple", "banana", "carrot"],
-        }
-    )
-
-    with patch.object(
-        entree_cache,
-        "get_previously_classified_entrees_location",
-        return_value=historical_csv_path,
-    ):
-        save_historical_entree_classifications(new_df)
-
-    saved = pd.read_csv(historical_csv_path).sort_values("product").reset_index(drop=True)
-    assert saved.to_dict("list") == {
-        "product": ["apple", "carrot"],
-        "entree_classification": ["side/add-on", "entree"],
-    }
 
 
 def test_get_previously_classified_entrees_keeps_null_like_products_and_drops_cleaned_names(

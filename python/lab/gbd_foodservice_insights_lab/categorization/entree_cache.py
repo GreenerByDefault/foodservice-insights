@@ -2,7 +2,7 @@
 Entree Cache
 ============
 
-Historical entree-classification persistence for serving data, plus the entree-label
+The historical entree-classification cache for serving data, plus the entree-label
 constants and the label normalizer used during cache I/O.
 """
 
@@ -130,33 +130,3 @@ def build_entree_cleaned_name_reuse_index(
     index = unanimous_index(work, key_col="cleaned_item_names", value_col="entree_classification")
     logger.info("Built entree cleaned-name reuse index with %d entries.", len(index))
     return index
-
-
-def save_historical_entree_classifications(new_df: pd.DataFrame) -> None:
-    """
-    Append new entree classifications to historical data and de-duplicate.
-    """
-    missing_cols = set(ENTREE_CACHE_COLUMNS) - set(new_df.columns)
-    if missing_cols:
-        raise ValueError(f"new_df missing required columns for entree save: {sorted(missing_cols)}")
-
-    existing = get_previously_classified_entrees()
-    valid_rows = new_df.loc[:, list(ENTREE_CACHE_COLUMNS)].copy()
-    valid_rows = valid_rows.dropna(subset=["entree_classification"])
-    valid_rows = valid_rows.loc[valid_rows["entree_classification"].astype(str).str.strip() != ""]
-    if not valid_rows.empty:
-        valid_rows["entree_classification"] = valid_rows["entree_classification"].apply(
-            _normalize_entree_classification
-        )
-    if valid_rows.empty:
-        logger.info("No valid entree classifications to append.")
-        return
-
-    combined = pd.concat([existing, valid_rows], ignore_index=True)
-    combined = combined.drop_duplicates(subset=["product"], keep="last")
-    combined.to_csv(get_previously_classified_entrees_location(), index=False)
-
-    logger.info(
-        "Historical entree classifications updated: %d unique products.",
-        combined["product"].nunique(),
-    )
