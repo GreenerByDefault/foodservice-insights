@@ -48,6 +48,28 @@ def test_categorize_using_historical_classifications_matches_the_cache():
     )
 
 
+def test_categorize_using_historical_classifications_matches_another_spelling():
+    cache = _cache(
+        ["Cheese Cheddar 5lb", "Napkins", "Salted Butter", "SALTED BUTTER!"],
+        ["Cheese", NO_MATCHES_FOUND, "Butter", "Cheese"],
+    )
+    products = ["CHEESE CHEDDAR, 5LB", "napkins", "Salted Butter", "salted butter", "Cake"]
+
+    result = categorize_using_historical_classifications(pd.DataFrame({"product": products}), cache)
+
+    # "salted butter" is left to the LLM: the spellings it could reuse disagree.
+    pd.testing.assert_frame_equal(
+        result,
+        pd.DataFrame(
+            {
+                "product": products,
+                "category": ["Cheese", NO_MATCHES_FOUND, "Butter", np.nan, np.nan],
+                "match_type": pd.Series(["raw_product_history"] * 3 + [pd.NA] * 2, dtype="object"),
+            }
+        ),
+    )
+
+
 def test_categorize_using_historical_classifications_prefers_the_latest_history_entry():
     cache = CategorizationCache.from_frame(
         pd.DataFrame(

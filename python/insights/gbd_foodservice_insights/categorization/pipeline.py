@@ -57,7 +57,7 @@ class CategorizationSummary:
     """The upload's unique products by how each was categorized, and the upload's rows that
     categorization left usable. The three match types partition the unique products."""
 
-    cache_raw_name_products: int  # the cache had the product itself
+    cache_raw_name_products: int  # the cache had the product, ignoring casing and punctuation
     cache_cleaned_name_products: int  # the cache had its LLM-cleaned name
     llm_matched_products: int
     # "No Matches Found" from the cache, which counts as a hit, or from the LLM.

@@ -17,6 +17,7 @@ from gbd_foodservice_insights.categorization.cache import (
     NO_MATCHES_FOUND,
     CategorizationCache,
     normalize_product_name,
+    unanimous_index,
 )
 from gbd_foodservice_insights.categorization.llm import LLM_CONCURRENCY, LlmClient
 from gbd_foodservice_insights.errors import UnusableDataError
@@ -41,12 +42,21 @@ def categorize_using_historical_classifications(
     `unique_products_df` needs a 'product' column. Returns it with 'category' (from history or
     NaN) and 'match_type' added.
     """
-    unique_products_df = unique_products_df.merge(
+    exact = unique_products_df.merge(
         cache.products[["product", "category"]],
         on="product",
         how="left",
         validate="many_to_one",
     )
+    # The same product spelled with other casing, spacing or punctuation reuses the category,
+    # "No Matches Found" included, when every spelling in the cache agrees. It fills only what the
+    # exact match missed, so a spelling whose variants disagree never overrides an exact hit.
+    by_spelling = (
+        exact["product"]
+        .map(normalize_product_name)
+        .map(unanimous_index(cache.products, key_col="product", value_col="category"))
+    )
+    unique_products_df = exact.assign(category=exact["category"].fillna(by_spelling))
     matched = unique_products_df["category"].notna()
 
     # Provenance for diagnostics / the cleaned-name hit-rate count. Object dtype
@@ -58,7 +68,12 @@ def categorize_using_historical_classifications(
 
     n_matched = matched.sum()
     n_total = len(unique_products_df)
-    logger.info("Historical match: %d/%d products found in cache.", n_matched, n_total)
+    logger.info(
+        "Historical match: %d/%d products found in cache (%d spelled differently).",
+        n_matched,
+        n_total,
+        n_matched - exact["category"].notna().sum(),
+    )
 
     return unique_products_df
 
