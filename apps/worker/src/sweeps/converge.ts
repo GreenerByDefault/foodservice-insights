@@ -3,17 +3,17 @@
  * [`apps/worker/README.md`](../../README.md#design)), and
  * `cancelRequestedPendingAttempts` for a `pending` attempt somebody has asked to cancel. */
 
-import type {
-  AnalysisAttemptId,
-  AnalysisAttemptStatus,
-  AnalysisFailureReason,
-  Database,
-  DatabaseExecutor,
-  ReportId,
+import {
+  type AnalysisAttemptId,
+  type AnalysisAttemptStatus,
+  type AnalysisFailureReason,
+  type Database,
+  type DatabaseExecutor,
+  dbMsAgo,
+  type ReportId,
 } from '@gbd/db';
 import { type ExpressionBuilder, type RawBuilder, sql } from 'kysely';
 import type { WorkerConfig } from '../config.ts';
-import { msAgo } from '../sql.ts';
 
 export type ReapOptions = Pick<
   WorkerConfig,
@@ -109,8 +109,8 @@ export async function reapExpiredAttempts(
   workerId: string,
   options: ReapOptions,
 ): Promise<AnalysisAttemptId[]> {
-  const leaseExpiresBefore = msAgo(options.leaseExpiresAfterMs);
-  const claimedBefore = msAgo(options.claimedCeilingMs);
+  const leaseExpiresBefore = dbMsAgo(options.leaseExpiresAfterMs);
+  const claimedBefore = dbMsAgo(options.claimedCeilingMs);
 
   const reaped = await db
     .updateTable('analysisAttempt')

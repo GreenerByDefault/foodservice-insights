@@ -25,9 +25,6 @@ describe('params.slug', () => {
     expect(accepts(params.slug, param as string)).toBe(false);
   });
 
-  // The invariant that actually matters: this matcher must never be tighter than what
-  // `deriveOrganizationSlug` can produce, or a legitimately-slugged organization would be
-  // unreachable forever. It may be looser (the database CHECK is the backstop for that side).
   test.each([
     'Acme Foodservice',
     'Café Ñoño',

@@ -6,15 +6,15 @@ import {
   insertOrganizationInvite,
   withRollback,
 } from '@gbd/db/testing';
+import { aTestEmailAddress } from '@gbd/email/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
-import { anEmail } from '#lib/server/testing/email.js';
 import { _loadInvites } from './+page.server.ts';
 
 describe('_loadInvites', () => {
   test("lists the address's pending invites newest first, matching it case-insensitively", async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('load-invites');
       const inviter = await insertAppUser(transaction, { displayName: 'Priya Shah' });
       const { organization: olderOrganization } = await insertOrganization(transaction);
       const { organization: newerOrganization } = await insertOrganization(transaction);
@@ -60,7 +60,7 @@ describe('_loadInvites', () => {
 
   test('an inviter with no display name, or none at all, is null', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('load-invites');
       const unnamed = await insertAppUser(transaction);
       const { organization } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
@@ -83,7 +83,7 @@ describe('_loadInvites', () => {
 
   test('a pending invite past its deadline is listed, marked expired', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('load-invites');
       const { organization } = await insertOrganization(transaction);
       const expired = await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
@@ -109,7 +109,7 @@ describe('_loadInvites', () => {
 
   test('invites no longer pending, or for another address, are never listed', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('load-invites');
       const { organization } = await insertOrganization(transaction);
       for (const status of ['accepted', 'declined', 'expired', 'revoked', 'superseded'] as const) {
         await insertOrganizationInvite(transaction, {
@@ -120,7 +120,7 @@ describe('_loadInvites', () => {
       }
       await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
-        email: anEmail(),
+        email: aTestEmailAddress('load-invites'),
       });
 
       expect(await _loadInvites(transaction, email)).toEqual([]);

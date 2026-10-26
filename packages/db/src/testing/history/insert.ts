@@ -1,4 +1,5 @@
 import type { InsertObject } from 'kysely';
+import { dbMsAgo } from '../../clock.ts';
 import type { NewAnalysisAttemptLlmUsage } from '../../generated/public/AnalysisAttemptLlmUsage.ts';
 import type { NewAnalysisAttemptQualityCheck } from '../../generated/public/AnalysisAttemptQualityCheck.ts';
 import type { Database, DatabaseExecutor } from '../../schema.ts';
@@ -8,7 +9,6 @@ import { insertAnalysisAttempt } from '../fixtures/analysis-attempt.ts';
 import { insertAppUser } from '../fixtures/app-user.ts';
 import { insertOrganization, insertOrganizationMember } from '../fixtures/organization.ts';
 import { insertReport } from '../fixtures/report.ts';
-import { dbMsAgo } from '../fixtures/values.ts';
 import {
   type PlannedOrganization,
   type PlannedUser,

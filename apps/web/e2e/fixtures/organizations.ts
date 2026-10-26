@@ -28,6 +28,7 @@ import {
   insertReportWithAttempt,
   type ReportWithAttemptOverrides,
 } from '@gbd/db/testing';
+import { aTestEmailAddress } from '@gbd/email/testing';
 import type { Kysely, RawBuilder } from 'kysely';
 import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
 
@@ -124,7 +125,7 @@ export async function insertOrganizationFixture(
     for (const invite of spec.invites ?? []) {
       await insertOrganizationInvite(tx, {
         organizationId,
-        email: invite.email ?? `${crypto.randomUUID()}@example.test`,
+        email: invite.email ?? aTestEmailAddress('fixture-invite'),
         role: invite.role ?? 'member',
         status: invite.status ?? 'pending',
         expiresAt: invite.expiresAt,

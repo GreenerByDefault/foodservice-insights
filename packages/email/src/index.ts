@@ -8,7 +8,7 @@ export {
   type RenderedEmail,
   SEND_TIMEOUT_MS,
 } from './client.ts';
-export { EmailError, emailRequest, isEmailError } from './errors.ts';
+export { EmailError, isEmailError } from './errors.ts';
 export {
   type AnalysisFailed,
   type AnalysisSucceeded,
@@ -27,6 +27,3 @@ export {
   type TransportName,
   type TransportSettings,
 } from './transports/index.ts';
-export { mailpitTransport } from './transports/mailpit.ts';
-export { postmarkTransport } from './transports/postmark.ts';
-export { providerTransport } from './transports/provider.ts';

@@ -1,9 +1,9 @@
 import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { dbMsAgo } from '../../clock.ts';
 import { DATABASE } from '../../env.ts';
 import { withRollback } from '../transactions.ts';
 import { findOrInsertAppUser, insertAppUser } from './app-user.ts';
-import { dbMsAgo } from './values.ts';
 
 describe('insertAppUser', () => {
   test('takes the id it is given, for a user mirrored from GoTrue', async () => {

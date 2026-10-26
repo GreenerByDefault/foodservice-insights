@@ -1,10 +1,5 @@
 import { unreachableEmailer } from '@gbd/email/testing';
 
-/** A unique address per call, so no test can see another's invite. */
-export function anEmail(): string {
-  return `${crypto.randomUUID()}@example.test`;
-}
-
 /** A `vi.mock('#lib/server/email.js', ...)` factory aimed at a port nothing listens on, so a test
  * proves `notifyGbd`'s own catch rather than depending on whatever Mailpit happens to be doing
  * locally.

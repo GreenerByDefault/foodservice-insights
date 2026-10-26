@@ -4,9 +4,9 @@
 
 import { join } from 'node:path';
 import { MINUTE_MS, SECOND_MS } from '@gbd/core';
-import { type CollectingLogger, collectingLogger } from '@gbd/core/testing';
+import { type Breakable, type CollectingLogger, collectingLogger } from '@gbd/core/testing';
 import type { AnalysisAttemptId, DatabaseExecutor } from '@gbd/db';
-import { type Breakable, readAnalysisAttemptRow } from '@gbd/db/testing';
+import { readAnalysisAttemptRow } from '@gbd/db/testing';
 import { type RecordingEmailer, recordingEmailer } from '@gbd/email/testing';
 import {
   type BlobStore,

@@ -67,7 +67,7 @@ test('re-inviting an outstanding address still shows one row', async ({ page, or
 });
 
 test('inviting an existing member is refused inline', async ({ page, organizations }) => {
-  const existingMemberEmail = `invites-e2e-existing-${crypto.randomUUID()}@example.test`;
+  const existingMemberEmail = aTestEmailAddress('invites-e2e-existing');
   const { slug: organizationSlug } = await organizations.create({
     name: `Existing Member ${crypto.randomUUID()}`,
     members: [{ email: existingMemberEmail, role: 'member' }],

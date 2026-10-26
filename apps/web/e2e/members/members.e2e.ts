@@ -1,4 +1,5 @@
 import { ensureHydrated } from '@gbd/browser-testing';
+import { aTestEmailAddress } from '@gbd/email/testing';
 import { expect } from '@playwright/test';
 import { organizationMemberApiHref } from '../../src/lib/hrefs.ts';
 import { test } from '../fixtures/test.ts';
@@ -128,7 +129,7 @@ test('a member removing someone else through the API is refused', async ({
   db,
   baseURL,
 }) => {
-  const adminEmail = `sole-admin-${crypto.randomUUID()}@example.test`;
+  const adminEmail = aTestEmailAddress('members-e2e-sole-admin');
   const { slug: organizationSlug } = await organizations.create({
     name: `Member Api Refusal ${crypto.randomUUID()}`,
     role: 'member',

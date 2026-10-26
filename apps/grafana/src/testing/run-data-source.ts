@@ -3,12 +3,10 @@
  * worktree shares. Named like `sweepStaleRunDatabases`'s run databases (`@gbd/db/testing`), with the
  * creation time first, so a sweep can tell a killed run's leftover from a live one. */
 
+import { RUN_STALE_AFTER_MS } from '@gbd/core/testing';
 import { deleteDataSource, listDataSourceUids } from '../data-source.ts';
 
 const RUN_PREFIX = 'metrics-run-';
-
-/** The same bound as `@gbd/db/testing`'s run databases: no live run lasts this long. */
-const RUN_STALE_AFTER_MS = 2 * 60 * 60 * 1000;
 
 export function newRunDataSourceUid(now: number = Date.now()): string {
   return `${RUN_PREFIX}${now}-${crypto.randomUUID().slice(0, 8)}`;

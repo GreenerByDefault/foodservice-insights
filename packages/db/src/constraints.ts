@@ -4,6 +4,9 @@
  * value without a query; each names the constraint in `packages/db/public-schema.sql` that
  * enforces it. A migration does not import them either, so a later change to a constant cannot
  * rewrite what an old migration did.
+ *
+ * Also exported as `@gbd/db/constraints`, for browser code: the root entry pulls in `pg`. Keep this
+ * file free of imports so that subpath stays safe to bundle.
  */
 
 /** How many attempts a report may have, `analysis_attempt_attempt_number_range`. */

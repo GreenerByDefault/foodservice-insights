@@ -1,6 +1,6 @@
+export { DB_NOW, dbMsAgo, dbMsFromNow } from '../clock.ts';
 export { requireLocalConnectionString } from '../connection-string.ts';
-export type { Breakable } from './breakable.ts';
-export { breakableDatabase, withBreakable } from './breakable.ts';
+export { breakableDatabase } from './breakable.ts';
 export type {
   BlockedStatement,
   ConcurrentTransaction,
@@ -18,9 +18,6 @@ export { aDatabaseError, anUnreachableDatabaseError, divideByZero } from './erro
 export type { ReportWithAttemptOverrides } from './fixtures/index.ts';
 export {
   aChecksum,
-  DB_NOW,
-  dbMsAgo,
-  dbMsFromNow,
   findOrInsertAppUser,
   insertAnalysisAttempt,
   insertAnalysisAttemptFinding,

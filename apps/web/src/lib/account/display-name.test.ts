@@ -1,15 +1,11 @@
-import { MAX_DISPLAY_NAME_LENGTH as DB_MAX_DISPLAY_NAME_LENGTH } from '@gbd/db';
+import { MAX_DISPLAY_NAME_LENGTH } from '@gbd/db/constraints';
 import * as v from 'valibot';
 import { describe, expect, test } from 'vitest';
-import { DisplayNameSchema, MAX_DISPLAY_NAME_LENGTH } from './display-name.ts';
+import { DisplayNameSchema } from './display-name.ts';
 
 function parse(name: unknown) {
   return v.safeParse(DisplayNameSchema, name);
 }
-
-test('MAX_DISPLAY_NAME_LENGTH mirrors @gbd/db, since this file cannot import it directly', () => {
-  expect(MAX_DISPLAY_NAME_LENGTH).toBe(DB_MAX_DISPLAY_NAME_LENGTH);
-});
 
 describe('DisplayNameSchema', () => {
   test('trims it', () => {

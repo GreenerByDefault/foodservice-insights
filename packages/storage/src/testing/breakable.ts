@@ -6,13 +6,10 @@
  */
 
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
-import { LOCALHOST, UNREACHABLE_PORT } from '@gbd/core/testing';
-import type { Breakable } from '@gbd/db/testing';
+import { type Breakable, LOCALHOST, UNREACHABLE_PORT } from '@gbd/core/testing';
 import type { HttpRequest } from '@smithy/types';
 import type { BlobStore } from '../client.ts';
 import { initializeBlobStore, shutdownBlobStore } from '../client.ts';
-
-export type { Breakable } from '@gbd/db/testing';
 
 const NOTHING_LISTENS_HERE = { hostname: LOCALHOST, port: UNREACHABLE_PORT };
 

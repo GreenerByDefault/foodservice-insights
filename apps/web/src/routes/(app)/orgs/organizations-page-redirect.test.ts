@@ -1,8 +1,8 @@
 import { insertOrganization, insertOrganizationInvite, withRollback } from '@gbd/db/testing';
+import { aTestEmailAddress } from '@gbd/email/testing';
 import { describe, expect, test } from 'vitest';
 import { database } from '#lib/server/db.js';
 import { anAuthContext, anOrganizationAccess } from '#lib/server/testing/auth.js';
-import { anEmail } from '#lib/server/testing/email.js';
 import { _organizationsPageRedirect } from './+page.server.ts';
 
 const IN_A_WEEK = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -11,7 +11,7 @@ const A_WEEK_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 describe('_organizationsPageRedirect', () => {
   test('a waiting invite comes before anything else, even for an existing member', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('organizations-page-redirect');
       const { organization } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
@@ -29,7 +29,7 @@ describe('_organizationsPageRedirect', () => {
 
   test('a member is not sent to an invite past its deadline, however its status still reads', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('organizations-page-redirect');
       const { organization } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
@@ -47,7 +47,7 @@ describe('_organizationsPageRedirect', () => {
 
   test('a live invite forwards a member who also holds an expired one', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('organizations-page-redirect');
       const { organization: first } = await insertOrganization(transaction);
       const { organization: second } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
@@ -71,7 +71,7 @@ describe('_organizationsPageRedirect', () => {
 
   test('somebody who belongs nowhere is shown an invite past its deadline instead of creating an organization', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('organizations-page-redirect');
       const { organization } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
@@ -86,7 +86,7 @@ describe('_organizationsPageRedirect', () => {
 
   test('a dismissed expired invite no longer stops somebody creating an organization', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('organizations-page-redirect');
       const { organization } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
@@ -102,7 +102,7 @@ describe('_organizationsPageRedirect', () => {
 
   test('an accepted invite is ignored even though it has not expired', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('organizations-page-redirect');
       const { organization } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
@@ -121,7 +121,7 @@ describe('_organizationsPageRedirect', () => {
 
   test('a waiting invite is found regardless of the case the sign-in email arrives in', async () => {
     await withRollback(database(), async (transaction) => {
-      const email = anEmail();
+      const email = aTestEmailAddress('organizations-page-redirect');
       const { organization } = await insertOrganization(transaction);
       await insertOrganizationInvite(transaction, {
         organizationId: organization.id,
@@ -136,7 +136,9 @@ describe('_organizationsPageRedirect', () => {
 
   test('somebody who can reach nowhere is sent to create an organization', async () => {
     await withRollback(database(), async (transaction) => {
-      const auth = anAuthContext({ user: { email: anEmail() } });
+      const auth = anAuthContext({
+        user: { email: aTestEmailAddress('organizations-page-redirect') },
+      });
 
       await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe('/orgs/new');
     });
@@ -144,7 +146,9 @@ describe('_organizationsPageRedirect', () => {
 
   test('a superadmin with no memberships stays on the picker instead, since they may act everywhere', async () => {
     await withRollback(database(), async (transaction) => {
-      const auth = anAuthContext({ user: { email: anEmail(), isSuperadmin: true } });
+      const auth = anAuthContext({
+        user: { email: aTestEmailAddress('organizations-page-redirect'), isSuperadmin: true },
+      });
 
       await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBeNull();
     });
@@ -153,7 +157,10 @@ describe('_organizationsPageRedirect', () => {
   test('one organization skips the picker', async () => {
     await withRollback(database(), async (transaction) => {
       const access = anOrganizationAccess('Acme Foods');
-      const auth = anAuthContext({ user: { email: anEmail() }, memberships: [access] });
+      const auth = anAuthContext({
+        user: { email: aTestEmailAddress('organizations-page-redirect') },
+        memberships: [access],
+      });
 
       await expect(_organizationsPageRedirect(transaction, auth)).resolves.toBe(
         `/orgs/${access.organizationSlug}`,
@@ -164,7 +171,7 @@ describe('_organizationsPageRedirect', () => {
   test('several organizations means staying on the picker', async () => {
     await withRollback(database(), async (transaction) => {
       const auth = anAuthContext({
-        user: { email: anEmail() },
+        user: { email: aTestEmailAddress('organizations-page-redirect') },
         memberships: [anOrganizationAccess('Acme Foods'), anOrganizationAccess('Zenith Dining')],
       });
 

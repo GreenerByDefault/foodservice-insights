@@ -10,6 +10,7 @@ export {
   initializeDatabase,
   shutdownDatabase,
 } from './client.ts';
+export { dbMsAgo, dbMsFromNow } from './clock.ts';
 export {
   INVISIBLE_KEY_CHARACTER,
   MAX_ANALYSIS_ATTEMPTS,

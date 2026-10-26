@@ -1,16 +1,11 @@
-export { bucketExists, ensureBucket } from './buckets.ts';
+export { bucketExists } from './buckets.ts';
 export {
   type BlobStore,
   type BlobStoreConfig,
   initializeBlobStore,
   shutdownBlobStore,
 } from './client.ts';
-export {
-  BlobStoreError,
-  isBlobStoreError,
-  isBucketAlreadyExistsError,
-  isNotFoundError,
-} from './errors.ts';
+export { BlobStoreError, isBlobStoreError } from './errors.ts';
 export {
   type InputFileVariants,
   putInputFile,
@@ -23,10 +18,8 @@ export { organizationPrefix, RESULT_FILE_FORMATS } from './keys.ts';
 export {
   deletePrefix,
   getObject,
-  headObject,
   listObjectKeys,
   type ObjectBody,
-  type ObjectMetadata,
   objectExists,
   type PagingOptions,
   type PutObjectOptions,

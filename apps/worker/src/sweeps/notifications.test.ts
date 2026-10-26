@@ -10,6 +10,7 @@ import {
   type AnalysisAttemptId,
   type AnalysisFailureReason,
   type Database,
+  dbMsAgo,
   newResultFileId,
   type ReportId,
   type UserId,
@@ -34,7 +35,6 @@ import {
 import type { Transaction } from 'kysely';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { WORKER_DATABASE } from '../db.ts';
-import { msAgo } from '../sql.ts';
 import { aWorkerId } from '../testing/attempt-helpers.ts';
 import {
   emailForNotifiableAttempt,
@@ -104,7 +104,7 @@ async function markClaimed(
     .updateTable('analysisAttempt')
     .set({
       notificationAttempts: attempts,
-      notificationClaimedAt: msAgo(claimedAgoMs),
+      notificationClaimedAt: dbMsAgo(claimedAgoMs),
       notificationClaimedByWorkerId: aWorkerId(),
     })
     .where('id', '=', attemptId)
@@ -474,7 +474,7 @@ describe('sendPendingNotifications', () => {
           .updateTable('analysisAttempt')
           .set({
             notificationEmailSentAt: null,
-            notificationClaimedAt: msAgo(RETRY_BASE_MS + 60_000),
+            notificationClaimedAt: dbMsAgo(RETRY_BASE_MS + 60_000),
           })
           .where('id', '=', attemptId)
           .execute();
