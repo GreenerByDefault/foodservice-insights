@@ -10,14 +10,10 @@ steps; each credential's section below says where to mint it and anything that d
    → `production`: edit the secret, paste the new value, and save.
 3. Redeploy both apps, since each reads its secrets only when it is deployed. The web app
    redeploys on the next push to `main`; to redeploy it sooner, re-run the latest Deploy run,
-   which works only while `main` is still at that run's commit. The worker redeploys only when you
-   dispatch [Deploy](https://github.com/GreenerByDefault/foodservice-insights/actions/workflows/deploy.yml)
-   from Actions. A secret that only CI uses needs no redeploy; its section says how to check it
+   which works only while `main` is still at that run's commit. Then
+   [deploy the worker](deploy-the-worker.md). A secret that only CI uses needs no redeploy; its section says how to check it
    instead.
 4. Only then delete the old value at the vendor.
-
-Warning: rolling back a deployment in DigitalOcean also restores that deployment's env, which
-undoes any rotation since.
 
 ## The DigitalOcean deploy token
 
@@ -38,5 +34,4 @@ To mint it:
 4. Click **Generate Token** and copy it. DigitalOcean shows it only once.
 
 Then continue from shared step 2. At step 3, instead of redeploying, check the token by
-dispatching Deploy on `main` at a quiet time, since that restarts the worker. If the worker job
-passes, the token works.
+[deploying the worker](deploy-the-worker.md). If the run passes, the token works.

@@ -25,6 +25,7 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 - [Write to the database by hand](write-to-the-database-by-hand.md), past the write guard.
 - [Review cache suggestions](review-cache-suggestions.md) in Supabase Studio.
 - [Rotate a secret](rotate-a-secret.md) in the `production` Environment.
+- [Deploy the worker](deploy-the-worker.md), the one deploy done by hand.
 
 ## Writing one
 

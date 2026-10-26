@@ -14,9 +14,6 @@ worker deploys only on demand (`docs/architecture.md` § Worker deploys only on 
   *Rejected: committing DigitalOcean's encrypted `EV[…]` values,* which would give runtime
   secrets a second home, in a public repo.
 - **To rotate a secret**, follow [`docs/runbooks/rotate-a-secret.md`](../docs/runbooks/rotate-a-secret.md).
-- **To roll back**, use the app's dashboard. A rollback restores that deployment's env too, so it
-  undoes any secret rotated since. If the next deploy is refused because the rollback pinned the
-  app, commit or revert the rollback in the dashboard.
 - **The region is the one nearest the Supabase project**, in AWS `us-east-1`: every request,
   claim, and lease renewal is a round trip to the database.
 - **`EMAIL_TRANSPORT=provider`** is a stub that drops every send as if it went out, until

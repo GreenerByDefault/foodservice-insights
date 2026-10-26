@@ -11,8 +11,9 @@ on the procedures whose traps the internet does not know, not to document everyt
 (§ Where things are), the index (§ The runbooks) and the conventions (§ Writing one), and
 [`.claude/rules/runbooks.md`](../rules/runbooks.md) loads on the folder. Three runbooks are in:
 `write-to-the-database-by-hand.md`, whose title and GitHub URL the write guard's hint names
-(`019_write_guard_hint_links_runbook.ts`), so moving it needs a migration; `review-cache-suggestions.md`; and `rotate-a-secret.md`, which
-holds the steps every rotation shares and one section, the DigitalOcean token. The root README
+(`019_write_guard_hint_links_runbook.ts`), so moving it needs a migration; `review-cache-suggestions.md`;
+`deploy-the-worker.md`; and `rotate-a-secret.md`, which holds the steps every rotation
+shares (its step 3 and the DigitalOcean check link the worker runbook) and one section, the DigitalOcean token. The root README
 links the folder from § Documentation and from § Signing in for real; architecture and
 `.do/README.md` link the files. Each PR below adds its file's line to the README's § The runbooks.
 
@@ -20,8 +21,9 @@ links the folder from § Documentation and from § Signing in for real; architec
 single directory contains (`architecture.md`, `requirements.md`, `typescript.md`), so
 `docs/runbooks/` fits it, and `scripts/ci/check_doc_links.py` checks every link and `§` citation
 these PRs add. The folder is in the README map's "Run it in production" table. The lines it left
-for this plan: the secrets **Open** in `docs/architecture.md` § Secrets management (PR 2 here
-resolves it), and the account recovery **Open** in `docs/requirements.md` (PR 3 here resolves it).
+for this plan: the secrets **Open** in `docs/architecture.md` § Secrets management (PR 1 here
+resolves it), and the account recovery **Open** in `docs/requirements.md` § Account recovery (PR 2
+here resolves it).
 
 Facts from the tree (2026-10-20) that shape the design:
 
@@ -32,8 +34,8 @@ Facts from the tree (2026-10-20) that shape the design:
   the S3 key pair, and two role passwords set by hand), Grafana Cloud, Better Stack, OpenAI, and
   Postmark once it lands. Web deploys on every push to `main` and migrates first; the worker
   deploys only by `workflow_dispatch`. A re-run of an old `deploy-web` run skips itself once `main`
-  has moved on. Rollback is from the DigitalOcean dashboard and restores that deployment's env,
-  undoing any rotation since (`.do/README.md:17-19`).
+  has moved on. Bad deploys are reverted, never rolled back (architecture § Bad deploys are fixed
+  forward).
 - **No vendor console URL appears anywhere in the tree.** `apps/grafana/gcx-cloud.yaml:4` keeps
   the Grafana stack hostname out "of the repo, which is public", and `alerts.md` keeps alert
   addresses in an Environment variable for the same reason.
@@ -51,8 +53,8 @@ Facts from the tree (2026-10-20) that shape the design:
 - **`audit_actor_kind` has a `gbd_manual` value nothing writes** (`public-schema.sql:77-82`;
   `audit.ts` writes only `'user'`). The draft's by-hand example promotes a superadmin with no
   audit row.
-- **Open items this plan closes:** `docs/architecture.md:512` (no rotation process for suspected
-  leaks); `docs/requirements.md:248-251` (account recovery "TBD").
+- **Open items this plan closes:** `docs/architecture.md` § Secrets management (no process for
+  a suspected leak); `docs/requirements.md` § Account recovery ("TBD").
 
 ## Decisions
 
@@ -108,7 +110,7 @@ avoids so that an agent stops (`012_write_guard.ts`, the comment above `require_
 
 `rotate-a-secret.md` opens with the steps every rotation shares (mint, leaving the old one
 working; paste it into the Environment in GitHub's settings; redeploy *both* apps, or for a secret
-only CI uses, check it instead; only then delete the old value; a rollback restores the old one).
+only CI uses, check it instead; only then delete the old value).
 Each credential then gets only what differs from those steps:
 
 - **A table row** where the shared steps fit unchanged: *secret*, *minted at*, *then* (what else
@@ -142,11 +144,10 @@ Each credential then gets only what differs from those steps:
 | --- | --- |
 | `README.md` | The index, the vendor table, the conventions |
 | `deploy-the-worker.md` | The one deploy that is by hand, and when it is due |
-| `roll-back-a-deploy.md` | Env restored, app pinned, worker must not run ahead; a failed deploy's two lines |
 | `write-to-the-database-by-hand.md` | Named by the guard's error hint |
 | `review-cache-suggestions.md` | The three UI steps; the rules stay in `002_caches.ts`, `product-categorization.ts` and the guard |
 | `rotate-a-secret.md` | Every credential, where it is minted, what else moves |
-| `a-credential-leaked.md` | Closes `docs/architecture.md:510` |
+| `a-credential-leaked.md` | Closes the **Open** in `docs/architecture.md` § Secrets management |
 | `offboard-a-person.md` | Crosses every vendor team and two rotations |
 | `restore-the-database.md` | Two sentences the vendor's docs cannot say |
 | `change-a-users-email.md` | Resolves the REQUIREMENTS TBD; why the dashboard and not SQL |
@@ -166,31 +167,10 @@ Each credential then gets only what differs from those steps:
 `gbd_manual` exists for this. The by-hand example gains one `INSERT INTO audit_event` in the
 same marked transaction, `actor_kind = 'gbd_manual'`, with the columns `audit.ts` fills, so the
 example doubles as the template for any manual write. The email-change runbook says to record
-one the same way. **Open, for Eric:** if that is more ceremony than the trail is worth, PR 3
+one the same way. **Open, for Eric:** if that is more ceremony than the trail is worth, PR 2
 instead adds a migration dropping the enum value.
 
-## PR 1 — Deploying
-
-- **`deploy-the-worker.md`.** Actions → Deploy → Run workflow, "Use workflow from" `main`; the
-  run prints the commits since the last worker deploy and refuses anything else by itself. When:
-  after a change under `apps/worker`, `python/`, `contract/` or `packages/` lands, and after
-  rotating a secret the worker holds. In-flight attempts get the drain grace (architecture
-  § Worker deploys only on demand); the user retries one that ran out. Check: the new worker's
-  `Worker started` log line carries `workerGitSha`. `rotate-a-secret.md`'s step 3 then links it
-  in place of "dispatch Deploy from Actions".
-- **`roll-back-a-deploy.md`.** The policy, one line: revert the PR (architecture § Bad deploys
-  are fixed forward). A failed deploy needs no rollback: read the failed step, whose comment in
-  `deploy.yml` says what it means and whether to re-run; a failed migrate applied nothing, and a
-  failed deploy left the old app running on a schema the migration rules allow. When an outage
-  cannot wait: the app's page → Deployments → roll back to the previous one. Then the three lines
-  from `.do/README.md:17-19`, which becomes a pointer, as does `rotate-a-secret.md`'s rollback
-  line: it restores that deployment's env and so
-  undoes any secret rotated since; a rollback pins the app, so commit or revert it in the
-  dashboard before the next deploy; land the revert before the next worker deploy, which would
-  otherwise run ahead of the web.
-- `/plan-advance` removes this section.
-
-## PR 2 — Secrets and people
+## PR 1 — Secrets and people
 
 - **`rotate-a-secret.md`** gains its table and remaining sections, per Decisions § Every
   credential, one file, one shape:
@@ -231,7 +211,7 @@ instead adds a migration dropping the enum value.
   reverse, plus the README.
 - `/plan-advance` removes this section.
 
-## PR 3 — Recovery, and the audit line
+## PR 2 — Recovery, and the audit line
 
 - **`restore-the-database.md`.** Supabase's docs for the click path, linked. The two sentences
   they cannot say: a migration that landed after the backup is unapplied while the deployed code
@@ -261,10 +241,10 @@ Docs only, so the gates pass trivially. Per PR, by hand:
 - **The guard's hint still matches.** `git grep -n 'Write to the database by hand'` shows the
   file's title, the hint in `019_write_guard_hint_links_runbook.ts`, `public-schema.sql` and
   `write-guard.test.ts`, all spelled the same, and the hint's URL still opens the file.
-- **PR 2:** each vendor page named was opened while writing; any that could not be checked is
+- **PR 1:** each vendor page named was opened while writing; any that could not be checked is
   marked **Open** in the entry. The DigitalOcean no-expiry option and token ownership are
   confirmed in its UI, and `rotate-a-secret.md`'s token section is corrected if either is wrong.
-- **PR 3:** on the dev stack with `PUBLIC_AUTH_MODE=supabase`, sign in as one address, change it
+- **PR 2:** on the dev stack with `PUBLIC_AUTH_MODE=supabase`, sign in as one address, change it
   in Studio's Auth → Users, sign in with the new address: same `app_user.id`, same reports. Run
   the by-hand example as written: the `audit_event` row appears with `actor_kind = 'gbd_manual'`,
   and the same statements without `set local` are refused.
