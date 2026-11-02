@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.14"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -530,7 +530,7 @@ requires-dist = [
     { name = "google-genai", specifier = ">=1.62,<2" },
     { name = "ipython", specifier = ">=8,<10" },
     { name = "levenshtein", specifier = ">=0.27,<1" },
-    { name = "llmwhisperer-client", specifier = ">=2.4,<3" },
+    { name = "llmwhisperer-client", specifier = ">=2.10.0,<3" },
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "numpy", specifier = ">=2.5.4,<3" },
     { name = "openai", specifier = ">=2.15,<3" },
@@ -918,7 +918,7 @@ wheels = [
 
 [[package]]
 name = "llmwhisperer-client"
-version = "2.9.1"
+version = "2.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
@@ -926,9 +926,9 @@ dependencies = [
     { name = "requests" },
     { name = "tenacity" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/62/8e/87d568d5ddf2c6494c11bedc7844e9ed150e90afe228f77867705bfd3d38/llmwhisperer_client-2.9.1.tar.gz", hash = "sha256:74dbced5a1a481ca5192c3d817a9f9e12bad4d9c3aaac64751ffb0e9b6182f35", size = 3319616, upload-time = "2026-09-18T10:56:06.901Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/60/b4ba32f16363b3dfa6e37716db0d0e52efac41bebce1043a0ff690c65e0c/llmwhisperer_client-2.10.0.tar.gz", hash = "sha256:7b4f7921dcba8a51cd4315cfae425aeb14bd24a1935df5f27a406a86be3d4765", size = 3320161, upload-time = "2026-10-27T06:15:26.764Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/aa/41/2f221e4ac210dd8a9307849cf0ac35ff87cdd8b344594524d15a52c8f115/llmwhisperer_client-2.9.1-py3-none-any.whl", hash = "sha256:9e9ad402f16562da4dad9d406e06e6c42c077bf8846670040f40e8605c5c82e4", size = 69186, upload-time = "2026-09-18T10:56:05.114Z" },
+    { url = "https://files.pythonhosted.org/packages/61/3d/cbb4cff42412117393c2b49c06f4bd4857322ac3310fe7d7ebf4893b54f2/llmwhisperer_client-2.10.0-py3-none-any.whl", hash = "sha256:e60e4877f021197dbb1b87624876cc607e99eedc8239c9ec563fafc645b66407", size = 69471, upload-time = "2026-10-27T06:15:25.636Z" },
 ]
 
 [[package]]
