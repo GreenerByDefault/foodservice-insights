@@ -9,7 +9,7 @@ members = ["python/*"]
 [dependency-groups]
 dev = [
     "nbstripout>=0.8.1",
-    "pytest>=9.1.1",
+    "pytest>=9.2.0",
     "pytest-xdist>=3.8",
     "ruff>=0.17.1",
     "ty>=0.0.89",
