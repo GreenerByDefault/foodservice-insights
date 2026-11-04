@@ -14,7 +14,7 @@ allowBuilds:
 catalog:
   # --- Shared toolchain --------------------------------------------------
   typescript: ^6.0.3
-  '@types/node': ^24.10.0
+  '@types/node': ^26.6.5
   '@biomejs/biome': 2.5.15
 
   # --- Svelte ------------------------------------------------------------
