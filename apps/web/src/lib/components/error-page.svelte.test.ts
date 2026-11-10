@@ -86,7 +86,7 @@ describe('ErrorPage', () => {
 
     await expect
       .element(screen.getByRole('heading', { level: 1 }))
-      .toHaveTextContent('Welcome to Foodservice Insights');
+      .toHaveTextContent('Welcome to PLATE');
     expect(screen.getByText("You don't have access").elements()).toHaveLength(0);
     await screen.getByLabelText('Your name').fill('Ada Lovelace');
     await screen.getByRole('button', { name: 'Continue' }).click();

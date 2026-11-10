@@ -39,9 +39,7 @@ test.describe('signed out', () => {
     await page.getByRole('button', { name: 'Send code' }).click();
     await page.getByLabel('Sign-in code').fill(await waitForSignInCode(person.signInEmail));
 
-    await expect(
-      page.getByRole('heading', { name: 'Welcome to Foodservice Insights' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Welcome to PLATE' })).toBeVisible();
     await expect(page.getByLabel('Your name')).toBeEmpty();
     await page.getByLabel('Your name').fill('Alex Baker');
     await page.getByRole('button', { name: 'Continue' }).click();

@@ -10,7 +10,7 @@ const TOKEN = 'server-token';
 
 const EMAIL: RenderedEmail = {
   kind: 'analysis-succeeded',
-  from: { address: 'insights@example.test', name: 'Foodservice Insights' },
+  from: { address: 'insights@example.test', name: 'PLATE' },
   to: 'user@example.test',
   subject: 'Your report is ready',
   text: 'text',
@@ -94,7 +94,7 @@ describe('postmarkTransport', () => {
           'x-postmark-server-token': TOKEN,
         }),
         body: {
-          From: '"Foodservice Insights" <insights@example.test>',
+          From: '"PLATE" <insights@example.test>',
           To: 'user@example.test',
           Subject: 'Your report is ready',
           TextBody: 'text',

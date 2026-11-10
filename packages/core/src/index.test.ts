@@ -3,7 +3,7 @@ import { APP_NAME, assertNever, exhaustiveArray } from './index.ts';
 
 describe('APP_NAME', () => {
   it('is the product name', () => {
-    expect(APP_NAME).toBe('Foodservice Insights');
+    expect(APP_NAME).toBe('PLATE');
   });
 });
 

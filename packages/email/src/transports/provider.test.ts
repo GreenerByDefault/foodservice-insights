@@ -6,7 +6,7 @@ describe('providerTransport', () => {
     await expect(
       providerTransport().send({
         kind: 'gbd-user-deleted',
-        from: { address: 'noreply@example.test', name: 'Foodservice Insights' },
+        from: { address: 'noreply@example.test', name: 'PLATE' },
         to: 'gbd@example.test',
         subject: 'User deleted',
         text: 'text',
