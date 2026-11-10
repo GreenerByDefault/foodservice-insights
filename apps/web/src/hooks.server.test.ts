@@ -158,6 +158,18 @@ describe('handle', () => {
     },
   );
 
+  test("serves a link preview signed out, even holding the sender's session cookie", async () => {
+    const request = new Request('http://localhost/orgs/acme', {
+      headers: { 'user-agent': 'facebookexternalhit/1.1 Facebot Twitterbot/1.0' },
+    });
+    const event = { ...anEvent('/orgs/acme'), request };
+
+    await handle({ event, resolve: respond });
+
+    expect(event.locals.auth).toBeNull();
+    expect(identify.identifyUser).not.toHaveBeenCalled();
+  });
+
   test('identifies no one sending a violation report', async () => {
     const event = anEvent('/csp-report');
 
