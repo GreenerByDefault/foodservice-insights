@@ -83,8 +83,7 @@ Both made in the UI and named in `docs/architecture.md` § Alerts, so they are n
 *Rejected: Better Stack's Terraform provider.* That is state to keep for a few settings made once.
 
 - **One monitor on the public `/health/ready`**, through the same DNS and edge a user goes
-  through. It watches the starter domain until [`custom-domain.md`](custom-domain.md) moves users
-  to our domain, and then moves with them. Three minutes is slow for a page, but the host's
+  through, at `plate.greenerbydefault.org`. Three minutes is slow for a page, but the host's
   readiness probe and the data rules see most outages sooner. *Considered, not done: paying for
   30-second checks.* Buy them if an outage is ever reported to us before the monitor fires.
 - **An alert on any `error` or `fatal` line** from either app. These are already kept for things a
@@ -98,7 +97,7 @@ Both made in the UI and named in `docs/architecture.md` § Alerts, so they are n
   queue wait once there is demand, and a crash loop as `RESTART_COUNT`. Add one if that
   quiet-hour notice is ever missed.
 - *Considered, not done: a scheduled check that submits a form.* A wrong `PROTOCOL_HEADER` fails
-  every mutating request while every GET passes. But `custom-domain.md` checks that by hand, and
+  every mutating request while every GET passes. But a person checks that by hand, and
   it changes only with configuration. A mutating request every few minutes in production would
   also write rows into the very metrics the data rules count.
 - *Rejected: an error tracker (Sentry, or Better Stack's own).* It means an SDK in both processes,

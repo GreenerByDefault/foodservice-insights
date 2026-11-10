@@ -27,9 +27,7 @@ Mailpit.
 The goal: every message, ours and Supabase's, comes from `insights@greenerbydefault.org`, a real
 Google Workspace mailbox that people read and reply from. It is .org rather than .com because
 .org is where GBD's mail already is; the website domain, greenerbydefault.com, has neither DKIM
-nor DMARC. The app itself is at `insights.greenerbydefault.com`
-([`custom-domain.md`](custom-domain.md)), so the mail records and the site's CNAME live in
-different zones and never meet.
+nor DMARC. The app itself is at `plate.greenerbydefault.org`.
 
 That address lives on GBD's existing mail domain, whose setup this plan must not disturb:
 
@@ -210,7 +208,6 @@ this file stays the source of truth for the records.
 
    Squarespace appends the domain to each host, so enter the host without `.greenerbydefault.org`.
    Change nothing else: MX, SPF, DMARC, and the Google and HubSpot DKIM records stay as they are.
-   [`custom-domain.md`](custom-domain.md)'s CNAME goes on greenerbydefault.com in the same sitting.
 5. **Confirm, then verify (Eric).** `dig +short TXT <host>.greenerbydefault.org` should return
    Postmark's value, and `dig +short CNAME pm-bounces.greenerbydefault.org` should return
    `pm.mtasv.net.`. Then press Verify on both records in Postmark.

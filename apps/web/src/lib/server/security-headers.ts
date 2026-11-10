@@ -8,9 +8,9 @@ const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  // Browsers ignore it over `http:`, so dev and e2e are unaffected. No `includeSubDomains` or
-  // `preload` until the domain is known.
-  'Strict-Transport-Security': 'max-age=31536000',
+  // Browsers ignore it over `http:`, so dev and e2e are unaffected. No `preload`: getting off the
+  // list takes months, and a rename is still conceivable.
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
