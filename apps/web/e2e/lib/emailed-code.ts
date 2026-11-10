@@ -8,7 +8,7 @@ const MAILBOX_POLL_INTERVAL_MS = 50;
  * would otherwise do. */
 const LEAD_IN = {
   'sign-in': /Enter this code to sign in[^:]*:\s*(\d+)/,
-  'email-change': /Enter this code to change your Foodservice Insights email[^:]*:\s*(\d+)/,
+  'email-change': /Enter this code to change your PLATE email[^:]*:\s*(\d+)/,
 } as const;
 
 /** The code in the newest sign-in email sent to `address`, waiting for one to arrive. Other mail

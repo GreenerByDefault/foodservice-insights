@@ -15,7 +15,7 @@ describe('renderOrganizationInvite', () => {
       expiresAt: new Date('2026-09-01T12:00:00Z'),
     });
 
-    expect(document.heading).toBe('Join Ridgeview Schools on Foodservice Insights');
+    expect(document.heading).toBe('Join Ridgeview Schools on PLATE');
     expect(document.blocks).toEqual([
       {
         block: 'paragraph',

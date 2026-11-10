@@ -1,5 +1,5 @@
 /** The product name, as shown to users. */
-export const APP_NAME = 'Foodservice Insights';
+export const APP_NAME = 'PLATE';
 
 export * from './local-host.ts';
 export * from './time.ts';

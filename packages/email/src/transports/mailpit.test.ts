@@ -12,7 +12,7 @@ import { mailpitTransport } from './mailpit.ts';
 
 loadLocalEnv();
 
-const FROM = { address: 'noreply@example.test', name: 'Foodservice Insights' };
+const FROM = { address: 'noreply@example.test', name: 'PLATE' };
 
 function emailerForTests(overrides: { gbdAddress?: string } = {}) {
   return initializeEmailer({

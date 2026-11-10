@@ -44,11 +44,11 @@ double_confirm_changes = false
 
 # The dev stack's templates; see its config.toml before adding one.
 [auth.email.template.magic_link]
-subject = "Your Foodservice Insights sign-in code"
+subject = "Your PLATE sign-in code"
 content_path = "../supabase-dev/supabase/templates/sign-in-code.html"
 
 [auth.email.template.email_change]
-subject = "Confirm your new Foodservice Insights email"
+subject = "Confirm your new PLATE email"
 content_path = "../supabase-dev/supabase/templates/email-change.html"
 
 # Mailpit: catches outbound email so nothing escapes locally.

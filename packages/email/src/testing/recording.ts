@@ -20,7 +20,7 @@ export type RecordingEmailer = {
 };
 
 export const TEST_EMAILER_CONFIG = {
-  from: { address: `noreply@${RESERVED_TEST_DOMAIN}`, name: 'Foodservice Insights' },
+  from: { address: `noreply@${RESERVED_TEST_DOMAIN}`, name: 'PLATE' },
   siteUrl: `https://${RESERVED_TEST_DOMAIN}`,
   gbdAddress: `gbd@${RESERVED_TEST_DOMAIN}`,
   supportAddress: `support@${RESERVED_TEST_DOMAIN}`,

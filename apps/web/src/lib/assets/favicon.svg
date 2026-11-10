@@ -4,7 +4,7 @@
        rsvg-convert -w 180 -h 180 -b '#234162' src/lib/assets/favicon.svg -o static/apple-touch-icon.png
      The touch icon is filled to the edge because iOS rounds its corners itself. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <title>Foodservice Insights</title>
+  <title>PLATE</title>
   <rect width="32" height="32" rx="7" fill="#234162" />
   <path d="M8 24C8 14.6 14.6 8 24 8c0 9.4-6.6 16-16 16Z" fill="#1B9F8D" />
   <path d="M8 24 18 14" stroke="#234162" stroke-width="2" stroke-linecap="round" />

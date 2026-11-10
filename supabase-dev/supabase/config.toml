@@ -41,11 +41,11 @@ double_confirm_changes = false
 # A template added later is missing until Kong restarts, and GoTrue silently falls back to its
 # link email: `docker restart supabase_kong_fsi-dev supabase_kong_fsi-test`.
 [auth.email.template.magic_link]
-subject = "Your Foodservice Insights sign-in code"
+subject = "Your PLATE sign-in code"
 content_path = "./supabase/templates/sign-in-code.html"
 
 [auth.email.template.email_change]
-subject = "Confirm your new Foodservice Insights email"
+subject = "Confirm your new PLATE email"
 content_path = "./supabase/templates/email-change.html"
 
 # Mailpit: catches outbound email so nothing escapes locally.

@@ -3,7 +3,7 @@ import { initializeEmailer } from './client.ts';
 
 const CONFIG = {
   transport: { name: 'noop', send: () => Promise.resolve() },
-  from: { address: 'noreply@example.test', name: 'Foodservice Insights' },
+  from: { address: 'noreply@example.test', name: 'PLATE' },
   siteUrl: 'https://example.test',
   gbdAddress: 'gbd@example.test',
   supportAddress: 'support@example.test',
