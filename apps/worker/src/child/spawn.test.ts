@@ -42,7 +42,7 @@ const PARENT_ENVIRONMENT: NodeJS.ProcessEnv = {
   HOME: '/home/analysis',
   LANG: 'en_US.UTF-8',
   TZ: 'UTC',
-  OPENAI_API_KEY: 'openai-key',
+  ANTHROPIC_API_KEY: 'anthropic-key',
   DB_CONNECTION_STRING: 'postgres://parent-only',
   S3_ENDPOINT: 'http://parent-only',
   S3_ACCESS_KEY_ID: 'parent-only',

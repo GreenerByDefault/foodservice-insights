@@ -36,12 +36,13 @@ directory, and find the repo root's `.env` by walking up from it.
 The kernel holds whatever lab code it imported, and step 1.5 runs step 2 in that kernel. After
 editing lab code, restart the kernel, or run `%load_ext autoreload` and `%autoreload 2` first.
 
-The lab reads three keys from `.env`: `OPENAI_API_KEY`, `GEMINI_API_KEY`, and
-`LLM_WHISPERER_API_KEY` (PDF extraction only). See [`.env.example`](../../.env.example).
+The lab reads four keys from `.env`: `ANTHROPIC_API_KEY` (categorization), `OPENAI_API_KEY`,
+`GEMINI_API_KEY`, and `LLM_WHISPERER_API_KEY` (PDF extraction only). See
+[`.env.example`](../../.env.example).
 
 The categorization and entree caches live in the database. To use them:
 
-1. Ask GBD for the `cache_client` connection string, and treat it like `OPENAI_API_KEY`. It can
+1. Ask GBD for the `cache_client` connection string, and treat it like an API key. It can
    only read the caches and suggest rows to them.
 2. Put it in `.env` as `CACHE_DB_CONNECTION_STRING`, in the form
    [`.env.example`](../../.env.example) shows: its `sslrootcert` is the absolute path to the

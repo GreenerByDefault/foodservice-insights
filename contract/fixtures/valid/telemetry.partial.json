@@ -2,8 +2,8 @@
   "llmUsage": [
     {
       "operation": "clean",
-      "requestedModel": "gpt-4.1-mini",
-      "servedModel": "gpt-4.1-mini-2025-04-14",
+      "requestedModel": "claude-sonnet-5-5",
+      "servedModel": "claude-sonnet-5-5",
       "calls": 97,
       "requests": 98,
       "failedRequests": 1,
@@ -12,7 +12,7 @@
       "inputTokens": 101850,
       "cachedInputTokens": 89600,
       "outputTokens": 776,
-      "costMicroUsd": 15102
+      "costMicroUsd": 41220
     }
   ],
   "input": {

@@ -8,7 +8,7 @@ const PYTHON_BIN = '/repo/.venv/bin/python';
 function resolve(settings: Partial<RawWorkerModeSettings> & Pick<RawWorkerModeSettings, 'mode'>) {
   return resolveWorkerMode({
     pythonBin: PYTHON_BIN,
-    openAiApiKey: 'sk-test',
+    anthropicApiKey: 'sk-ant-test',
     platformShutdownGraceMs: 600_000,
     cacheDbConnectionString: undefined,
     ...settings,
@@ -71,9 +71,9 @@ describe('resolveWorkerMode', () => {
   });
 
   describe('live', () => {
-    test.each(['', undefined])('refuses OPENAI_API_KEY=%j', (openAiApiKey) => {
-      expect(() => resolve({ mode: 'live', openAiApiKey })).toThrow(
-        'WORKER_MODE=live needs OPENAI_API_KEY.',
+    test.each(['', undefined])('refuses ANTHROPIC_API_KEY=%j', (anthropicApiKey) => {
+      expect(() => resolve({ mode: 'live', anthropicApiKey })).toThrow(
+        'WORKER_MODE=live needs ANTHROPIC_API_KEY.',
       );
     });
 
@@ -85,16 +85,16 @@ describe('resolveWorkerMode', () => {
 
     test('names every missing variable at once', () => {
       expect(() =>
-        resolve({ mode: 'live', openAiApiKey: undefined, platformShutdownGraceMs: undefined }),
-      ).toThrow('WORKER_MODE=live needs OPENAI_API_KEY and PLATFORM_SHUTDOWN_GRACE_MS.');
+        resolve({ mode: 'live', anthropicApiKey: undefined, platformShutdownGraceMs: undefined }),
+      ).toThrow('WORKER_MODE=live needs ANTHROPIC_API_KEY and PLATFORM_SHUTDOWN_GRACE_MS.');
     });
   });
 
   test.each(['stubbed', 'mock-llm'] as const)(
-    '%s needs neither OPENAI_API_KEY nor PLATFORM_SHUTDOWN_GRACE_MS',
+    '%s needs neither ANTHROPIC_API_KEY nor PLATFORM_SHUTDOWN_GRACE_MS',
     (mode) => {
       expect(
-        resolve({ mode, openAiApiKey: undefined, platformShutdownGraceMs: undefined }),
+        resolve({ mode, anthropicApiKey: undefined, platformShutdownGraceMs: undefined }),
       ).toEqual(resolve({ mode }));
     },
   );

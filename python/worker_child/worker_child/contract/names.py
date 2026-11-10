@@ -5,7 +5,7 @@ from typing import Final, Literal, get_args
 MODULE: Final = "worker_child"
 POSITIONAL_ARGUMENTS: Final = ("runDirectory",)
 WORKING_DIRECTORY: Final = "work"
-ENVIRONMENT_VARIABLES: Final = ("PATH", "HOME", "LANG", "TZ", "OPENAI_API_KEY")
+ENVIRONMENT_VARIABLES: Final = ("PATH", "HOME", "LANG", "TZ", "ANTHROPIC_API_KEY")
 
 # `MAX_CACHE_KEY_BYTES` in `@gbd/db`, the bound the cache tables' CHECKs enforce, in UTF-8.
 MAX_PRODUCT_BYTES: Final = 2000

@@ -228,7 +228,7 @@ jobs:
           DO_APP_ID: ${{ vars.DO_WORKER_APP_ID }}
           DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
           DB_SSL_CA: ${{ vars.DB_SSL_CA }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BETTER_STACK_TOKEN: ${{ secrets.BETTER_STACK_TOKEN }}
           POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
           S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}

@@ -60,7 +60,7 @@ def test_stub_analysis_reports_its_telemetry_even_when_it_raises(
 ) -> None:
     call = LlmCall(
         operation="clean",
-        requested_model="gpt-4.1-mini",
+        requested_model="claude-sonnet-5-5",
         served_model=None,
         requests=5,
         failed_requests=5,

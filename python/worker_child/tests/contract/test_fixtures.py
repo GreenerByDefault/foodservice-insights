@@ -363,8 +363,8 @@ def test_new_categorizations_payload_refuses_what_the_parent_would(
 
 CLEAN_USAGE = LlmUsage(
     operation="clean",
-    requested_model="gpt-4.1-mini",
-    served_model="gpt-4.1-mini-2025-04-14",
+    requested_model="claude-sonnet-5-5",
+    served_model="claude-sonnet-5-5",
     calls=412,
     requests=415,
     failed_requests=3,
@@ -376,8 +376,8 @@ CLEAN_USAGE = LlmUsage(
 )
 MATCH_USAGE = LlmUsage(
     operation="match",
-    requested_model="gpt-4.1-mini",
-    served_model="gpt-4.1-mini-2025-04-14",
+    requested_model="claude-sonnet-5-5",
+    served_model="claude-sonnet-5-5",
     calls=396,
     requests=396,
     failed_requests=0,
@@ -414,7 +414,10 @@ REPORT = ReportSummary(
 )
 FINISHED = TelemetryState(
     # Out of order, as threads may report them.
-    llm_usage={("match", "gpt-4.1-mini"): MATCH_USAGE, ("clean", "gpt-4.1-mini"): CLEAN_USAGE},
+    llm_usage={
+        ("match", "claude-sonnet-5-5"): MATCH_USAGE,
+        ("clean", "claude-sonnet-5-5"): CLEAN_USAGE,
+    },
     input=INPUT,
     categorization=CATEGORIZATION,
     report=REPORT,
@@ -431,7 +434,7 @@ def test_telemetry_payload_is_the_fixture() -> None:
 def test_telemetry_payload_of_a_run_killed_while_categorizing_is_the_fixture() -> None:
     state = TelemetryState(
         llm_usage={
-            ("clean", "gpt-4.1-mini"): replace(
+            ("clean", "claude-sonnet-5-5"): replace(
                 CLEAN_USAGE,
                 calls=97,
                 requests=98,
@@ -455,7 +458,9 @@ def test_telemetry_payload_of_a_run_killed_while_categorizing_is_the_fixture() -
 # `invalid/telemetry.*`. Unknown fields and enum spellings are the type checker's to catch on this
 # side, but a bool or a float where a count belongs gets past it.
 def _usage(**changes: object) -> TelemetryState:
-    return replace(FINISHED, llm_usage={("clean", "gpt-4.1-mini"): replace(CLEAN_USAGE, **changes)})
+    return replace(
+        FINISHED, llm_usage={("clean", "claude-sonnet-5-5"): replace(CLEAN_USAGE, **changes)}
+    )
 
 
 @pytest.mark.parametrize(

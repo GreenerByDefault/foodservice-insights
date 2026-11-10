@@ -3,7 +3,7 @@ import { parseEnv } from 'node:util';
 import { expect, test } from 'vitest';
 
 // Read by the lab, which runs through `just`, never Turbo.
-const LAB_ONLY = new Set(['GEMINI_API_KEY', 'LLM_WHISPERER_API_KEY']);
+const LAB_ONLY = new Set(['GEMINI_API_KEY', 'LLM_WHISPERER_API_KEY', 'OPENAI_API_KEY']);
 
 async function readRepoFile(path: string): Promise<string> {
   return readFile(new URL(`../../../${path}`, import.meta.url), 'utf8');

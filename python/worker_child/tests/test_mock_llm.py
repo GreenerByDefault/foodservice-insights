@@ -18,7 +18,7 @@ def test_main_with_no_arguments_is_a_usage_error(capsys: pytest.CaptureFixture[s
 def test_main_runs_a_real_analysis_with_no_api_key(
     run_directory: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     (run_directory / layout.INPUT_CSV).write_text(sample_input_csv(), encoding="utf-8")
 
     exit_code = main(["worker_child.mock_llm", str(run_directory)])
@@ -34,7 +34,7 @@ def test_main_runs_a_real_analysis_with_no_api_key(
 def test_main_records_every_summary_and_no_llm_usage(
     run_directory: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     (run_directory / layout.INPUT_CSV).write_text(sample_input_csv(), encoding="utf-8")
 
     main(["worker_child.mock_llm", str(run_directory)])

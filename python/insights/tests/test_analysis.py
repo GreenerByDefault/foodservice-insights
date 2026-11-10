@@ -527,7 +527,7 @@ def test_the_default_llm_reports_its_calls_as_telemetry(
         received.append(on_call)
         return KeywordLlmClient()
 
-    monkeypatch.setattr(analysis.OpenAiLlmClient, "from_env", from_env)
+    monkeypatch.setattr(analysis.AnthropicLlmClient, "from_env", from_env)
     request = a_request(tmp_path)
     request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 1.0)]))
     reported: list[Telemetry] = []
@@ -753,15 +753,15 @@ def test_data_whose_recognizable_products_weigh_nothing_is_unusable(tmp_path: Pa
 
 class UnreachableLlmClient:
     def clean_product_name(self, item: str) -> str:
-        raise UpstreamApiError("OpenAI failed 5 times")
+        raise UpstreamApiError("Claude failed 5 times")
 
     def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
-        raise UpstreamApiError("OpenAI failed 5 times")
+        raise UpstreamApiError("Claude failed 5 times")
 
 
 def test_an_upstream_failure_propagates(tmp_path: Path) -> None:
     request = a_request(tmp_path)
     request.input_csv.write_text(sample_input_csv(KEYWORD_PRODUCTS))
 
-    with pytest.raises(UpstreamApiError, match="OpenAI failed 5 times"):
+    with pytest.raises(UpstreamApiError, match="Claude failed 5 times"):
         analyze(request, llm=UnreachableLlmClient())
