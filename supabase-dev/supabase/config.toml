@@ -56,6 +56,16 @@ content_path = "./supabase/templates/sign-in-code.html"
 subject = "Confirm your new PLATE email"
 content_path = "./supabase/templates/email-change.html"
 
+# To the old address once a change goes through. With `double_confirm_changes` off, it is how an
+# owner learns that someone holding their session moved the account.
+#
+# Unlike a template's, a notification's `content_path` is relative to this file's directory, not
+# the stack's.
+[auth.email.notification.email_changed]
+enabled = true
+subject = "Your PLATE email was changed"
+content_path = "./templates/email-changed.html"
+
 # Mailpit: catches outbound email so nothing escapes locally.
 #
 # There's a web UI on `port`, which also serves the REST API

@@ -39,6 +39,12 @@ test('changing your email confirms the new address with a code', async ({ page, 
 
   await expect(page.getByText(`Changed your email to ${newEmail}`)).toBeVisible();
   expect(await readGoTrueEmail(user.id)).toBe(newEmail);
+
+  // Asserting our copy, since GoTrue falls back silently to its own when our template is missing.
+  const notice = await waitForEmail(user.email, { subject: 'Your PLATE email was changed' });
+  expect(notice.html).toContain(
+    `Your PLATE account's email changed from ${user.email} to ${newEmail}.`,
+  );
 });
 
 test.describe('deleting your account', () => {
