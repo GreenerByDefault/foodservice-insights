@@ -102,8 +102,22 @@ services:
       - key: PROTOCOL_HEADER
         value: x-forwarded-proto
 
+# A CNAME to the starter domain, in GBD's Squarespace DNS.
+domains:
+  - domain: plate.greenerbydefault.org
+    type: PRIMARY
+
 ingress:
   rules:
+    # Literal rather than App Platform's `${STARTER_DOMAIN}`, which our deploy would try to render.
+    - match:
+        authority:
+          exact: foodservice-insights-web-k4v6z.ondigitalocean.app
+        path:
+          prefix: /
+      redirect:
+        authority: plate.greenerbydefault.org
+        redirect_code: 301
     - component:
         name: foodservice-insights-web
       match:

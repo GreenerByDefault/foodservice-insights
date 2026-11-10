@@ -13,7 +13,7 @@ describe('applySecurityHeaders', () => {
       'x-frame-options': 'DENY',
       'x-content-type-options': 'nosniff',
       'referrer-policy': 'strict-origin-when-cross-origin',
-      'strict-transport-security': 'max-age=31536000',
+      'strict-transport-security': 'max-age=31536000; includeSubDomains',
       'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
       'cross-origin-opener-policy': 'same-origin',
       'cross-origin-resource-policy': 'same-origin',
