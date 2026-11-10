@@ -1,6 +1,10 @@
 /** The product name, as shown to users. */
 export const APP_NAME = 'PLATE';
 
+/** The name with its maker, wherever a reader may not know PLATE yet: who every email is from,
+ * its sign-off, and the public page's title (`pageTitle()`). */
+export const APP_FULL_NAME = `${APP_NAME} (Greener by Default)`;
+
 export * from './local-host.ts';
 export * from './time.ts';
 

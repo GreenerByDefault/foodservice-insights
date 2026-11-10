@@ -1,6 +1,6 @@
 /** One shape for every email's copy, rendered to both a plain-text and an HTML body. */
 
-import { APP_NAME, assertNever } from '@gbd/core';
+import { APP_FULL_NAME, assertNever } from '@gbd/core';
 import type { TrustedUrl } from './links.ts';
 
 export type Block =
@@ -47,7 +47,7 @@ function blockToText(block: Block): string {
 
 export function renderText(document: Document): string {
   const parts = document.blocks.map(blockToText);
-  return [document.heading, ...parts, `— ${APP_NAME}`].join('\n\n');
+  return [document.heading, ...parts, `— ${APP_FULL_NAME}`].join('\n\n');
 }
 
 // Styles are inline because email clients discard `<head>`.
@@ -97,7 +97,7 @@ export function renderHtml(document: Document): string {
     `<div style="${CARD_STYLE}">`,
     `<h1 style="margin:0 0 16px;font-size:20px;">${escapeHtml(document.heading)}</h1>`,
     ...blocks,
-    `<p style="margin:24px 0 0;color:#57534e;font-size:14px;">— ${escapeHtml(APP_NAME)}</p>`,
+    `<p style="margin:24px 0 0;color:#57534e;font-size:14px;">— ${escapeHtml(APP_FULL_NAME)}</p>`,
     '</div>',
     '</body>',
     '</html>',

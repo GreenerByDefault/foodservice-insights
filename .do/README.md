@@ -16,6 +16,3 @@ worker deploys only on demand (`docs/architecture.md` § Worker deploys only on 
 - **To rotate a secret**, follow [`docs/runbooks/rotate-a-secret.md`](../docs/runbooks/rotate-a-secret.md).
 - **The region is the one nearest the Supabase project**, in AWS `us-east-1`: every request,
   claim, and lease renewal is a round trip to the database.
-- **`EMAIL_TRANSPORT=provider`** is a stub that drops every send as if it went out, until
-  `.claude/plans/email-provider.md` wires up Postmark. `EMAIL_GBD_ADDRESS` is a stand-in until GBD
-  names one.

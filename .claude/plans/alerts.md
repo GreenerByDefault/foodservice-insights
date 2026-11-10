@@ -25,9 +25,8 @@ Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
     within the expected window;
   - email is broken: the two notification queries under the table, *gave up* and *stuck*;
   - the database runs out of connections: pools and timeouts only, with no alert;
-  - **Open** in that table: alerting on Supabase Auth's OTP email. It is not this plan's.
-    [`email-provider.md`](email-provider.md) § Not yet: bounce and complaint webhooks decides
-    there is no alert at launch, and names what would trigger building one.
+  - Supabase Auth's OTP email is not this plan's. The email row says it has no alert, and what
+    would trigger building one.
 - **The pipe that data alerts ride has landed.** Views in a `metrics` schema, read only by
   `metrics_reader`, are in `packages/db/migrations/009_metrics.ts`, with their tombstones in
   `011_metrics_tombstones.ts`. [`apps/grafana`](../../apps/grafana/README.md) holds dashboards as

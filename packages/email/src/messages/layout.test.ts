@@ -29,7 +29,7 @@ function expectedHtml(heading: string, blockHtml: string): string {
     `<div style="${CARD_STYLE}">`,
     `<h1 style="margin:0 0 16px;font-size:20px;">${heading}</h1>`,
     ...(blockHtml === '' ? [] : [blockHtml]),
-    '<p style="margin:24px 0 0;color:#57534e;font-size:14px;">— PLATE</p>',
+    '<p style="margin:24px 0 0;color:#57534e;font-size:14px;">— PLATE (Greener by Default)</p>',
     '</div>',
     '</body>',
     '</html>',
@@ -66,7 +66,7 @@ describe('renderText', () => {
         'Your report is ready',
         'Here is what changed.',
         'View your report: https://example.test/r/1',
-        '— PLATE',
+        '— PLATE (Greener by Default)',
       ].join('\n\n'),
     );
   });
@@ -79,7 +79,9 @@ describe('renderText', () => {
       ],
     };
     expect(renderText(document)).toBe(
-      ['Hi', 'View your report: https://example.test/r/1', '— PLATE'].join('\n\n'),
+      ['Hi', 'View your report: https://example.test/r/1', '— PLATE (Greener by Default)'].join(
+        '\n\n',
+      ),
     );
   });
 
@@ -100,7 +102,7 @@ describe('renderText', () => {
       [
         'Hi',
         'Download A: https://example.test/a\nDownload B: https://example.test/b',
-        '— PLATE',
+        '— PLATE (Greener by Default)',
       ].join('\n\n'),
     );
   });
@@ -119,18 +121,18 @@ describe('renderText', () => {
       ],
     };
     expect(renderText(document)).toBe(
-      ['Hi', 'Organization: Acme\nReport: Q1', '— PLATE'].join('\n\n'),
+      ['Hi', 'Organization: Acme\nReport: Q1', '— PLATE (Greener by Default)'].join('\n\n'),
     );
   });
 
   test('renders just the heading and signature when there are no blocks', () => {
     const document: Document = { heading: 'Hi', blocks: [] };
-    expect(renderText(document)).toBe(['Hi', '— PLATE'].join('\n\n'));
+    expect(renderText(document)).toBe(['Hi', '— PLATE (Greener by Default)'].join('\n\n'));
   });
 
   test('leaves user text alone, since a plain-text body has no markup to escape', () => {
     const document: Document = { heading: 'Hi', blocks: [{ block: 'paragraph', text: HOSTILE }] };
-    expect(renderText(document)).toBe(['Hi', HOSTILE, '— PLATE'].join('\n\n'));
+    expect(renderText(document)).toBe(['Hi', HOSTILE, '— PLATE (Greener by Default)'].join('\n\n'));
   });
 });
 

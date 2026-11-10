@@ -40,13 +40,31 @@ double_confirm_changes = false
 # Kong serves these to GoTrue, bind-mounting each file from the checkout that started the stack.
 # A template added later is missing until Kong restarts, and GoTrue silently falls back to its
 # link email: `docker restart supabase_kong_fsi-dev supabase_kong_fsi-test`.
+#
+# Production's copies, subjects included, are pasted into the hosted project's dashboard
+# (Authentication → Emails), so a change here must be pasted there too.
 [auth.email.template.magic_link]
+subject = "Your PLATE sign-in code"
+content_path = "./supabase/templates/sign-in-code.html"
+
+# What a new user gets in place of `magic_link` when confirmations are on, as production needs.
+[auth.email.template.confirmation]
 subject = "Your PLATE sign-in code"
 content_path = "./supabase/templates/sign-in-code.html"
 
 [auth.email.template.email_change]
 subject = "Confirm your new PLATE email"
 content_path = "./supabase/templates/email-change.html"
+
+# To the old address once a change goes through. With `double_confirm_changes` off, it is how an
+# owner learns that someone holding their session moved the account.
+#
+# Unlike a template's, a notification's `content_path` is relative to this file's directory, not
+# the stack's.
+[auth.email.notification.email_changed]
+enabled = true
+subject = "Your PLATE email was changed"
+content_path = "./templates/email-changed.html"
 
 # Mailpit: catches outbound email so nothing escapes locally.
 #

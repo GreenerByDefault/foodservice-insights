@@ -1,4 +1,4 @@
-import { APP_NAME } from '@gbd/core';
+import { APP_FULL_NAME } from '@gbd/core';
 import {
   type Emailer,
   type GbdOrganizationCreated,
@@ -31,7 +31,7 @@ export function emailer(): Emailer {
         postmarkServerToken: POSTMARK_SERVER_TOKEN,
       }),
     ),
-    from: { address: requirePrivateVar('EMAIL_FROM_ADDRESS'), name: APP_NAME },
+    from: { address: requirePrivateVar('EMAIL_FROM_ADDRESS'), name: APP_FULL_NAME },
     siteUrl: requirePrivateVar('SITE_URL'),
     gbdAddress: requirePrivateVar('EMAIL_GBD_ADDRESS'),
     supportAddress: requirePrivateVar('EMAIL_SUPPORT_ADDRESS'),

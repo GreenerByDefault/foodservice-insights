@@ -28,12 +28,12 @@ here resolves it).
 Facts from the tree (2026-10-20) that shape the design:
 
 - **Every production credential is in the `production` GitHub Environment**, named in
-  [`deploy.yml`](../../.github/workflows/deploy.yml), which is the list; two in-flight plans change
-  it (`email-provider.md` adds Postmark's token, `production-sign-in.md` removes `SITE_PASSWORD`).
-  Seven vendors hold a credential of ours: GitHub, DigitalOcean, Supabase (the `postgres` password,
-  the S3 key pair, and two role passwords set by hand), Grafana Cloud, Better Stack, OpenAI, and
-  Postmark once it lands. Web deploys on every push to `main` and migrates first; the worker
-  deploys only by `workflow_dispatch`. A re-run of an old `deploy-web` run skips itself once `main`
+  [`deploy.yml`](../../.github/workflows/deploy.yml), which is the list; `production-sign-in.md`
+  removes `SITE_PASSWORD` from it. Seven vendors hold a credential of ours: GitHub, DigitalOcean,
+  Supabase (the `postgres` password, the S3 key pair, and two role passwords set by hand), Grafana
+  Cloud, Better Stack, OpenAI, and Postmark (`POSTMARK_SERVER_TOKEN`, and the `auth` stream's SMTP
+  token, which lives only in Supabase's SMTP settings). Web deploys on every push to `main` and
+  migrates first; the worker deploys only by `workflow_dispatch`. A re-run of an old `deploy-web` run skips itself once `main`
   has moved on. Bad deploys are reverted, never rolled back (architecture § Bad deploys are fixed
   forward).
 - **No vendor console URL appears anywhere in the tree.** `apps/grafana/gcx-cloud.yaml:4` keeps
@@ -66,8 +66,7 @@ under some pressure, and a file is what a person opens, links, and searches for 
 names say what the reader is trying to do, or what happened, in lowercase kebab.
 
 - **The README's vendor table lists only what exists.** A plan that adds a vendor resource adds
-  its row: `email-provider.md` Postmark's server and two streams, `better-stack.md` its views and
-  monitor.
+  its row, as `better-stack.md` will for its views and monitor.
 - **`.claude/rules/runbooks.md`** carries the two things an agent must know before it reads
   anything — it never performs a runbook, and the public-file rule — and points at the README for
   the rest, which is the `db.md` pattern.
@@ -116,12 +115,13 @@ Each credential then gets only what differs from those steps:
 - **A table row** where the shared steps fit unchanged: *secret*, *minted at*, *then* (what else
   moves, and the check for a CI-only secret). The OpenAI key, the S3 pair, the Better Stack token,
   the Grafana token, `metrics_reader` (a link to `deploy.ts`' header), the site password, and
-  Postmark's token.
+  `POSTMARK_SERVER_TOKEN`.
 - **A section** where the steps themselves differ, or a decision is made here: the DigitalOcean
   token (scopes, who mints it, no expiry); the deploy tags SSH key (minted locally, multi-line,
   the old key kept until a tag moves); `cache_client` (never in the Environment; a handoff in
-  place of a redeploy); and the `postgres` password only if Supabase's reset kills the old one at
-  once, which breaks step 1. **Open, check while writing.**
+  place of a redeploy); Postmark's `auth` SMTP token (never in the Environment; pasted into
+  Supabase's SMTP settings, so nothing redeploys); and the `postgres` password only if Supabase's
+  reset kills the old one at once, which breaks step 1. **Open, check while writing.**
 - *Rejected: a section per credential.* Seven of them would be three lines each repeating the
   shape, and the four that differ would not stand out.
 - *Rejected: a file per credential.* Eight files of three lines each, and the shared steps copied
@@ -152,11 +152,11 @@ Each credential then gets only what differs from those steps:
 | `restore-the-database.md` | Two sentences the vendor's docs cannot say |
 | `change-a-users-email.md` | Resolves the REQUIREMENTS TBD; why the dashboard and not SQL |
 | `trace-a-problem-through-the-logs.md` | Reserved: `better-stack.md` PR 1 writes it |
-| `a-user-did-not-get-an-email.md` | Reserved: `email-provider.md`'s PR writes it |
 
 - `better-stack.md`'s entry already covers the path from a failed attempt's row to its log lines,
-  so there is no separate triage file. `email-provider.md`'s PR writes its support runbook and
-  adds Postmark's rows to the vendor table and to `rotate-a-secret.md`. `alerts.md` adds nothing: the README's one sentence, "an alert's own rule says what firing
+  so there is no separate triage file. Nor is there one for an email that never arrived: the
+  README's Postmark row says which stream to search, and that a spam complaint's suppression
+  only Postmark's support lifts. `alerts.md` adds nothing: the README's one sentence, "an alert's own rule says what firing
   means, then the logs runbook", is the whole of "when an alert fires".
 - *Left out:* generic vendor how-tos an agent or a search answers; the hosted project's settings,
   which stay on the code that depends on them; plan tiers, which `scripts/monthly_costs.py` holds;
@@ -184,6 +184,10 @@ instead adds a migration dropping the enum value.
     add a token, delete the old; CI only.
   - The `metrics_reader` password: the procedure on `apps/grafana/scripts/deploy.ts`' header,
     linked.
+  - Postmark: `POSTMARK_SERVER_TOKEN` from the server's API Tokens, which both apps send with; and
+    the `auth` stream's SMTP token, from that stream's Settings, which Supabase Auth sends with.
+    **Open, check while writing:** whether a server can hold two API tokens at once, as the shared
+    steps assume.
   - The site password, while placeholder mode lasts: at or above `site-password.ts`' minimum;
     signs every browser out. `production-sign-in.md` PR 2 removes the section.
   - `cache_client`: compose the string in `.env.example`'s form, check it with `psql`, hand it

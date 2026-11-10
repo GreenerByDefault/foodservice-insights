@@ -7,7 +7,7 @@
  * `fetch` and holds no pool of its own, so a script that imports this needs no cleanup to exit.
  */
 
-import { APP_NAME } from '@gbd/core';
+import { APP_FULL_NAME } from '@gbd/core';
 import { loadLocalEnv, requireEnv } from '@gbd/core/env';
 import { type Emailer, initializeEmailer } from './client.ts';
 import { parseTransportSettings, resolveTransport } from './transports/index.ts';
@@ -22,7 +22,7 @@ export const EMAILER: Emailer = initializeEmailer({
       postmarkServerToken: process.env.POSTMARK_SERVER_TOKEN,
     }),
   ),
-  from: { address: requireEnv('EMAIL_FROM_ADDRESS'), name: APP_NAME },
+  from: { address: requireEnv('EMAIL_FROM_ADDRESS'), name: APP_FULL_NAME },
   siteUrl: requireEnv('SITE_URL'),
   gbdAddress: requireEnv('EMAIL_GBD_ADDRESS'),
   supportAddress: requireEnv('EMAIL_SUPPORT_ADDRESS'),
