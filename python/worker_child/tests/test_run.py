@@ -209,14 +209,14 @@ def test_an_analysis_that_reports_nothing_writes_no_telemetry(run_directory: Pat
 def test_the_default_analyze_without_an_api_key_fails_as_unknown(
     run_directory: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     exit_code = run(run_directory)  # no `analyze` override: exercises the production default
 
     assert exit_code == names.EXIT_WROTE_FAILURE
     failure = read_json(run_directory / layout.FAILURE)
     assert failure["reason"] == "unknown"
-    assert failure["detail"] == "OPENAI_API_KEY must be set in environment variables"
+    assert failure["detail"] == "ANTHROPIC_API_KEY must be set in environment variables"
 
 
 def test_writes_a_contract_violation_when_the_manifest_is_missing(run_directory: Path) -> None:

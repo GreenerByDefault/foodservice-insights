@@ -40,8 +40,8 @@ allowed-confusables = ["×", "–", "ℹ"]
 # The lab is where data scientists experiment without the product's constraints, so its code
 # carries none of the product's guarantees: product code must not import it, while the lab may
 # import anything. The same goes for test helpers. Gemini is lab-only because the product's LLM
-# calls all go through `LlmClient`, which runs on OpenAI; GBD prefers Gemini for new LLM work, and
-# that work starts in the lab.
+# calls all go through `LlmClient`, which runs on Claude; the lab's Gemini work, such as entree
+# detection, stays there.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "gbd_foodservice_insights_lab".msg = "Product code must not import the lab."
 "gbd_foodservice_insights.testing".msg = "Product code must not import the tests."

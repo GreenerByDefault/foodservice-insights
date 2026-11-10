@@ -137,8 +137,8 @@ def test_each_run_reports_its_own_sequence(run_directory: Path, tmp_path_factory
 
 CALL = LlmCall(
     operation="clean",
-    requested_model="gpt-4.1-mini",
-    served_model="gpt-4.1-mini-2025-04-14",
+    requested_model="claude-sonnet-5-5",
+    served_model="claude-sonnet-5-5",
     requests=1,
     failed_requests=0,
     rate_limited_requests=0,
@@ -191,8 +191,8 @@ def test_calls_of_one_operation_and_model_fold_into_one_row(run_directory: Path)
     clean, match = read_telemetry(run_directory)["llmUsage"]
     assert clean == {
         "operation": "clean",
-        "requestedModel": "gpt-4.1-mini",
-        "servedModel": "gpt-4.1-mini-2025-04-14",
+        "requestedModel": "claude-sonnet-5-5",
+        "servedModel": "claude-sonnet-5-5",
         "calls": 2,
         "requests": 4,
         "failedRequests": 2,
@@ -201,12 +201,12 @@ def test_calls_of_one_operation_and_model_fold_into_one_row(run_directory: Path)
         "inputTokens": 2_000,
         "cachedInputTokens": 0,
         "outputTokens": 20,
-        "costMicroUsd": 832,
+        "costMicroUsd": 4_200,
     }
     assert match == {
         "operation": "match",
-        "requestedModel": "gpt-4.1-mini",
-        "servedModel": "gpt-4.1-mini-2025-04-14",
+        "requestedModel": "claude-sonnet-5-5",
+        "servedModel": "claude-sonnet-5-5",
         "calls": 1,
         "requests": 1,
         "failedRequests": 0,
@@ -215,7 +215,7 @@ def test_calls_of_one_operation_and_model_fold_into_one_row(run_directory: Path)
         "inputTokens": 1_000,
         "cachedInputTokens": 0,
         "outputTokens": 10,
-        "costMicroUsd": 416,
+        "costMicroUsd": 2_100,
     }
 
 
@@ -229,11 +229,11 @@ def test_the_served_model_is_the_latest_that_answered(run_directory: Path) -> No
     report(unanswered)
     assert served_model() is None
     report(CALL)
-    assert served_model() == "gpt-4.1-mini-2025-04-14"
+    assert served_model() == "claude-sonnet-5-5"
     report(unanswered)
-    assert served_model() == "gpt-4.1-mini-2025-04-14"
-    report(replace(CALL, served_model="gpt-4.1-mini-2025-09-01"))
-    assert served_model() == "gpt-4.1-mini-2025-09-01"
+    assert served_model() == "claude-sonnet-5-5"
+    report(replace(CALL, served_model="claude-sonnet-5"))
+    assert served_model() == "claude-sonnet-5"
 
 
 def test_a_served_model_the_parent_would_refuse_is_dropped_not_raised(
@@ -242,10 +242,10 @@ def test_a_served_model_the_parent_would_refuse_is_dropped_not_raised(
     report = telemetry_reporter(run_directory)
     report(CALL)
 
-    report(replace(CALL, served_model="GPT-4.1 Mini"))
+    report(replace(CALL, served_model="Claude Sonnet 5.5"))
 
     (usage,) = read_telemetry(run_directory)["llmUsage"]
-    assert (usage["calls"], usage["servedModel"]) == (2, "gpt-4.1-mini-2025-04-14")
+    assert (usage["calls"], usage["servedModel"]) == (2, "claude-sonnet-5-5")
     assert [(name, level) for name, level, _ in caplog.record_tuples] == [
         ("worker_child.writer", logging.WARNING)
     ]
@@ -299,10 +299,10 @@ def test_concurrent_calls_give_exact_totals(run_directory: Path) -> None:
 
 def test_cost_is_rounded_once_over_the_totals(run_directory: Path) -> None:
     report = telemetry_reporter(run_directory)
-    # 0.4 micro-USD each, which rounds to 0 per call but to 1 over three.
-    one_token = replace(CALL, input_tokens=1, output_tokens=0)
+    # One cached token, 0.1 micro-USD each, which rounds to 0 per call but to 1 over five.
+    one_token = replace(CALL, input_tokens=1, cached_input_tokens=1, output_tokens=0)
 
-    for _ in range(3):
+    for _ in range(5):
         report(one_token)
 
     assert read_telemetry(run_directory)["llmUsage"][0]["costMicroUsd"] == 1

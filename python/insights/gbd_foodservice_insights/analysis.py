@@ -34,8 +34,8 @@ from gbd_foodservice_insights.categorization.cache import (
     CachedCategorization as CachedCategorization,
 )
 from gbd_foodservice_insights.categorization.cache import CategorizationCache
+from gbd_foodservice_insights.categorization.llm import AnthropicLlmClient, LlmClient
 from gbd_foodservice_insights.categorization.llm import LlmCall as LlmCall
-from gbd_foodservice_insights.categorization.llm import LlmClient, OpenAiLlmClient
 from gbd_foodservice_insights.categorization.llm import LlmOperation as LlmOperation
 from gbd_foodservice_insights.categorization.llm import cost_micro_usd as cost_micro_usd
 from gbd_foodservice_insights.categorization.pipeline import (
@@ -144,10 +144,10 @@ def analyze(
     report_telemetry: ReportTelemetry = _ignore_telemetry,
     llm: LlmClient | None = None,
 ) -> AnalysisOutcome:
-    """`llm` defaults to `OpenAiLlmClient.from_env()`, which raises when `OPENAI_API_KEY` is
+    """`llm` defaults to `AnthropicLlmClient.from_env()`, which raises when `ANTHROPIC_API_KEY` is
     unset — a deployment bug, so deliberately not an `AnalysisError`."""
     llm = _ReportingLlmClient(
-        llm if llm is not None else OpenAiLlmClient.from_env(on_call=report_telemetry),
+        llm if llm is not None else AnthropicLlmClient.from_env(on_call=report_telemetry),
         report_progress,
     )
     with _stage("read", report_telemetry):

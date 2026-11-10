@@ -16,7 +16,7 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 | [Supabase](https://supabase.com/dashboard/projects) | The production project | The database, Auth, Storage and Studio. Auth settings live only in this dashboard, and the write guard does not cover them ([`docs/architecture.md`](../architecture.md) § Supabase: database, auth, and blob store) |
 | [Grafana Cloud](https://grafana.com/auth/sign-in) | GBD's stack | The Foodservice Insights folder, which every web deploy overwrites |
 | [Better Stack](https://telemetry.betterstack.com) | Telemetry | The one source both apps forward their logs to |
-| [OpenAI](https://platform.openai.com/settings/organization/projects) | The project the spend is tracked in | The worker's API key |
+| [Anthropic](https://platform.claude.com) | The production workspace, which has its own spend limit and prompt cache | The worker's API key |
 | [Postmark](https://account.postmarkapp.com) | The production server | Two message streams: `outbound` for our email, sent with `POSTMARK_SERVER_TOKEN`; and `auth` for Supabase Auth's codes, whose SMTP token lives only in Supabase's SMTP settings. When someone never got an email, search that stream's Activity for their address. One suppressed by a spam complaint stays suppressed until Postmark's support lifts it |
 | [Squarespace](https://account.squarespace.com/domains) | GBD's domain | DNS |
 | [Google Workspace](https://admin.google.com) | GBD's organization | Staff mailboxes, and `PLATE@`, which every email is from and every reply reaches |

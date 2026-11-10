@@ -62,8 +62,8 @@ KNOWN_SCENARIOS: Final = ("slow", "hang", "crash", "fail", "missing-pdf")
 
 _STUB_CALL: Final = LlmCall(
     operation="clean",
-    requested_model="gpt-4.1-mini",
-    served_model="gpt-4.1-mini-2025-04-14",
+    requested_model="claude-sonnet-5-5",
+    served_model="claude-sonnet-5-5",
     requests=1,
     failed_requests=0,
     rate_limited_requests=0,

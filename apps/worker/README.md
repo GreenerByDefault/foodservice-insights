@@ -23,7 +23,7 @@ Beyond the vars every package reads from `.env`, it needs:
 | `WORKER_RUN_ROOT` | Where each attempt gets its own run directory |
 | `WORKER_MODE` | Which analysis the child runs — see the root [`README.md`](../../README.md#analysis-modes) |
 | `PYTHON_BIN` | The Python interpreter that runs the analysis child — the repo venv, not the bare system interpreter. Unneeded with `WORKER_MODE=off` |
-| `OPENAI_API_KEY` | Required by `WORKER_MODE=live` |
+| `ANTHROPIC_API_KEY` | Required by `WORKER_MODE=live` |
 | `WORKER_ID` | Optional. Defaults to a value derived from the host and process |
 | `WORKER_MAX_CONCURRENT_ATTEMPTS` | Optional. Overrides `maxConcurrentAttempts` |
 | `PLATFORM_SHUTDOWN_GRACE_MS` | The host's shutdown grace, which `drainGraceMs` is derived from. Required by `WORKER_MODE=live`; optional otherwise |
@@ -43,7 +43,7 @@ sends only the rest to the LLM. Yours is in your local database, and starts empt
 Default's answers:
 
 1. Ask Greener by Default for the `cache_client` connection string, and treat it like
-   `OPENAI_API_KEY`. It can only read the cache and suggest rows to it.
+   `ANTHROPIC_API_KEY`. It can only read the cache and suggest rows to it.
 2. Put it in `.env` as `CACHE_DB_CONNECTION_STRING`, beside `WORKER_MODE=live`, in the form
    `.env.example` shows: its `sslrootcert` is the absolute path to the repo's `supabase-ca.crt`.
 3. Restart the worker. Its `Worker started` line names the cache database as

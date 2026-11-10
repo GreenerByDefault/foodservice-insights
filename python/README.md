@@ -62,9 +62,9 @@ Add it to `[project.dependencies]` of the package that imports it, then `just sy
 
 ### API keys
 
-The analysis library reads `OPENAI_API_KEY` from the process environment. Set it in the repo
+The analysis library reads `ANTHROPIC_API_KEY` from the process environment. Set it in the repo
 root's `.env` ([`../.env.example`](../.env.example)), which only the worker parent and the lab load:
-to call `analyze()` from a shell, export it first. The lab reads two more; see
+to call `analyze()` from a shell, export it first. The lab reads three more; see
 [`lab/README.md`](lab/README.md).
 
 ### Measure before optimizing

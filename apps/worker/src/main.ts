@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     const resolved = resolveWorkerMode({
       mode: requireEnv('WORKER_MODE'),
       pythonBin: resolvePythonBin(process.env.PYTHON_BIN),
-      openAiApiKey: process.env.OPENAI_API_KEY,
+      anthropicApiKey: process.env.ANTHROPIC_API_KEY,
       platformShutdownGraceMs,
       cacheDbConnectionString: process.env.CACHE_DB_CONNECTION_STRING,
     });

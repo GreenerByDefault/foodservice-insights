@@ -16,7 +16,7 @@ import argparse
 import logging
 
 from dotenv import find_dotenv, load_dotenv
-from gbd_foodservice_insights.categorization.llm import OpenAiLlmClient
+from gbd_foodservice_insights.categorization.llm import AnthropicLlmClient
 from gbd_foodservice_insights_lab.cache_sync import pull_caches_if_configured
 from gbd_foodservice_insights_lab.categorization.spreadsheet import categorize_spreadsheet_to_csvs
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
@@ -74,7 +74,7 @@ def main() -> None:
         input_filepath=args.input,
         output_filepath=args.output,
         data_type=args.data_type,
-        llm=OpenAiLlmClient.from_env(),
+        llm=AnthropicLlmClient.from_env(),
         gemini_client=clients.get("gemini_client"),
         date_format=args.date_format,
     )

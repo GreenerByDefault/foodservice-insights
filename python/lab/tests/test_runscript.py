@@ -59,7 +59,7 @@ def test_categorize_runscript_pulls_then_passes_its_arguments_straight_through(
     monkeypatch.setattr(module, "pull_caches_if_configured", lambda: steps.append("pull"))
     monkeypatch.setattr(module, "categorize_spreadsheet_to_csvs", _fake_categorize)
     monkeypatch.setattr(module, "setup_api_clients", _fake_setup_api_clients)
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setattr(module, "load_dotenv", lambda **_: None)
     monkeypatch.setattr(module, "update_metadata_with_categorization_stats", lambda _: None)
     monkeypatch.setattr(
@@ -80,7 +80,7 @@ def test_categorize_runscript_pulls_then_passes_its_arguments_straight_through(
 
     assert steps == ["pull", "setup_api_clients", "categorize"]
     llm = called.pop("llm")
-    assert isinstance(llm, module.OpenAiLlmClient)
+    assert isinstance(llm, module.AnthropicLlmClient)
     assert called == {
         "input_filepath": str(input_path),
         "output_filepath": None,

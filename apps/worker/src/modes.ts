@@ -7,8 +7,8 @@ import type { WorkerDefaultableFields } from './config.ts';
 import { INVOCATION } from './contract/names.ts';
 
 /** How the worker analyzes a report. The root `README.md` § Analysis modes says when to pick each.
- * - `live`: the real analysis, categorized by OpenAI. What production runs.
- * - `mock-llm`: the real analysis, with a keyword list standing in for OpenAI.
+ * - `live`: the real analysis, categorized by Claude. What production runs.
+ * - `mock-llm`: the real analysis, with a keyword list standing in for Claude.
  * - `stubbed`: a fake analysis that finishes in seconds, for working on the report lifecycle.
  * - `off`: no worker is started. */
 export type WorkerMode = 'stubbed' | 'mock-llm' | 'live' | 'off';
@@ -43,7 +43,7 @@ export type RawWorkerModeSettings = {
   /** Required by every mode but `off`, which spawns nothing. */
   pythonBin: string | undefined;
   /** Required by `live`. Without it, every attempt fails and emails its requester. */
-  openAiApiKey: string | undefined;
+  anthropicApiKey: string | undefined;
   /** Required by `live`. Without it, `drainGraceMs` falls back to a default no platform was sized
    * against, and a deploy kills in-flight attempts as an ordinary `shut_down`. */
   platformShutdownGraceMs: number | undefined;
@@ -91,7 +91,7 @@ export function resolveWorkerMode(settings: RawWorkerModeSettings): ResolvedWork
 
   if (mode === 'live') {
     const missing = [
-      ...(settings.openAiApiKey ? [] : ['OPENAI_API_KEY']),
+      ...(settings.anthropicApiKey ? [] : ['ANTHROPIC_API_KEY']),
       ...(settings.platformShutdownGraceMs === undefined ? ['PLATFORM_SHUTDOWN_GRACE_MS'] : []),
     ];
     if (missing.length > 0) throw new Error(`WORKER_MODE=live needs ${missing.join(' and ')}.`);
