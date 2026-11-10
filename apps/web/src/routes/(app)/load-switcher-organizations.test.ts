@@ -10,8 +10,8 @@ function paddedNames(count: number): string[] {
 }
 
 /** Digit-prefixed and unique per call, so these sort ahead of every other organization the shared
- * test database holds — the seed's placeholder org and whatever concurrent fixtures have
- * committed for real, both of which are ordinary, letter-led names. That lets a query against the
+ * test database holds — whatever concurrent fixtures have committed for real, which have
+ * ordinary, letter-led names. That lets a query against the
  * live, unscoped `organization` table assert on an exact prefix rather than the whole table. */
 function paddedNamesSortingFirst(count: number): string[] {
   const prefix = `0-${crypto.randomUUID()}`;

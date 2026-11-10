@@ -1,10 +1,9 @@
 /** The browser's half of Supabase Auth: a lazily loaded, deliberately narrow view of
  * `supabase.auth`.
  *
- * Narrow for two reasons. It keeps supabase-js out of the root chunk — in `supabase` mode it is
- * fetched after hydration, when the root layout subscribes to the session, and in `placeholder`
- * mode never — and it makes the seam a component test has to fake five functions wide instead of a
- * whole client (`testing/fake.ts`).
+ * Narrow for two reasons. It keeps supabase-js out of the root chunk — it is fetched after
+ * hydration, when the root layout subscribes to the session — and it makes the seam a component
+ * test has to fake five functions wide instead of a whole client (`testing/fake.ts`).
  *
  * Supabase is a token service here and nothing else: no `locals.supabase`, no callback route, no
  * RLS. See `docs/architecture.md` § Supabase: database, auth, and blob store.

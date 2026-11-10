@@ -26,8 +26,6 @@
     "EMAIL_SUPPORT_ADDRESS",
     "POSTMARK_SERVER_TOKEN",
     "SITE_URL",
-    "PUBLIC_AUTH_MODE",
-    "SITE_PASSWORD",
     "PUBLIC_SUPABASE_URL",
     "PUBLIC_SUPABASE_PUBLISHABLE_KEY",
     "SUPABASE_SECRET_KEY",
@@ -100,10 +98,6 @@
       "outputs": ["playwright-report/**", "test-results/**"]
     },
     "migrate": {
-      "dependsOn": ["^build"],
-      "cache": false
-    },
-    "seed:identity": {
       "dependsOn": ["^build"],
       "cache": false
     },

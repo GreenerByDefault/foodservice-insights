@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks';
-import { authMode } from '#lib/auth/mode.js';
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import { loadAuthorization } from '#lib/server/auth/authorization.js';
 import { identifyUser } from '#lib/server/auth/identify.js';
@@ -79,13 +78,11 @@ async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
 
   if (auth) return auth;
 
-  // A setup error in either mode, never a signed-out visitor: in `supabase` mode,
-  // `on_auth_user_created` writes the row in the same transaction as the GoTrue user.
+  // A setup error, never a signed-out visitor: `on_auth_user_created` writes the row in the same
+  // transaction as the GoTrue user.
   throw new Error(
     `The identified user ${userId} has no app_user row. ` +
-      (authMode() === 'placeholder'
-        ? 'Run `pnpm seed:identity` (or `TEST_DB=1 pnpm seed:identity`).'
-        : 'Is DATABASE_URL the database Supabase Auth writes to, with migrations applied?'),
+      'Is DATABASE_URL the database Supabase Auth writes to, with migrations applied?',
   );
 }
 
@@ -137,11 +134,6 @@ export const init: ServerInit = () => {
   if (process.listenerCount('sveltekit:shutdown') > 0) return;
 
   assertConfigured();
-  if (authMode() === 'placeholder') {
-    logger().warn(
-      'PUBLIC_AUTH_MODE=placeholder: whoever signs in with SITE_PASSWORD is the one seeded user.',
-    );
-  }
 
   // Without these, Node writes its own multi-line trace to stderr, which a host ingests as one
   // entry per line. The destination is synchronous, so the record is written before the exit.

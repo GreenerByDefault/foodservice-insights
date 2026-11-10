@@ -87,7 +87,6 @@ export const CONNECTION_BUDGET = {
   // one service at a time, so at most one fleet is doubled — all of its instances at once.
   deployOverlap: Math.max(WEB_FLEET, WORKER_FLEET),
 
-  // `seed:identity` runs after it, not beside it.
   migrate: MIGRATE_DB_LIMITS.maxConnections,
 
   cacheClient: CACHE_CLIENT_CONNECTION_LIMIT,

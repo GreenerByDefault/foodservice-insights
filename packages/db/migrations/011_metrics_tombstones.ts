@@ -53,7 +53,7 @@ export async function up(database: Kysely<any>): Promise<void> {
 // read its report; `metrics.attempt` finds the organization through `metrics.report` instead.
 //
 // ON CONFLICT DO NOTHING, because a delete must never fail on metrics' account. Ids are generated,
-// but a fixed one can come back: the dev seed recreates its placeholder user under the same id.
+// but a fixed one can come back, as a user re-inserted by hand under the same id does.
 
 async function reportTombstone(database: Kysely<any>): Promise<void> {
   await sql`

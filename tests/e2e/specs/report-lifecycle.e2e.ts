@@ -108,8 +108,7 @@ test('a report uploaded through the form is analysed, downloadable, and emailed 
     .executeTakeFirstOrThrow();
   expect(attempt.workerGitSha).toBe(E2E_GIT_SHA);
 
-  // The run's identity is pointed at a mailbox no other run sends to (`scripts/test-run.ts`), but
-  // both tests here share it — so match on the subject rather than taking whatever arrives first.
+  // `user` is this test's own, minted at a unique address, so no other test's mail lands here.
   await expect
     .poll(async () => (await readMailbox(user.email)).map((message) => message.subject), {
       timeout: LIFECYCLE_TIMEOUT_MS,

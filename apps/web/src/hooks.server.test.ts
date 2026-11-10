@@ -2,7 +2,6 @@ import type { UserId } from '@gbd/db';
 import { aDatabaseError, anUnreachableDatabaseError } from '@gbd/db/testing';
 import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import * as mode from '#lib/auth/mode.js';
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import * as authorization from '#lib/server/auth/authorization.js';
 import * as identify from '#lib/server/auth/identify.js';
@@ -16,14 +15,12 @@ import { handle, handleError } from './hooks.server.ts';
 // See #lib/server/auth/authorization.test.ts for their tests.
 vi.mock('#lib/server/auth/identify.js', () => ({ identifyUser: vi.fn() }));
 vi.mock('#lib/server/auth/authorization.js', () => ({ loadAuthorization: vi.fn() }));
-vi.mock('#lib/auth/mode.js', () => ({ authMode: vi.fn() }));
 
 const A_USER_ID = crypto.randomUUID() as UserId;
 
 beforeEach(() => {
   vi.mocked(identify.identifyUser).mockReset().mockResolvedValue(A_USER_ID);
   vi.mocked(authorization.loadAuthorization).mockReset().mockResolvedValue(anAuthContext());
-  vi.mocked(mode.authMode).mockReset().mockReturnValue('supabase');
 });
 
 /** The parts of a request the hooks actually read. */
@@ -234,22 +231,10 @@ describe('handle', () => {
     expect(SERVER_LOGS.records).toEqual([expect.objectContaining({ msg: 'Request', status: 500 })]);
   });
 
-  describe('an identified user with no database row', () => {
-    beforeEach(() => {
-      vi.mocked(authorization.loadAuthorization).mockResolvedValue(null);
-    });
+  test('fails loudly for an identified user with no database row, pointing at the database', async () => {
+    vi.mocked(authorization.loadAuthorization).mockResolvedValue(null);
 
-    test('fails loudly in placeholder mode, pointing at the seed', async () => {
-      vi.mocked(mode.authMode).mockReturnValue('placeholder');
-
-      await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(
-        /pnpm seed:identity/,
-      );
-    });
-
-    test('fails loudly in supabase mode, pointing at the database', async () => {
-      await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(/DATABASE_URL/);
-    });
+    await expect(handle({ event: anEvent(), resolve: respond })).rejects.toThrow(/DATABASE_URL/);
   });
 });
 

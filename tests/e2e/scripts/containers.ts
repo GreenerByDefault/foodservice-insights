@@ -275,12 +275,9 @@ export function webContainerCommand(options: {
       PORT: String(port),
       // See `extraHTTPHeaders` in `@gbd/browser-testing`'s Playwright config.
       PROTOCOL_HEADER: 'x-forwarded-proto',
-      // Whatever `test-run.ts` chose, which matches how production is hosted and flips with it.
-      PUBLIC_AUTH_MODE: requireEnv('PUBLIC_AUTH_MODE'),
-      // What `@gbd/browser-testing` signs each browser in with, in `placeholder` mode.
-      SITE_PASSWORD: requireEnv('SITE_PASSWORD'),
-      // Required at startup in every auth mode (`supabaseProject` in `assertConfigured`).
-      PUBLIC_SUPABASE_URL: requireEnv('PUBLIC_SUPABASE_URL'),
+      // The server validates every session against it, and the browser on the host signs in and out
+      // through it, so it needs the name that resolves on both sides.
+      PUBLIC_SUPABASE_URL: forContainer(requireEnv('PUBLIC_SUPABASE_URL')),
       PUBLIC_SUPABASE_PUBLISHABLE_KEY: requireEnv('PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
       // Playwright pipes this server's stdout, which would otherwise carry an access line per request.
       LOG_LEVEL: requireEnv('LOG_LEVEL'),

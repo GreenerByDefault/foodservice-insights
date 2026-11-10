@@ -7,7 +7,6 @@
     ".": "./dist/index.js",
     "./constraints": "./dist/constraints.js",
     "./env": "./dist/env.js",
-    "./seed": "./dist/seed.js",
     "./testing": "./dist/testing/index.js"
   },
   "scripts": {
@@ -16,7 +15,6 @@
     "check": "tsc --noEmit",
     "test:unit": "TEST_DB=1 vitest run",
     "migrate": "node scripts/migrate.ts",
-    "seed:identity": "node scripts/seed-identity.ts",
     "seed:history": "node scripts/seed-history.ts",
     "truncate": "node scripts/truncate.ts",
     "db:clean": "TEST_DB=1 node scripts/clean.ts",

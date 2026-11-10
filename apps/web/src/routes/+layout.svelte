@@ -5,7 +5,6 @@ import { updated } from '$app/state';
 import favicon from '#lib/assets/favicon.svg';
 import { browserAuth } from '#lib/auth/browser.js';
 import { refreshWhenRestoredByBack, sessionUserChanged } from '#lib/auth/follow-session.js';
-import { authMode } from '#lib/auth/mode.js';
 import { Toaster } from '#lib/components/ui/sonner/index.js';
 import { fullLoadForNewVersion } from '#lib/navigation/new-version.js';
 import type { LayoutProps } from './$types';
@@ -20,11 +19,8 @@ $effect(() => {
 });
 
 // Keeps the page on the session the browser holds: a sign-in or sign-out, here or in another tab,
-// re-runs every load. Not in `placeholder`, which must not load supabase-js: there, a sign-out in
-// another tab goes unnoticed until this tab next loads.
+// re-runs every load.
 $effect(() => {
-  if (authMode() !== 'supabase') return;
-
   let unmounted = false;
   let unsubscribe: (() => void) | undefined;
   void (async () => {

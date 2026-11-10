@@ -7,7 +7,6 @@
  * rather than part of the package's index.
  */
 
-import { requireEnv } from '@gbd/core/env';
 import { type Database, type OrganizationId, type UserId, withTransaction } from '@gbd/db';
 import { DATABASE, shutdown } from '@gbd/db/env';
 import { insertOrganization } from '@gbd/db/testing';
@@ -18,8 +17,6 @@ import {
   type MintedUser,
   mintUser,
   readPinnedIdentity,
-  readRunIdentity,
-  runAuthMode,
   signInCookies,
   type TestIdentity,
 } from './identity.ts';
@@ -37,8 +34,7 @@ export type TestOrganization = {
 export type IdentityOption = 'onboarded' | 'new' | 'pinned' | 'anonymous';
 
 export type SharedTestOptions = {
-  /** Who this test's browser is signed in as. `placeholder` mode has one identity, the run's, so
-   * there anything but the default and `anonymous` throws.
+  /** Who this test's browser is signed in as.
    *
    * - `onboarded` (the default): a GoTrue user of this test's own, named
    *   `MINTED_USER_DISPLAY_NAME`. Its address is unique, so a screenshot must not render it.
@@ -64,8 +60,7 @@ export type SharedTestOptions = {
   orgName: string | undefined;
 };
 
-/** More people than the one `user` a test is signed in as. `supabase` mode only: `placeholder`
- * has one identity per run. */
+/** More people than the one `user` a test is signed in as. */
 export interface UserFactory {
   /** A GoTrue user of this test's own, like `identity: 'onboarded'`'s, or `'new'`'s with
    * `onboarded: false`. Deleted from GoTrue when the test ends. It belongs to no organization until
@@ -90,10 +85,9 @@ export type SharedTestFixtures = {
    */
   org: TestOrganization;
 
-  /** `user`, and the GoTrue address its browser signs in with — null in `placeholder` mode, where
-   * it signs in with the site password instead. Null altogether for `anonymous`. Split out from
+  /** `user`, and the GoTrue address its browser signs in with. Null for `anonymous`. Split out from
    * `user` so that `context` can depend on it without throwing for an anonymous test. */
-  signedInAs: { user: TestIdentity; signInEmail: string | null } | null;
+  signedInAs: { user: TestIdentity; signInEmail: string } | null;
 
   users: UserFactory;
 };
@@ -126,14 +120,6 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
       return;
     }
 
-    if (runAuthMode() === 'placeholder') {
-      if (identity !== 'onboarded') {
-        throw new Error(`identity: '${identity}' needs a run in supabase mode.`);
-      }
-      await use({ user: await readRunIdentity(db), signInEmail: null });
-      return;
-    }
-
     switch (identity) {
       case 'pinned': {
         const { signInEmail, ...user } = await readPinnedIdentity(db);
@@ -161,11 +147,7 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
 
   context: async ({ context, signedInAs, baseURL }, use) => {
     const violations = await recordCspViolations(context);
-    if (signedInAs?.signInEmail === null) {
-      await signInWithSitePassword(context, baseURL);
-    } else if (signedInAs) {
-      await signIn(context, signedInAs.signInEmail, baseURL);
-    }
+    if (signedInAs) await signIn(context, signedInAs.signInEmail, baseURL);
     await use(context);
     expectNoCspViolations(violations);
   },
@@ -177,9 +159,6 @@ export const test = base.extend<SharedTestOptions & SharedTestFixtures, SharedWo
 
     await use({
       create: async (options = {}) => {
-        if (runAuthMode() === 'placeholder') {
-          throw new Error('users.create() needs a run in supabase mode.');
-        }
         const user = await mintUser(db, options);
         created.push(user);
         return user;
@@ -265,21 +244,6 @@ async function signIn(
   await context.addCookies(cookies.map((cookie) => ({ ...cookie, url: baseURL })));
 }
 
-/** `placeholder` mode's sign-in, through the app itself, since only the server can sign its
- * session cookie. `context.request` shares the context's cookies, so the browser holds it too. */
-async function signInWithSitePassword(
-  context: BrowserContext,
-  baseURL: string | undefined,
-): Promise<void> {
-  if (baseURL === undefined) throw new Error('Signing a browser in needs a baseURL.');
-  const response = await context.request.post(new URL('/api/site-session', baseURL).href, {
-    data: { password: requireEnv('SITE_PASSWORD') },
-  });
-  if (!response.ok()) {
-    throw new Error(`Signing in with SITE_PASSWORD answered ${response.status()}.`);
-  }
-}
-
 /** The one organization called `name` in this run, creating it if this is the first test to ask.
  *
  * A pinned name cannot belong to one test: `organization_name_unique_ci` is global, so two tests
@@ -293,8 +257,7 @@ async function signInWithSitePassword(
  * The loser of the race reads the winner's row, so both see one id, one slug and one name.
  *
  * Every asking user is made an admin of it, so each test's own identity can open it. That
- * membership is `ON CONFLICT DO NOTHING` too: the pinned identity, or `placeholder` mode's one
- * user, asks again in every test.
+ * membership is `ON CONFLICT DO NOTHING` too: the pinned identity asks again in every test.
  */
 async function findOrCreateOrganization(
   db: Kysely<Database>,

@@ -10,7 +10,7 @@ import {
 import { planSyntheticHistory, SYNTHETIC_HISTORY_SEED, type SyntheticHistoryPlan } from './plan.ts';
 
 /** Swap the synthetic history for a fresh one, ending today, so running this twice leaves what
- * running it once does. Rows anyone made by hand, the placeholder identity included, are untouched.
+ * running it once does. Rows anyone made by hand are untouched.
  *
  * One transaction, under a lock, so two runs at once cannot interleave into two histories. */
 export async function replaceSyntheticHistory(
