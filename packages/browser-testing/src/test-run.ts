@@ -25,12 +25,7 @@ import {
 } from '@gbd/db/testing';
 import { type BlobStoreConfig, initializeBlobStore, shutdownBlobStore } from '@gbd/storage';
 import { createRunBucket, deleteRunBucket, sweepStaleRunBuckets } from '@gbd/storage/testing';
-import {
-  deleteGoTrueUser,
-  GOTRUE_TEST_DOMAIN,
-  preparePinnedIdentity,
-  prepareRunIdentity,
-} from './identity.ts';
+import { deleteGoTrueUser, GOTRUE_TEST_DOMAIN, preparePinnedIdentity } from './identity.ts';
 
 /** Locates the `playwright` binary next to a `scripts/test-run.ts` caller.
  * Pass the caller's own `import.meta.url`. */
@@ -150,29 +145,17 @@ export type BeforePlaywrightResult = {
   afterPlaywright?(): Promise<void>;
 };
 
-/** Who the run's requests are, exported to the app and the fixtures as `PUBLIC_AUTH_MODE`. See
- * `./identity.ts`. */
-export type RunIdentity =
-  | {
-      mode: 'placeholder';
-      /** The address the run's one identity is given. See `prepareRunIdentity`. */
-      email?: string;
-    }
-  | { mode: 'supabase' };
-
 export type RunAgainstFreshStackOptions = {
   connectionString: string;
   s3: BlobStoreConfig;
   playwrightBin: string;
   playwrightArgs: readonly string[];
-  identity: RunIdentity;
   beforePlaywright?(stack: FreshStack): Promise<BeforePlaywrightResult>;
 };
 
 /** Returns Playwright's own exit code — assign it straight to `process.exitCode`. */
 export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions): Promise<number> {
-  const { connectionString, s3, playwrightBin, playwrightArgs, identity, beforePlaywright } =
-    options;
+  const { connectionString, s3, playwrightBin, playwrightArgs, beforePlaywright } = options;
 
   await sweepStaleResources(connectionString, s3);
 
@@ -180,11 +163,7 @@ export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions)
   const runDatabase = await createRunDatabase(connectionString, templateName);
   let pinnedUserId: UserId | undefined;
   try {
-    if (identity.mode === 'placeholder') {
-      await prepareRunIdentity(runDatabase.connectionString, identity.email);
-    } else {
-      pinnedUserId = await preparePinnedIdentity(runDatabase.connectionString, runDatabase.name);
-    }
+    pinnedUserId = await preparePinnedIdentity(runDatabase.connectionString, runDatabase.name);
 
     const store = initializeBlobStore(s3);
     let runBucket: Awaited<ReturnType<typeof createRunBucket>> | undefined;
@@ -214,7 +193,6 @@ export async function runAgainstFreshStack(options: RunAgainstFreshStackOptions)
           SITE_URL: stack.siteUrl,
           PLAYWRIGHT_PORT: String(port),
           TEST_RUN_ID: stack.name,
-          PUBLIC_AUTH_MODE: identity.mode,
         });
       } finally {
         await before.afterPlaywright?.();

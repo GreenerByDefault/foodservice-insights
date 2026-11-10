@@ -1,23 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
-import type { AuthMode } from '#lib/auth/mode.js';
 import { fakeBrowserAuth } from '#lib/auth/testing/fake.js';
-import { expectFetched, stubFetch } from '#lib/testing/fetch.js';
+import { stubFetch } from '#lib/testing/fetch.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { refreshAll } from '$app/navigation';
 import ErrorPage from './error-page.svelte';
 
-const state = vi.hoisted(() => ({
-  auth: null as ReturnType<typeof fakeBrowserAuth> | null,
-  mode: 'supabase' as AuthMode,
-}));
+const state = vi.hoisted(() => ({ auth: null as ReturnType<typeof fakeBrowserAuth> | null }));
 vi.mock('#lib/auth/browser.js', () => ({ browserAuth: () => state.auth }));
-vi.mock('#lib/auth/mode.js', () => ({ authMode: () => state.mode }));
 vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 
 beforeEach(() => {
   state.auth = fakeBrowserAuth();
-  state.mode = 'supabase';
   resetNavigationMocks();
 });
 
@@ -57,26 +51,6 @@ describe('ErrorPage', () => {
       email: 'ada@example.com',
       token: '123456',
       type: 'email',
-    });
-  });
-
-  it('in placeholder mode, signs a 401 in on the spot with the site password', async () => {
-    state.mode = 'placeholder';
-    const fetchMock = stubFetch(new Response(null, { status: 204 }));
-    const screen = await render(ErrorPage, { status: 401 });
-
-    await expect
-      .element(screen.getByRole('heading', { level: 1 }))
-      .toHaveTextContent('Sign in to continue');
-    expect(screen.getByLabelText('Email address').elements()).toHaveLength(0);
-    await screen.getByLabelText('Password').fill('correct horse battery');
-    await screen.getByRole('button', { name: 'Sign in' }).click();
-
-    await expect.poll(() => vi.mocked(refreshAll).mock.calls.length).toBe(1);
-    expectFetched(fetchMock, {
-      url: '/api/site-session',
-      method: 'POST',
-      body: { password: 'correct horse battery' },
     });
   });
 

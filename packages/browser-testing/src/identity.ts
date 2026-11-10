@@ -1,13 +1,8 @@
 /** The one place a browser test's signed-in identity is materialized.
  *
- * Which identities exist depends on the run's `PUBLIC_AUTH_MODE`, which `runAgainstFreshStack`
- * chooses and exports to both the app and the fixtures:
- *
- * - `placeholder`: `identifyUser` answers every request as `PLACEHOLDER_USER_ID`, so a run has
- *   exactly one identity. `prepareRunIdentity` writes it once; `readRunIdentity` reads it back.
- * - `supabase`: every test mints a GoTrue user of its own and signs its browser in with a real
- *   session (`mintUser`, `signInCookies`). Screenshots that render the signed-in user's address use
- *   the run's *pinned* identity instead (`preparePinnedIdentity`, `readPinnedIdentity`).
+ * Every test mints a GoTrue user of its own and signs its browser in with a real session
+ * (`mintUser`, `signInCookies`). Screenshots that render the signed-in user's address use the run's
+ * *pinned* identity instead (`preparePinnedIdentity`, `readPinnedIdentity`).
  *
  * **GoTrue and the app read different databases.** GoTrue writes users into the stack's main
  * `postgres`; the app under test reads a per-run clone (`@gbd/db/testing`'s `createRunDatabase`),
@@ -24,11 +19,6 @@
 import { AUTH_COOKIE_NAME } from '@gbd/core';
 import { requireEnv } from '@gbd/core/env';
 import { type Database, initializeDatabase, shutdownDatabase, type UserId } from '@gbd/db';
-import {
-  PLACEHOLDER_USER_DISPLAY_NAME,
-  PLACEHOLDER_USER_EMAIL,
-  PLACEHOLDER_USER_ID,
-} from '@gbd/db/seed';
 import { insertAppUser } from '@gbd/db/testing';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -38,8 +28,6 @@ export type TestIdentity = {
   id: UserId;
   email: string;
 };
-
-export type AuthMode = 'placeholder' | 'supabase';
 
 /** Every GoTrue user the suites mint lives at this domain, and only they do, which is what lets
  * `sweepStaleGoTrueUsers` delete by it. Under `.test`, so no mail to one can reach a real inbox. */
@@ -53,53 +41,6 @@ export const PINNED_IDENTITY_EMAIL = 'sam.cook@example.test';
 export const MINTED_USER_DISPLAY_NAME = 'Sam Cook';
 
 const TEST_USER_PASSWORD = 'test-user-password';
-
-/** The run's mode, as `runAgainstFreshStack` exported it. */
-export function runAuthMode(): AuthMode {
-  const mode = process.env.PUBLIC_AUTH_MODE;
-  if (mode === 'placeholder' || mode === 'supabase') return mode;
-  throw new Error(
-    `PUBLIC_AUTH_MODE is '${mode ?? ''}', not placeholder or supabase. Run tests through the ` +
-      "suite's pnpm script, whose scripts/test-run.ts chooses one.",
-  );
-}
-
-/** Commit the run's one `placeholder` identity into its own database, as `runAgainstFreshStack`
- * does before Playwright starts.
- *
- * `email` defaults to a fixed address, which is what keeps a screenshot of the account menu — it
- * renders the address — identical on every run. A suite that instead asserts on mail we sent has
- * to pass a unique one, because Mailpit is shared across concurrent runs and worktrees.
- */
-export async function prepareRunIdentity(
-  connectionString: string,
-  email: string = PLACEHOLDER_USER_EMAIL,
-): Promise<void> {
-  const database = initializeDatabase({
-    connectionString,
-    log: 'console',
-    siteUrl: process.env.SITE_URL,
-  });
-  try {
-    await insertAppUser(database, {
-      id: PLACEHOLDER_USER_ID,
-      email,
-      displayName: PLACEHOLDER_USER_DISPLAY_NAME,
-    });
-  } finally {
-    await shutdownDatabase(database);
-  }
-}
-
-export async function readRunIdentity(db: Kysely<Database>): Promise<TestIdentity> {
-  const user = await db
-    .selectFrom('auth.users')
-    .select(['id', 'email'])
-    .where('id', '=', PLACEHOLDER_USER_ID)
-    .executeTakeFirstOrThrow();
-
-  return { id: user.id as UserId, email: user.email as string };
-}
 
 /** A GoTrue user, mirrored into the run database. */
 export type MintedUser = TestIdentity & {
@@ -160,8 +101,8 @@ function pinnedSignInEmail(runName: string): string {
   return `pinned-${runName}@${GOTRUE_TEST_DOMAIN}`;
 }
 
-/** Mint the run's pinned identity, as `runAgainstFreshStack` does before Playwright starts in
- * `supabase` mode. Returns its id, for deleting afterwards. */
+/** Mint the run's pinned identity, as `runAgainstFreshStack` does before Playwright starts.
+ * Returns its id, for deleting afterwards. */
 export async function preparePinnedIdentity(
   connectionString: string,
   runName: string,

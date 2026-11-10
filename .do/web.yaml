@@ -76,11 +76,6 @@ services:
       - key: S3_BUCKET
         value: ${S3_BUCKET}
 
-      - key: PUBLIC_AUTH_MODE
-        value: placeholder
-      - key: SITE_PASSWORD
-        type: SECRET
-        value: ${SITE_PASSWORD}
       - key: PUBLIC_SUPABASE_URL
         value: ${PUBLIC_SUPABASE_URL}
       - key: PUBLIC_SUPABASE_PUBLISHABLE_KEY

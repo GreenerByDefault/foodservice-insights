@@ -2,10 +2,8 @@
 import { APP_NAME } from '@gbd/core';
 import { refreshAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
-import { authMode } from '#lib/auth/mode.js';
 import DisplayNameForm from '#lib/components/account/display-name-form.svelte';
 import SignInFlow from '#lib/components/auth/sign-in-flow.svelte';
-import SitePasswordForm from '#lib/components/auth/site-password-form.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
 import { describeError } from '#lib/errors/messages.js';
 import { pageTitle } from '#lib/page-title.js';
@@ -45,11 +43,7 @@ const title = $derived(
     <PageHeading>{presentation.title}</PageHeading>
     <p class="text-muted-foreground">{presentation.body}</p>
 
-    {#if authMode() === 'placeholder'}
-      <SitePasswordForm onSignedIn={refreshAll} />
-    {:else}
-      <SignInFlow auth={browserAuth()} onSignedIn={refreshAll} />
-    {/if}
+    <SignInFlow auth={browserAuth()} onSignedIn={refreshAll} />
   </div>
 {:else}
   <!-- No calls to action yet, deliberately. The 5xx cases want a retry plus somewhere to report

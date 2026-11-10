@@ -2,7 +2,6 @@
 import { toast } from 'svelte-sonner';
 import { refreshAll } from '$app/navigation';
 import { browserAuth } from '#lib/auth/browser.js';
-import { authMode } from '#lib/auth/mode.js';
 import DisplayNameForm from '#lib/components/account/display-name-form.svelte';
 import PageHeading from '#lib/components/page-heading.svelte';
 import * as Field from '#lib/components/ui/field/index.js';
@@ -25,27 +24,16 @@ async function nameSaved(name: string) {
 
 <PageHeading>Your account</PageHeading>
 
-<!-- `placeholder` mode has no session to change or end, and deleting its one user breaks every
-     request. -->
 <div class="flex w-full max-w-md flex-col gap-8">
-  {#if authMode() === 'supabase'}
-    <ChangeEmailForm auth={browserAuth()} currentEmail={data.user.email} />
-  {:else}
-    <Field.Field>
-      <Field.Title>Email</Field.Title>
-      <p class="text-sm text-muted-foreground">{data.user.email}</p>
-    </Field.Field>
-  {/if}
+  <ChangeEmailForm auth={browserAuth()} currentEmail={data.user.email} />
 
   <DisplayNameForm initialName={data.user.displayName} submitLabel="Save" onSaved={nameSaved} />
 
-  {#if authMode() === 'supabase'}
-    <Field.Separator />
+  <Field.Separator />
 
-    <DeleteAccount
-      auth={browserAuth()}
-      email={data.user.email}
-      soleAdminOrganizations={data.soleAdminOrganizations}
-    />
-  {/if}
+  <DeleteAccount
+    auth={browserAuth()}
+    email={data.user.email}
+    soleAdminOrganizations={data.soleAdminOrganizations}
+  />
 </div>

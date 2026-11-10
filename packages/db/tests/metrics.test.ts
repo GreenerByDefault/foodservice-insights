@@ -624,7 +624,6 @@ describe('tombstones', () => {
     expect(after).toEqual(before.map((row) => ({ ...row, purgedAt: now })));
   });
 
-  // The dev seed's placeholder user is one such id.
   test('keep the first of two accounts deleted under the same id', async () => {
     const { first, rows } = await withRollback(DATABASE, async (transaction) => {
       const id = crypto.randomUUID() as UsersId;

@@ -81,7 +81,7 @@ report the spec created through the UI or the API rather than through the `repor
 come from [`@gbd/browser-testing/fixtures`](../../../packages/browser-testing/src/fixtures.ts),
 shared with `tests/e2e`.
 
-This suite runs in `PUBLIC_AUTH_MODE=supabase`: every test's browser is signed in with a real
+Every test's browser is signed in with a real
 session as a GoTrue user of its own, so what one test's user belongs to never shows up in
 another's. `test.use({ identity })` picks someone else: `'new'` for a user who has not yet
 chosen a display name, `'pinned'` for a screenshot that renders the signed-in address, or

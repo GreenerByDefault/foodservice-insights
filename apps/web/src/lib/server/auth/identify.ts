@@ -1,19 +1,14 @@
 /** Who is making this request? Everything downstream — `loadAuthorization`, the guards — takes
  * the id this answers with and never asks how it was found.
  *
- * In `placeholder` mode a request is the seeded user from `pnpm seed:identity` if it carries a site
- * password session (`site-password.ts`), and nobody otherwise. Keep the `@gbd/db/seed` import
- * confined to this file so it's easy to remove later.
- *
- * In `supabase` mode it is the session cookie, validated by `getUser()` — a round trip to Supabase
- * Auth on every request, never the unverified `getSession()`. That round trip is also what catches a
+ * The answer is the session cookie, validated by `getUser()` — a round trip to Supabase Auth on
+ * every request, never the unverified `getSession()`. That round trip is also what catches a
  * deleted or banned user whose token has not expired yet. Supabase is a token service here and
  * nothing more; see `docs/architecture.md` § Supabase: database, auth, and blob store.
  */
 
 import { AUTH_COOKIE_NAME } from '@gbd/core';
 import type { UserId } from '@gbd/db';
-import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import { type CookieOptions, createServerClient } from '@supabase/ssr';
 import {
   type AuthError,
@@ -23,16 +18,9 @@ import {
   type User,
 } from '@supabase/supabase-js';
 import { error, type RequestEvent } from '@sveltejs/kit';
-import { authMode } from '#lib/auth/mode.js';
 import { SERVICE_UNAVAILABLE_MESSAGE } from '#lib/errors/messages.js';
 import { requirePublicVar } from '#lib/server/env.js';
 import { logger } from '#lib/server/log.js';
-import { hasSiteSession } from './site-password.ts';
-
-export async function identifyUser(event: RequestEvent): Promise<UserId | null> {
-  if (authMode() === 'placeholder') return hasSiteSession(event) ? PLACEHOLDER_USER_ID : null;
-  return await identifyFromSession(event);
-}
 
 /** What we observed (`kind`, `reason`) versus what the caller must do about it (`action`). */
 export type AuthResult =
@@ -79,7 +67,7 @@ export function classifyAuthResult(result: {
   };
 }
 
-/** The Supabase project `supabase` mode validates sessions against. */
+/** The Supabase project sessions are validated against. */
 export function supabaseProject(): { url: string; publishableKey: string } {
   return {
     url: requirePublicVar('PUBLIC_SUPABASE_URL'),
@@ -87,7 +75,7 @@ export function supabaseProject(): { url: string; publishableKey: string } {
   };
 }
 
-async function identifyFromSession(event: RequestEvent): Promise<UserId | null> {
+export async function identifyUser(event: RequestEvent): Promise<UserId | null> {
   const { url, publishableKey } = supabaseProject();
   const supabase = createServerClient(url, publishableKey, {
     cookieOptions: { name: AUTH_COOKIE_NAME },

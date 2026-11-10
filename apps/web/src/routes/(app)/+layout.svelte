@@ -1,6 +1,5 @@
 <script lang="ts">
 import { page } from '$app/state';
-import { authMode } from '#lib/auth/mode.js';
 import SiteHeader from '#lib/components/site-header.svelte';
 import Wordmark from '#lib/components/wordmark.svelte';
 import type { LayoutProps } from './$types';
@@ -30,7 +29,7 @@ const currentOrganization = $derived(page.data.organization);
     </div>
 
     <div class="ml-auto sm:ml-0">
-      <UserMenu email={data.user.email} displayName={data.user.displayName} mode={authMode()} />
+      <UserMenu email={data.user.email} displayName={data.user.displayName} />
     </div>
   </SiteHeader>
 

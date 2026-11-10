@@ -1,6 +1,5 @@
 import { AUTH_COOKIE_NAME } from '@gbd/core';
 import type { UserId } from '@gbd/db';
-import { PLACEHOLDER_USER_ID } from '@gbd/db/seed';
 import {
   AuthApiError,
   type AuthError,
@@ -11,16 +10,12 @@ import {
 } from '@supabase/supabase-js';
 import { isHttpError, type RequestEvent } from '@sveltejs/kit';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import * as mode from '#lib/auth/mode.js';
 import { SERVER_LOGS } from '../testing/logs.ts';
 import { classifyAuthResult, identifyUser } from './identify.ts';
-import { hasSiteSession } from './site-password.ts';
 
 const { createServerClient } = vi.hoisted(() => ({ createServerClient: vi.fn() }));
 vi.mock('@supabase/ssr', () => ({ createServerClient }));
-vi.mock('#lib/auth/mode.js', () => ({ authMode: vi.fn() }));
 vi.mock('#lib/server/env.js', () => ({ requirePublicVar: (name: string) => `<${name}>` }));
-vi.mock('./site-password.ts', () => ({ hasSiteSession: vi.fn() }));
 
 const A_USER_ID = crypto.randomUUID() as UserId;
 
@@ -100,7 +95,6 @@ describe('identifyUser', () => {
   const signOut = vi.fn();
 
   beforeEach(() => {
-    vi.mocked(mode.authMode).mockReset().mockReturnValue('supabase');
     getUser.mockReset();
     signOut.mockReset().mockResolvedValue({ error: null });
     createServerClient.mockReset().mockReturnValue({ auth: { getUser, signOut } });
@@ -123,28 +117,6 @@ describe('identifyUser', () => {
   function setAllFromClient() {
     return createServerClient.mock.calls[0]?.[2].cookies.setAll;
   }
-
-  describe('in placeholder mode', () => {
-    beforeEach(() => {
-      vi.mocked(mode.authMode).mockReturnValue('placeholder');
-    });
-
-    test('a site session is the placeholder, without asking Supabase', async () => {
-      vi.mocked(hasSiteSession).mockReturnValue(true);
-      const event = anEvent();
-
-      expect(await identifyUser(event)).toBe(PLACEHOLDER_USER_ID);
-      expect(hasSiteSession).toHaveBeenCalledWith(event);
-      expect(createServerClient).not.toHaveBeenCalled();
-    });
-
-    test('no site session is nobody', async () => {
-      vi.mocked(hasSiteSession).mockReturnValue(false);
-
-      expect(await identifyUser(anEvent())).toBeNull();
-      expect(createServerClient).not.toHaveBeenCalled();
-    });
-  });
 
   test('is the session user, read through the pinned cookie name', async () => {
     answer(aUser(), null);

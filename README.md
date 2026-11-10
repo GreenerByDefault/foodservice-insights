@@ -25,14 +25,7 @@ just sync
 cp .env.example .env
 scripts/supabase start
 pnpm migrate
-pnpm seed:identity
 ```
-
-`pnpm seed:identity` creates the placeholder user that you sign in as, with `.env`'s
-`SITE_PASSWORD`, in the default `PUBLIC_AUTH_MODE=placeholder`. The app cannot sign anyone in
-without it. `.env.example` ships a working `SITE_PASSWORD`; if you change it, keep it at or above the
-minimum length in [`site-password.ts`](apps/web/src/lib/server/auth/site-password.ts), or sign-in
-errors.
 
 ### Start it
 
@@ -55,10 +48,11 @@ pnpm dev:worker
 
 Alternatively, `pnpm dev` runs both in one terminal, with their logs interleaved.
 
-Open <http://localhost:5173> and upload a CSV. Enter the `SITE_PASSWORD` from `.env`, which defaults to `local-password`.
-You can use [`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) for an example CSV. The report page
-updates on its own once the analysis finishes. Emails the app sends arrive in the local mailbox,
-<http://localhost:55324>. When you're done, run `scripts/supabase stop` to free the memory the
+Open <http://localhost:5173> and sign in with any address. Emails the app sends, the sign-in code
+included, arrive in the local mailbox, <http://localhost:55324>; an address that is new creates an
+account. Create an organization and upload a CSV. You can use
+[`apps/web/sample-reports/valid.csv`](apps/web/sample-reports/valid.csv) for an example CSV. The report page
+updates on its own once the analysis finishes. When you're done, run `scripts/supabase stop` to free the memory the
 databases use.
 
 ### Analysis modes
@@ -74,11 +68,7 @@ page checks for a result.
 | `stubbed` | A fake analysis that finishes in seconds. Its PDF and workbook are placeholders that will not open. The report name drives failure scenarios such as `!slow` and `!fail:<reason>`; see [`testing.py`](python/worker_child/worker_child/testing.py) for the full list. | Working on the report lifecycle and its error states |
 | `off` | No worker, so reports stay queued. | UI work that doesn't need a result |
 
-### Signing in for real
-
-By default, sign-in is the site password, and makes you the placeholder user. To use Supabase Auth
-instead, set `PUBLIC_AUTH_MODE=supabase` in `.env` and restart the web app. Sign in with any
-address; the code arrives in the local mailbox, and an address that is new creates an account.
+### Becoming a superadmin
 
 To make yourself a superadmin, set `app_user.is_superadmin` in Supabase Studio's SQL editor
 (<http://localhost:55323>), as the runbook

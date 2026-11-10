@@ -124,16 +124,6 @@ jobs:
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
           S3_BUCKET: ${{ vars.S3_BUCKET }}
 
-      # Production runs PUBLIC_AUTH_MODE=placeholder, which cannot serve a request without these
-      # rows. Idempotent.
-      - name: Seed the placeholder identity
-        if: env.superseded != 'true'
-        run: pnpm exec turbo run seed:identity
-        env:
-          DB_CONNECTION_STRING: ${{ secrets.DB_CONNECTION_STRING }}
-          DB_SSL_CA: ${{ vars.DB_SSL_CA }}
-          SITE_URL: ${{ vars.SITE_URL }}
-
       # The env is every `${NAME}` in .do/web.yaml but IMAGE_DIGEST, which the action resolves.
       - uses: ./.github/actions/deploy-service
         id: deploy
@@ -151,7 +141,6 @@ jobs:
           S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
           S3_BUCKET: ${{ vars.S3_BUCKET }}
-          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
           BETTER_STACK_TOKEN: ${{ secrets.BETTER_STACK_TOKEN }}
           POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
           SITE_URL: ${{ vars.SITE_URL }}

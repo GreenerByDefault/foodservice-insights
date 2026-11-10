@@ -96,7 +96,6 @@ If the test database gets into a strange state, [reset it](#reset-a-database).
 | Command | What it does |
 | --- | --- |
 | `pnpm migrate` | Apply pending database migrations and create the blob store's bucket if it is missing |
-| `pnpm seed:identity` | Create the placeholder user, organization, and membership that `PUBLIC_AUTH_MODE=placeholder` runs as |
 | `pnpm seed:history` | Replace the synthetic history of organizations, users, reports and attempts that dashboards draw locally |
 | `pnpm truncate` | Delete every row, object, and local email, keeping the schema and the bucket |
 | `pnpm db:gen-types` | Regenerate [`packages/db/src/generated/`](../packages/db/src/generated/), [`packages/db/public-schema.sql`](../packages/db/public-schema.sql), [`packages/db/metrics-schema.sql`](../packages/db/metrics-schema.sql), and [`packages/db/auth-schema.sql`](../packages/db/auth-schema.sql) from the live database |
@@ -111,8 +110,7 @@ Prefix any of these with `TEST_DB=1` to target the test stack instead of dev.
 
 Which to run when:
 
-- After a fresh clone or a `db reset` — `pnpm migrate`, then `pnpm seed:identity`. After a
-  `truncate`, only `pnpm seed:identity`.
+- After a fresh clone or a `db reset` — `pnpm migrate`.
 - Before working on a dashboard, or to move the history's dates up to today — `pnpm seed:history`.
   Re-running it replaces the history rather than adding to it, and leaves rows you made alone.
 - For tests, nothing: the suites that need seeded rows clone a database for the run and seed it
@@ -120,12 +118,10 @@ Which to run when:
 
 ### Reset a database
 
-Clear the dev data, keeping the schema and the bucket. The app needs the placeholder identity
-back before it will run, so re-seed it:
+Clear the dev data, keeping the schema and the bucket:
 
 ```sh
 pnpm truncate
-pnpm seed:identity
 ```
 
 Rebuild the dev database from nothing, when the schema itself is wrong. A reset takes the blob
@@ -134,7 +130,6 @@ store's bucket with it, which `pnpm migrate` puts back:
 ```sh
 scripts/supabase db reset
 pnpm migrate
-pnpm seed:identity
 ```
 
 Same for the test database, when it gets into a strange state:
@@ -142,7 +137,6 @@ Same for the test database, when it gets into a strange state:
 ```sh
 TEST_DB=1 scripts/supabase db reset
 TEST_DB=1 pnpm migrate
-TEST_DB=1 pnpm seed:identity
 ```
 
 ### Add a database migration

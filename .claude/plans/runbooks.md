@@ -28,8 +28,7 @@ here resolves it).
 Facts from the tree (2026-10-20) that shape the design:
 
 - **Every production credential is in the `production` GitHub Environment**, named in
-  [`deploy.yml`](../../.github/workflows/deploy.yml), which is the list; `production-sign-in.md`
-  removes `SITE_PASSWORD` from it. Seven vendors hold a credential of ours: GitHub, DigitalOcean,
+  [`deploy.yml`](../../.github/workflows/deploy.yml), which is the list. Seven vendors hold a credential of ours: GitHub, DigitalOcean,
   Supabase (the `postgres` password, the S3 key pair, and two role passwords set by hand), Grafana
   Cloud, Better Stack, OpenAI, and Postmark (`POSTMARK_SERVER_TOKEN`, and the `auth` stream's SMTP
   token, which lives only in Supabase's SMTP settings). Web deploys on every push to `main` and
@@ -114,8 +113,7 @@ Each credential then gets only what differs from those steps:
 
 - **A table row** where the shared steps fit unchanged: *secret*, *minted at*, *then* (what else
   moves, and the check for a CI-only secret). The OpenAI key, the S3 pair, the Better Stack token,
-  the Grafana token, `metrics_reader` (a link to `deploy.ts`' header), the site password, and
-  `POSTMARK_SERVER_TOKEN`.
+  the Grafana token, `metrics_reader` (a link to `deploy.ts`' header), and `POSTMARK_SERVER_TOKEN`.
 - **A section** where the steps themselves differ, or a decision is made here: the DigitalOcean
   token (scopes, who mints it, no expiry); the deploy tags SSH key (minted locally, multi-line,
   the old key kept until a tag moves); `cache_client` (never in the Environment; a handoff in
@@ -188,8 +186,6 @@ instead adds a migration dropping the enum value.
     the `auth` stream's SMTP token, from that stream's Settings, which Supabase Auth sends with.
     **Open, check while writing:** whether a server can hold two API tokens at once, as the shared
     steps assume.
-  - The site password, while placeholder mode lasts: at or above `site-password.ts`' minimum;
-    signs every browser out. `production-sign-in.md` PR 2 removes the section.
   - `cache_client`: compose the string in `.env.example`'s form, check it with `psql`, hand it
     over privately, and allow the holder's address if the project ever turns on network
     restrictions; each holder sets `CACHE_DB_CONNECTION_STRING` and runs `just pull-caches` once.
@@ -248,7 +244,7 @@ Docs only, so the gates pass trivially. Per PR, by hand:
 - **PR 1:** each vendor page named was opened while writing; any that could not be checked is
   marked **Open** in the entry. The DigitalOcean no-expiry option and token ownership are
   confirmed in its UI, and `rotate-a-secret.md`'s token section is corrected if either is wrong.
-- **PR 2:** on the dev stack with `PUBLIC_AUTH_MODE=supabase`, sign in as one address, change it
+- **PR 2:** on the dev stack, sign in as one address, change it
   in Studio's Auth → Users, sign in with the new address: same `app_user.id`, same reports. Run
   the by-hand example as written: the `audit_event` row appears with `actor_kind = 'gbd_manual'`,
   and the same statements without `set local` are refused.

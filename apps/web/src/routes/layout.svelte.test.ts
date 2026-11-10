@@ -4,23 +4,17 @@ import { createRawSnippet } from 'svelte';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { browserAuth } from '#lib/auth/browser.js';
-import type { AuthMode } from '#lib/auth/mode.js';
 import { type FakeBrowserAuth, fakeBrowserAuth } from '#lib/auth/testing/fake.js';
 import { resetNavigationMocks } from '#lib/testing/navigation.js';
 import { refreshAll } from '$app/navigation';
 import Layout from './+layout.svelte';
 
-const state = vi.hoisted(() => ({
-  auth: null as FakeBrowserAuth | null,
-  mode: 'supabase' as AuthMode,
-}));
+const state = vi.hoisted(() => ({ auth: null as FakeBrowserAuth | null }));
 vi.mock('#lib/auth/browser.js', () => ({ browserAuth: vi.fn(() => state.auth) }));
-vi.mock('#lib/auth/mode.js', () => ({ authMode: () => state.mode }));
 vi.mock('$app/navigation', () => import('#lib/testing/navigation.js'));
 
 beforeEach(() => {
   state.auth = fakeBrowserAuth();
-  state.mode = 'supabase';
   vi.mocked(browserAuth).mockClear();
   resetNavigationMocks();
 });
@@ -36,14 +30,6 @@ function sessionFor(userId: string): Session {
 }
 
 describe('+layout.svelte', () => {
-  test('in placeholder mode, never reaches for the auth client', async () => {
-    state.mode = 'placeholder';
-
-    await render(Layout, props(null));
-
-    expect(browserAuth).not.toHaveBeenCalled();
-  });
-
   describe('following the session', () => {
     async function subscribed(sessionUserId: string | null = 'ana') {
       const screen = await render(Layout, props(sessionUserId));
