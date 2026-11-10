@@ -4,6 +4,7 @@ import type { Handle, HandleServerError, ServerInit } from '@sveltejs/kit/hooks'
 import { UNEXPECTED_ERROR_MESSAGE } from '#lib/errors/messages.js';
 import { loadAuthorization } from '#lib/server/auth/authorization.js';
 import { identifyUser } from '#lib/server/auth/identify.js';
+import { isLinkPreview } from '#lib/server/auth/link-preview.js';
 import type { AuthContext } from '#lib/server/auth/types.js';
 import { assertConfigured } from '#lib/server/config.js';
 import { closeDatabase, database, withDbErrorHandling } from '#lib/server/db.js';
@@ -67,6 +68,7 @@ function logAccess(event: RequestEvent, status: number, startedAt: number): void
 /** Identify the caller, then look up what they may do, once per request. */
 async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
   if (ANONYMOUS_PATHS.has(event.url.pathname)) return null;
+  if (isLinkPreview(event.request.headers.get('user-agent'))) return null;
 
   const userId = await identifyUser(event);
   if (!userId) return null;
