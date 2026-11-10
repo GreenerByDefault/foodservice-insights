@@ -87,13 +87,16 @@ services:
         value: ${PUBLIC_SUPABASE_PUBLISHABLE_KEY}
 
       - key: EMAIL_TRANSPORT
-        value: provider
+        value: postmark
+      - key: POSTMARK_SERVER_TOKEN
+        type: SECRET
+        value: ${POSTMARK_SERVER_TOKEN}
       - key: EMAIL_FROM_ADDRESS
-        value: insights@greenerbydefault.org
+        value: PLATE@greenerbydefault.org
       - key: EMAIL_SUPPORT_ADDRESS
-        value: insights@greenerbydefault.org
+        value: PLATE@greenerbydefault.org
       - key: EMAIL_GBD_ADDRESS
-        value: insights@greenerbydefault.org
+        value: PLATE@greenerbydefault.org
       - key: SITE_URL
         value: ${SITE_URL}
 

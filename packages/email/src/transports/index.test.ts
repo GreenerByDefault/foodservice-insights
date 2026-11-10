@@ -16,13 +16,9 @@ describe('parseTransportSettings', () => {
     ).toEqual({ name: 'postmark', serverToken: 'a-token' });
   });
 
-  test('accepts provider, which needs no endpoint', () => {
-    expect(parseTransportSettings({ ...UNSET, name: 'provider' })).toEqual({ name: 'provider' });
-  });
-
   test('names what it accepts when EMAIL_TRANSPORT is wrong', () => {
     expect(() => parseTransportSettings({ ...UNSET, name: 'sendgrid' })).toThrow(
-      /mailpit, postmark, provider/,
+      /mailpit, postmark\./,
     );
   });
 
@@ -54,9 +50,5 @@ describe('resolveTransport', () => {
     expect(resolveTransport({ name: 'postmark', serverToken: 'a-token' })).toMatchObject({
       name: 'postmark',
     });
-  });
-
-  test('builds the provider transport', () => {
-    expect(resolveTransport({ name: 'provider' })).toMatchObject({ name: 'provider' });
   });
 });

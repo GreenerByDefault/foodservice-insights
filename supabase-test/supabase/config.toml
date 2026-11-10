@@ -47,6 +47,10 @@ double_confirm_changes = false
 subject = "Your PLATE sign-in code"
 content_path = "../supabase-dev/supabase/templates/sign-in-code.html"
 
+[auth.email.template.confirmation]
+subject = "Your PLATE sign-in code"
+content_path = "../supabase-dev/supabase/templates/sign-in-code.html"
+
 [auth.email.template.email_change]
 subject = "Confirm your new PLATE email"
 content_path = "../supabase-dev/supabase/templates/email-change.html"

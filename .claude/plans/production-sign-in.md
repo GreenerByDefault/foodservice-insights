@@ -1,27 +1,11 @@
 # Real sign-in in production
 
-> **Status:** a spec. Until production can send sign-in codes, it runs `PUBLIC_AUTH_MODE=placeholder`:
-> every request is one seeded admin, behind a site password
-> ([`.do/web.yaml`](../../.do/web.yaml)). This plan switches production to Supabase Auth,
-> then deletes placeholder mode. It starts once two things are true: Supabase sends through
-> Postmark, per [`email-provider.md`](email-provider.md) § Supabase Auth's settings; and Postmark
-> has approved the account. The PR that lands the last step deletes this file.
-
-## Order of operations
-
-Go-live spans two plans. GBD's part comes first and is one sitting; everything after it is
-Eric's.
-
-1. **GBD:** the insights@ mailbox and the DNS records on greenerbydefault.org, from the handoff doc Eric
-   sends once Postmark has shown him the DKIM record
-   ([`email-provider.md`](email-provider.md) § Before PR 1 steps 3 and 4).
-2. Postmark verifies the domain, the first send passes DMARC, and Supabase Auth gets its SMTP
-   settings and templates (`email-provider.md`).
-3. `email-provider.md`'s PR: production sends through Postmark. Not before 2, since
-   `EMAIL_TRANSPORT=provider` is what keeps mail from going out under `p=reject` until the DNS
-   verifies.
-4. Postmark approves the account.
-5. This plan: § Before PR 1, then PR 1 and PR 2.
+> **Status:** a spec. Production runs `PUBLIC_AUTH_MODE=placeholder`: every request is one seeded
+> admin, behind a site password ([`.do/web.yaml`](../../.do/web.yaml)). This plan switches
+> production to Supabase Auth, then deletes placeholder mode. Email already goes through Postmark,
+> Supabase Auth's codes included ([`docs/architecture.md`](../../docs/architecture.md) § Email), so
+> this starts once Postmark has approved the account; until then it delivers only to
+> greenerbydefault.org addresses. The PR that lands the last step deletes this file.
 
 ## Before PR 1: the hosted project
 
@@ -30,8 +14,9 @@ In the production Supabase project:
 - **Turn "Confirm email" on.** GoTrue's `/signup` is public. With confirmations off, it returns a
   session for any address without verifying it, and claiming an invite would take that session as
   proof that the user owns the address. Local stacks leave confirmations off, because only
-  developers use them. Turn this on only after `email-provider.md`'s templates are in place.
-  Otherwise new users get GoTrue's default link instead of a code.
+  developers use them. First check that the dashboard's "Confirm signup" template is
+  `sign-in-code.html`, as `[auth.email.template.confirmation]` in `supabase-dev/supabase/config.toml`
+  says; otherwise new users get GoTrue's default link instead of a code.
 - **Turn the Data API off.** Nothing uses it. With no RLS, it could expose the tables to the
   publishable key that the browser holds once sign-in is live.
 - **Decide what happens to the placeholder organization.** Its reports belong to an address nobody

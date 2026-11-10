@@ -40,7 +40,15 @@ double_confirm_changes = false
 # Kong serves these to GoTrue, bind-mounting each file from the checkout that started the stack.
 # A template added later is missing until Kong restarts, and GoTrue silently falls back to its
 # link email: `docker restart supabase_kong_fsi-dev supabase_kong_fsi-test`.
+#
+# Production's copies, subjects included, are pasted into the hosted project's dashboard
+# (Authentication → Emails), so a change here must be pasted there too.
 [auth.email.template.magic_link]
+subject = "Your PLATE sign-in code"
+content_path = "./supabase/templates/sign-in-code.html"
+
+# What a new user gets in place of `magic_link` when confirmations are on, as production needs.
+[auth.email.template.confirmation]
 subject = "Your PLATE sign-in code"
 content_path = "./supabase/templates/sign-in-code.html"
 

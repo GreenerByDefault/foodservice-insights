@@ -315,11 +315,17 @@ Locally, mail goes to [Mailpit](https://mailpit.axllent.org), so nothing leaves 
 
 The provider is **Postmark**, chosen above all for deliverability
 ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/email-provider.md)).
+Every email is from `PLATE@greenerbydefault.org`, a Google Workspace mailbox GBD reads, so a reply
+reaches a person
+([setup, and what was rejected](https://github.com/GreenerByDefault/foodservice-insights/blob/927fea1460cec9a519d57b480965b12e2ea2fbb5/.claude/plans/email-provider.md)).
 
 The `packages/email` code does not retry failures. Instead, callers must decide how to handle
 failure.
 
-Sign-in codes and email-change confirmations go through Supabase Auth, not us.
+Sign-in codes and email-change confirmations go through Supabase Auth, not us, which sends them
+over Postmark's SMTP. They go on Postmark's `auth` message stream and ours on `outbound`, because
+Postmark keeps a suppression list per stream: a user who marks a report email as spam still gets
+sign-in codes.
 
 ### Result notifications
 
@@ -427,7 +433,7 @@ handling.
 | A third-party API rate limits us, e.g. OpenAI | The child retries with backoff, then fails as `upstream_api`; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk. Reasoning in `OpenAiLlmClient` (`python/insights/gbd_foodservice_insights/categorization/llm.py`) |
 | Workers cannot keep up with demand | **Open:** an alert on attempts waiting too long to be claimed |
 | Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. **Open:** alerts when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
-| Email is slow or down | The notification sweep retries a bounded number of times with exponential backoff (§ Result notifications), then gives up; delivery is best effort either way. Auth's own OTP email is a separate system this doesn't cover — **Open:** can we alert on that too? |
+| Email is slow or down | The notification sweep retries a bounded number of times with exponential backoff (§ Result notifications), then gives up; delivery is best effort either way. Auth's own OTP email is a separate system this doesn't cover, and has no alert: build one from Postmark's bounce webhook the first time the `auth` stream shows a Blocked bounce |
 | The blob store is down while uploading a completed attempt's results | The verdict parks rather than being discarded — the analysis work is already paid for. It resumes on later ticks for up to `uploadRetryBudgetMs`, then converts to `failed('infrastructure')` |
 | Database exhausts connections | Clients and the database periodically terminate connections, plus timeouts, to limit zombie connections. Use connection pools and cap the number of connections |
 
