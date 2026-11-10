@@ -14,6 +14,10 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      # Otherwise, seconds after `/api/health` passes, Grafana updates its bundled data source
+      # plugins from grafana.com in the background. Postgres is unregistered for each update, and its
+      # queries fail with 404 `plugin.notRegistered`. This keeps the image's bundled plugins.
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
     # How the container reaches the Supabase stacks' Postgres, on Linux as well as macOS.
     extra_hosts:
       - host.docker.internal:host-gateway
