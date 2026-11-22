@@ -1,5 +1,6 @@
 """Chart panels: each `draw_*` fills an `Axes` it is handed, empty state included."""
 
+import math
 from collections.abc import Mapping
 
 import matplotlib.pyplot as plt
@@ -316,6 +317,14 @@ def _draw_share_bar_axis(
     add_grid(ax, axis="x")
 
 
+def _share_axis_top(shares: pd.Series) -> int:
+    """A fifth above the highest share, so a month-to-month change is visible, capped at 100%."""
+    highest = shares.max()
+    if pd.isna(highest) or highest == 0:
+        return 100
+    return min(100, math.ceil(highest * 1.2))
+
+
 def _draw_monthly_share_axis(
     ax: plt.Axes,
     monthly: pd.DataFrame,
@@ -329,7 +338,7 @@ def _draw_monthly_share_axis(
     x_pos = range(len(monthly_sorted))
     ax.plot(x_pos, monthly_sorted[value_column].values, marker="o", color=_PLANT_COLOR)
     ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
-    ax.set_ylim(0, 100)
+    ax.set_ylim(0, _share_axis_top(monthly_sorted[value_column]))
     ax.set_ylabel(y_label)
     ax.set_xticks(list(x_pos))
     ax.set_xticklabels(format_month_labels(monthly_sorted["month_year"]), rotation=45)

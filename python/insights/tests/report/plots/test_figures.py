@@ -66,8 +66,8 @@ def test_plot_category_drivers_pages_puts_four_categories_on_each_page_in_order(
 def test_plot_category_totals_titles_and_labels_its_own_axes_with_categories_largest_first():
     monthly = pd.DataFrame(
         {
-            "category": ["fruit", "fruit", "dairy"],
-            "kilos_total": [10.0, 5.0, 20.0],
+            "category": ["fruit", "fruit", "dairy", "juice"],
+            "kilos_total": [10.0, 5.0, 1999.6, np.nan],
         }
     )
 
@@ -77,7 +77,9 @@ def test_plot_category_totals_titles_and_labels_its_own_axes_with_categories_lar
     assert ax.get_title() == "Kilos by Category Across All Months"
     assert ax.get_xlabel() == "Kilos"
     assert ax.get_ylabel() == ""
-    assert [label.get_text() for label in ax.get_yticklabels()] == ["dairy", "fruit"]
+    assert [label.get_text() for label in ax.get_yticklabels()] == ["dairy", "fruit", "juice"]
+    assert [text.get_text() for text in ax.texts] == ["2,000", "15"]
+    assert ax.get_xlim()[1] == pytest.approx(1999.6 * 1.1)
 
 
 def test_plot_diner_meal_numbers_pads_the_y_axis_by_a_fifth_of_each_limit():
