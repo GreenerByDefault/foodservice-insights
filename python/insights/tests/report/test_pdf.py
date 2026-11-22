@@ -195,7 +195,7 @@ def test_title_page_wraps_a_long_client_name_above_the_subtitle() -> None:
         "North Campus Main Dining Hall"
     )
     texts = _title_page(client)
-    name_lines, subtitle, generated = texts[1:-3], texts[-3], texts[-2]
+    name_lines, subtitle = texts[1:-3], texts[-3]
     prop = FontProperties(family="Montserrat", size=20)
 
     assert len(name_lines) > 1
@@ -203,7 +203,13 @@ def test_title_page_wraps_a_long_client_name_above_the_subtitle() -> None:
     for line in name_lines:
         width_pt, _, _ = text_to_path.get_text_width_height_descent(line.text, prop, ismath=False)
         assert width_pt / 72 <= 6.5
-    assert name_lines[-1].y > subtitle.y > generated.y
+    assert name_lines[-1].y > subtitle.y
+
+
+def test_procurement_title_page_spans_the_input_dates(recording_pdf: _RecordingPdf) -> None:
+    _write(_report())
+
+    assert [t.text for t in recording_pdf.pages[0]][2] == "Procurement | Jan 2024 – Feb 2024"
 
 
 def test_title_page_replaces_underscores_in_the_client_name() -> None:
@@ -289,6 +295,7 @@ def test_write_report_pdf_orders_the_procurement_pages(recording_pdf: _Recording
         "Decision KPIs",
         "Substitution Scenarios",
         "About This Report",
+        "References",
     ]
 
 
@@ -312,7 +319,7 @@ def test_write_report_pdf_includes_each_procurement_page_its_data_supports(
     _write(_report(animal_product))
 
     titles = _page_titles(recording_pdf)
-    assert titles[titles.index("Category Template") + 1 : -1] == procurement_pages
+    assert titles[titles.index("Category Template") + 1 : -2] == procurement_pages
 
 
 def test_write_report_pdf_continues_a_long_quality_section_onto_more_pages(
@@ -601,10 +608,8 @@ def test_decision_kpis_page_states_the_share_and_lists_the_products_in_order() -
 
     assert _decision_kpis_page(concentration) == [
         "Decision KPIs",
-        "The top 2 animal products share of animal-product emissions was 38.8% amounting",
-        "to 1,353 kg CO₂e.",
-        "",
-        "The top 2 animal products were:",
+        "The 2 animal products with the highest emissions accounted for 38.8% of",
+        "animal-product emissions (1,353 kg CO₂e):",
         "1. Ground Beef | 80/20",
         "2. Cheddar",
     ]
@@ -615,11 +620,9 @@ def test_decision_kpis_page_words_a_single_product_and_a_whole_share() -> None:
         top_products=("Ground Beef",), top_products_kg_co2e=50.0, total_animal_kg_co2e=50.0
     )
 
-    assert _decision_kpis_page(concentration)[1:5] == [
-        "The top 1 animal products share of animal-product emissions was 100% amounting",
-        "to 50 kg CO₂e.",
-        "",
-        "The top 1 animal product was:",
+    assert _decision_kpis_page(concentration)[1:3] == [
+        "The animal product with the highest emissions accounted for 100% of",
+        "animal-product emissions (50 kg CO₂e):",
     ]
 
 
@@ -631,7 +634,7 @@ def test_decision_kpis_page_wraps_a_long_product_name_without_losing_words() -> 
         total_animal_kg_co2e=20.0,
     )
 
-    lines = _decision_kpis_page(concentration)[5:]
+    lines = _decision_kpis_page(concentration)[3:]
 
     assert lines[0].startswith("1. Ground Beef | very long")
     assert " ".join(line.strip() for line in lines[:-1]) == "1. " + product.strip()

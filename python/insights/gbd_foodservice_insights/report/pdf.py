@@ -127,17 +127,6 @@ def create_title_page(
     )
     ax.text(
         0.5,
-        subtitle_y - 0.09,
-        f"Generated {datetime.now().strftime('%d %B %Y')}",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=11,
-        fontfamily="Lato",
-        color="gray",
-    )
-    ax.text(
-        0.5,
         0.15,
         "Greener By Default",
         transform=ax.transAxes,
@@ -146,6 +135,17 @@ def create_title_page(
         fontsize=12,
         fontfamily="Montserrat",
         color="#234162",
+    )
+    ax.text(
+        0.5,
+        0.02,
+        f"Generated {datetime.now().strftime('%d %B %Y')}",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=9,
+        fontfamily="Lato",
+        color="gray",
     )
     pdf.savefig(fig)
     plt.close(fig)
@@ -608,16 +608,15 @@ def create_decision_kpis_page(
 
     products = concentration.top_products
     share_text = f"{concentration.share_pct:.1f}".removesuffix(".0")
+    subject = (
+        "The animal product with the highest emissions"
+        if len(products) == 1
+        else f"The {len(products)} animal products with the highest emissions"
+    )
     intro_lines = _wrap_text_lines(
         [
-            (
-                f"The top {len(products)} animal products share of animal-product emissions was "
-                f"{share_text}% amounting to {round(concentration.top_products_kg_co2e):,} kg "
-                "CO₂e."
-            ),
-            "",
-            f"The top {len(products)} animal "
-            f"{'product was' if len(products) == 1 else 'products were'}:",
+            f"{subject} accounted for {share_text}% of animal-product emissions "
+            f"({round(concentration.top_products_kg_co2e):,} kg CO₂e):"
         ],
         width=80,
     )
@@ -809,6 +808,15 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
     ]
 
 
+_REFERENCES = [
+    (
+        "Poore, J., & Nemecek, T. (2018). Reducing food's environmental impacts through "
+        "producers and consumers. Science, 360(6392), 987-992. "
+        "https://doi.org/10.1126/science.aaq0216"
+    ),
+]
+
+
 def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
     """Methodology note for the final page of the PDF. `diner_or_meal` is `None` without
     headcounts."""
@@ -836,9 +844,12 @@ def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
             "  A carbon emissions factor — measured in kg of CO\u2082e per kg of food — "
             "is then applied."
         ),
-        "  These factors are drawn from peer-reviewed life-cycle assessment research.",
-        "  These factors cover emissions from production up to the farm gate. They do not",
-        "  include processing, transport, packaging, storage, or cooking.",
+        (
+            "  These factors are drawn from Poore & Nemecek (2018), a peer-reviewed "
+            "meta-analysis of life-cycle assessments. These factors cover emissions from "
+            "production up to the farm gate. They do not include processing, transport, "
+            "packaging, storage, or cooking."
+        ),
         "  Total carbon is the sum of (weight \u00d7 emissions factor) across all items.",
         "  This means two foods with the same weight can have very different greenhouse gas",
         "  footprints depending on how they are produced.",
@@ -922,7 +933,7 @@ def write_report_pdf(
     diner_or_meal = None if report.headcounts is None else report.headcounts.diner_or_meal
 
     with close_new_figures_on_error(), PdfPages(path) as pdf:
-        create_title_page(pdf, client_name, "Procurement")
+        create_title_page(pdf, client_name, f"Procurement | {date_range_label(report.rows)}")
         create_executive_summary_page(
             pdf, _executive_narrative(report, client_name, quality_status)
         )
@@ -951,6 +962,7 @@ def write_report_pdf(
             methodology,
             bold_lines={line for line in methodology if line.endswith("?")},
         )
+        create_text_page(pdf, "References", _REFERENCES)
 
     logger.info("PDF report saved to %s", path)
 

@@ -231,7 +231,7 @@ def test_serving_charts_title_every_page_in_servings_and_close_on_exit():
             "Servings Over Time",
             "Servings by Category Across All Months",
             "Plant and Protein Breakdown",
-            "Top Products Driving Overall (Servings)",
+            "Top 2 Products by Serving Count: Overall",
             "Top Products by Category",
         ]
 
@@ -307,7 +307,7 @@ def test_write_serving_pdf_summarises_as_key_values_without_the_procurement_pros
         "Category Template",
         "Data Completeness & Quality",
     ]
-    assert recording_pdf.pages[0][:3] == ["Food Report", "Acme", "Serving"]
+    assert recording_pdf.pages[0][:3] == ["Food Report", "Acme", "Serving | Jan 2024 – Feb 2024"]
     assert recording_pdf.pages[1] == [
         "Executive Summary",
         *(f"{label}:  {value}" for label, value in report.summary_stats.items()),
