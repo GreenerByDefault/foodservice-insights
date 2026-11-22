@@ -103,7 +103,10 @@ def plot_overall_drivers(overall_drivers: pd.DataFrame, metric: Metric = KILOS) 
     )
     ax.set_xlabel("Percentage of Overall Total (%)")
     ax.set_ylabel("")
-    set_title_font(ax, f"Top Products Driving Overall ({metric.label})")
+    products = (
+        "Top Product" if len(overall_drivers) == 1 else f"Top {len(overall_drivers)} Products"
+    )
+    set_title_font(ax, f"{products} by {metric.line_noun.title()}: Overall")
     plt.tight_layout()
     return fig
 

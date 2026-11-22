@@ -29,7 +29,11 @@ from gbd_foodservice_insights.report.aggregation import (
     identify_overall_drivers,
 )
 from gbd_foodservice_insights.report.excel import diner_meals_frame, write_excel_workbook
-from gbd_foodservice_insights.report.food_report import ReportCharts, validate_rows
+from gbd_foodservice_insights.report.food_report import (
+    ReportCharts,
+    date_range_label,
+    validate_rows,
+)
 from gbd_foodservice_insights.report.metric import Metric
 from gbd_foodservice_insights.report.pdf import (
     create_category_template_pages,
@@ -253,7 +257,7 @@ def write_serving_pdf(
 ) -> None:
     quality_status = quality_status_from_findings(report.findings)
     with close_new_figures_on_error(), PdfPages(path) as pdf:
-        create_title_page(pdf, client_name, "Serving")
+        create_title_page(pdf, client_name, f"Serving | {date_range_label(report.rows)}")
         _create_summary_page(
             pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}
         )

@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 _TEXT_PAGE_TOP_Y = 0.88
 _TEXT_PAGE_BOTTOM_Y = 0.06
-_TEXT_PAGE_LINE_HEIGHT = 0.029
+_TEXT_PAGE_LINE_HEIGHT = 0.03
 _TEXT_PAGE_WRAP_CHARS = 92
 
 _SUMMARY_MARGIN_IN = 1.0
@@ -127,17 +127,6 @@ def create_title_page(
     )
     ax.text(
         0.5,
-        subtitle_y - 0.09,
-        f"Generated {datetime.now().strftime('%d %B %Y')}",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=11,
-        fontfamily="Lato",
-        color="gray",
-    )
-    ax.text(
-        0.5,
         0.15,
         "Greener By Default",
         transform=ax.transAxes,
@@ -147,18 +136,29 @@ def create_title_page(
         fontfamily="Montserrat",
         color="#234162",
     )
+    ax.text(
+        0.5,
+        0.02,
+        f"Generated {datetime.now().strftime('%d %B %Y')}",
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=9,
+        fontfamily="Lato",
+        color="gray",
+    )
     pdf.savefig(fig)
     plt.close(fig)
 
 
 def _format_co2e(kg: float) -> str:
-    """Human-scale CO₂e: metric tons from 2,000 kg, with one decimal below 10 metric tons."""
+    """Human-scale CO₂e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
     if kg < 2000:
         return f"{kg:,.0f} kg"
-    metric_tons = kg / 1000
-    if round(metric_tons, 1) < 10:
-        return f"{metric_tons:.1f} metric tons"
-    return f"{metric_tons:,.0f} metric tons"
+    tonnes = kg / 1000
+    if round(tonnes, 1) < 10:
+        return f"{tonnes:.1f} tonnes"
+    return f"{tonnes:,.0f} tonnes"
 
 
 class CategoryShare(NamedTuple):
@@ -608,16 +608,15 @@ def create_decision_kpis_page(
 
     products = concentration.top_products
     share_text = f"{concentration.share_pct:.1f}".removesuffix(".0")
+    subject = (
+        "The animal product with the highest emissions"
+        if len(products) == 1
+        else f"The {len(products)} animal products with the highest emissions"
+    )
     intro_lines = _wrap_text_lines(
         [
-            (
-                f"The top {len(products)} animal products share of animal-product emissions was "
-                f"{share_text}% amounting to {round(concentration.top_products_kg_co2e):,} kg "
-                "CO₂e."
-            ),
-            "",
-            f"The top {len(products)} animal "
-            f"{'product was' if len(products) == 1 else 'products were'}:",
+            f"{subject} accounted for {share_text}% of animal-product emissions "
+            f"({round(concentration.top_products_kg_co2e):,} kg CO₂e):"
         ],
         width=80,
     )
@@ -809,9 +808,9 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
     ]
 
 
-def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
-    """Methodology note for the final page of the PDF. `diner_or_meal` is `None` without
-    headcounts."""
+def _about_pages(diner_or_meal: DinerOrMeal | None) -> tuple[list[str], list[str]]:
+    """The "About This Report" pages, split at a heading rather than wherever the first page
+    fills. `diner_or_meal` is `None` without headcounts."""
     normalizing = (
         []
         if diner_or_meal is None
@@ -820,7 +819,7 @@ def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
             f"of {diner_or_meal}s served."
         ]
     )
-    return [
+    first = [
         (
             "This report was produced by Greener By Default using procurement data provided by "
             "your organization."
@@ -832,30 +831,50 @@ def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
         "",
         "How are carbon figures calculated?",
         "  Each food item is assigned to a high-level category (e.g. Poultry, Legumes, Dairy).",
+        "  A carbon emissions factor — measured in kg of CO₂e per kg of food — is then applied.",
         (
-            "  A carbon emissions factor — measured in kg of CO\u2082e per kg of food — "
-            "is then applied."
+            "  These factors are drawn from Poore & Nemecek (2018), a peer-reviewed "
+            "meta-analysis of life-cycle assessments."
         ),
-        "  These factors are drawn from peer-reviewed life-cycle assessment research.",
-        "  These factors cover emissions from production up to the farm gate. They do not",
-        "  include processing, transport, packaging, storage, or cooking.",
-        "  Total carbon is the sum of (weight \u00d7 emissions factor) across all items.",
-        "  This means two foods with the same weight can have very different greenhouse gas",
-        "  footprints depending on how they are produced.",
-        "",
+        (
+            "  These factors cover emissions from production up to the farm gate. They do not "
+            "include processing, transport, packaging, storage, or cooking."
+        ),
+        "  Total carbon is the sum of (weight × emissions factor) across all items.",
+        (
+            "  This means two foods with the same weight can have very different greenhouse gas "
+            "footprints depending on how they are produced."
+        ),
+    ]
+    second = [
         "How should I interpret the monthly figures?",
-        "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with",
-        "  seasonal menus, catering events, term dates, and other operational factors.",
+        (
+            "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with "
+            "seasonal menus, catering events, term dates, and other operational factors."
+        ),
         *normalizing,
         "",
         "How should I use this report?",
-        "  The highest-carbon categories and products are the most impactful places to focus",
-        "  menu changes. Even modest reductions in high-carbon items can produce significant",
-        "  carbon savings at scale. Greener By Default can help you identify practical",
-        "  substitutions that maintain menu quality and diner satisfaction.",
+        (
+            "  The highest-carbon categories and products are the most impactful places to focus "
+            "menu changes. Even modest reductions in high-carbon items can produce significant "
+            "carbon savings at scale. Greener By Default can help you identify practical "
+            "substitutions that maintain menu quality and diner satisfaction."
+        ),
         "",
         "Figures in this report are relative to your own data. No external benchmark is applied.",
+        "",
+        _REFERENCES_HEADING,
+        (
+            "  Poore, J., & Nemecek, T. (2018). Reducing food's environmental impacts through "
+            "producers and consumers. Science, 360(6392), 987-992. "
+            "https://doi.org/10.1126/science.aaq0216"
+        ),
     ]
+    return first, second
+
+
+_REFERENCES_HEADING = "References"
 
 
 # ---------------------------------------------------------------------------
@@ -922,7 +941,7 @@ def write_report_pdf(
     diner_or_meal = None if report.headcounts is None else report.headcounts.diner_or_meal
 
     with close_new_figures_on_error(), PdfPages(path) as pdf:
-        create_title_page(pdf, client_name, "Procurement")
+        create_title_page(pdf, client_name, f"Procurement | {date_range_label(report.rows)}")
         create_executive_summary_page(
             pdf, _executive_narrative(report, client_name, quality_status)
         )
@@ -944,13 +963,19 @@ def write_report_pdf(
         if aggregation.substitution_scenarios is not None:
             create_substitution_scenarios_page(pdf, aggregation.substitution_scenarios)
 
-        methodology = _methodology_lines(diner_or_meal)
-        create_text_page(
-            pdf,
-            "About This Report",
-            methodology,
-            bold_lines={line for line in methodology if line.endswith("?")},
-        )
+        for title, lines in zip(
+            ("About This Report", "About This Report (cont.)"),
+            _about_pages(diner_or_meal),
+            strict=True,
+        ):
+            create_text_page(
+                pdf,
+                title,
+                lines,
+                bold_lines={
+                    line for line in lines if line.endswith("?") or line == _REFERENCES_HEADING
+                },
+            )
 
     logger.info("PDF report saved to %s", path)
 
