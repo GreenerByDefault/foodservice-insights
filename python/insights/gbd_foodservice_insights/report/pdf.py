@@ -152,13 +152,13 @@ def create_title_page(
 
 
 def _format_co2e(kg: float) -> str:
-    """Human-scale CO₂e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
+    """Human-scale CO₂e: metric tons from 2,000 kg, with one decimal below 10 metric tons."""
     if kg < 2000:
         return f"{kg:,.0f} kg"
-    tonnes = kg / 1000
-    if round(tonnes, 1) < 10:
-        return f"{tonnes:.1f} tonnes"
-    return f"{tonnes:,.0f} tonnes"
+    metric_tons = kg / 1000
+    if round(metric_tons, 1) < 10:
+        return f"{metric_tons:.1f} metric tons"
+    return f"{metric_tons:,.0f} metric tons"
 
 
 class CategoryShare(NamedTuple):
