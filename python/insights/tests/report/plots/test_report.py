@@ -75,6 +75,6 @@ def test_generate_all_report_plots_orders_every_page(
         "Carbon Emissions by Category",
         "Carbon Emissions Over Time",
         "Plant and Protein Breakdown",
-        "Top Products Driving Overall (Kilos)",
+        "Top Product by Weight: Overall",
         "Top Products by Category",
     ]
