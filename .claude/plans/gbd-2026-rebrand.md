@@ -23,7 +23,8 @@ stay as they are.
 | Chartreuse (accent) | `#D9E027` | `--highlight`, so `bg-highlight` and `text-highlight` |
 
 Poppins is the only family, for body and headings alike; `font-heading` stays a separate token
-so the two can split later. Buttons are uppercase pills; in-app headings are bold green in
+so the two can split later. Buttons are sentence-case pills, not GBD's
+uppercase: rows of in-app actions read faster that way. In-app headings are bold green in
 sentence case, because they show user content such as report and org names. UPPERCASE headings
 are for the marketing page and eyebrow labels only.
 
@@ -79,7 +80,7 @@ Follow the mockup described in Context:
   | --- | --- |
   | `BODY_STYLE` | background `#FDF9F1`, color `#403428`; font stack `Poppins,-apple-system,…` (clients can't load webfonts reliably, so the stack falls back) |
   | `CARD_STYLE` | stays white, `border-radius:12px` |
-  | `ACTION_STYLE` | `#016939` background, `#FDF9F1` text, `border-radius:999px`, uppercase, `letter-spacing:.04em`, weight 700. Replaces `#166534` |
+  | `ACTION_STYLE` | `#016939` background, `#FDF9F1` text, `border-radius:999px`, sentence case like the app's buttons, weight 700. Replaces `#166534` |
   | h1 | green, weight 700 |
   | Footer | `#6E6052` |
   | Links | `#016939` |

@@ -31,12 +31,11 @@ const menuOrganizations = $derived(current ? [current, ...rest] : rest);
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
     {#snippet child({ props })}
-      <!-- Styled as a field rather than a button: it shows an organization's name, which the
-           button's uppercase would distort. -->
+      <!-- Styled as a field rather than a button: it shows the current organization's name. -->
       <Button
         {...props}
         variant="outline"
-        class="min-w-0 max-w-full justify-between gap-1.5 border-border bg-card font-medium tracking-normal text-foreground normal-case"
+        class="min-w-0 max-w-full justify-between gap-1.5 border-border bg-card font-medium text-foreground"
       >
         <span class="truncate">{current?.name ?? 'Choose an organization'}</span>
         <span class="sr-only">Switch organization</span>
