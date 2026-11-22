@@ -1,13 +1,12 @@
 """
 GBD's chart styling and the helpers shared by `report/plots` and the lab's plots.
 
-Importing this module applies the house style: the Agg backend, the palette, and the Lato and
-Montserrat fonts.
+Importing this module applies the house style: the Agg backend, the palette, the Poppins font
+and brown ink. The colors are GBD's 2026 rebrand, as `apps/web/src/routes/layout.css` ships them.
 """
 
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from itertools import cycle, islice
 from typing import Literal
 
 import matplotlib
@@ -28,14 +27,25 @@ from gbd_foodservice_insights import PACKAGE_DIR
 # Color Palette & Style Constants
 # ----------------------------------------------------------------------
 
+GBD_GREEN = "#016939"
+GBD_CHARTREUSE = "#D9E027"
+GBD_BROWN = "#403428"
+GBD_MUTED = "#6E6052"
+GBD_SAND = "#F4EEE2"
+GBD_CREAM = "#FDF9F1"
+GBD_BORDER = "#E6DDCC"
+
+# Leads with GBD green; the rest are chosen to stay apart from their neighbors on a white page,
+# under protanopia and deuteranopia too. Chartreuse is left out: at 1.4:1 on white, a line or a
+# thin bar in it all but disappears.
 GBD_COLORS = [
-    "#234162",
-    "#1b9f8d",
-    "#d9e027",
-    "#88a8d8",
-    "#9f4870",
-    "#a6979c",
-    "#016939",
+    GBD_GREEN,
+    "#3A64C0",
+    "#D0661E",
+    "#B23B78",
+    "#788C00",
+    "#8E4520",
+    "#1A9C8C",
 ]
 
 # Every report page is US Letter, so the PDF prints and scales as one document: text pages
@@ -51,17 +61,18 @@ PAGE_FOOTER_HEIGHT = 0.04
 # Font Configuration
 # ----------------------------------------------------------------------
 
-# GBD font settings: Montserrat for titles, Lato for body text
-TITLE_FONT = "Montserrat"
-BODY_FONT = "Lato"
+# Poppins has no subscript digits, so the ₂ of every "CO₂e" falls back to Lato, whose ₂ sits below
+# the baseline as a subscript should. A family named alone gets no fallback, hence the pairs.
+TITLE_FONT = ("Poppins", "Lato")
+BODY_FONT = ("Poppins", "Lato")
 
 # Registered with matplotlib's font_manager below rather than relied on from the OS: the worker
 # image ships neither font, so without this the report silently renders in DejaVu Sans.
 FONT_FILES = [
+    "Poppins-Regular.ttf",
+    "Poppins-Bold.ttf",
     "Lato-Regular.ttf",
     "Lato-Bold.ttf",
-    "Montserrat-Regular.ttf",
-    "Montserrat-Bold.ttf",
 ]
 
 
@@ -80,22 +91,28 @@ def close_new_figures_on_error() -> Generator[None]:
 
 
 def setup_gbd_fonts() -> None:
-    """
-    Configure matplotlib to use GBD fonts: Montserrat for titles, Lato for body text.
-
-    Registers the packaged Regular/Bold font files so this holds regardless of what fonts the
-    OS has installed; falls back to sans-serif only if that registration is somehow missing.
-    """
+    """Register the packaged fonts, so the house style holds whatever the OS has installed, and
+    make them and GBD's ink the defaults."""
     fonts_dir = PACKAGE_DIR / "data_files" / "fonts"
     for font_file in FONT_FILES:
         font_manager.fontManager.addfont(str(fonts_dir / font_file))
 
     plt.rcParams.update(
         {
-            # Default font family (Lato for body text)
-            "font.family": "sans-serif",
-            "font.sans-serif": [BODY_FONT, "DejaVu Sans", "Arial", "sans-serif"],
-            # Font sizes
+            # Named rather than "sans-serif", which resolves to a single font and so no fallback.
+            "font.family": list(BODY_FONT),
+            "text.color": GBD_BROWN,
+            "axes.labelcolor": GBD_BROWN,
+            "axes.titlecolor": GBD_BROWN,
+            "axes.edgecolor": GBD_MUTED,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "xtick.color": GBD_MUTED,
+            "ytick.color": GBD_MUTED,
+            "xtick.labelcolor": GBD_BROWN,
+            "ytick.labelcolor": GBD_BROWN,
+            "grid.color": GBD_BORDER,
+            "legend.labelcolor": GBD_BROWN,
             "axes.titlesize": 14,
             "axes.labelsize": 12,
             "xtick.labelsize": 10,
@@ -106,14 +123,28 @@ def setup_gbd_fonts() -> None:
     )
 
 
-def set_title_font(ax: plt.Axes, title: str, fontsize: int = 14, **kwargs) -> None:
-    """Set a title with Montserrat font; `kwargs` go to `set_title`."""
-    ax.set_title(title, fontname=TITLE_FONT, fontsize=fontsize, **kwargs)
+def set_title_font(
+    ax: plt.Axes, title: str, fontsize: int = 14, fontweight: str = "bold", **kwargs
+) -> None:
+    """Set a chart title in the title font; `kwargs` go to `set_title`."""
+    ax.set_title(title, fontfamily=TITLE_FONT, fontsize=fontsize, fontweight=fontweight, **kwargs)
+
+
+def set_page_title_font(ax: plt.Axes, title: str) -> None:
+    """Title a single-chart page to match `set_suptitle_font`'s titles of multi-chart pages."""
+    set_title_font(ax, title, fontsize=16, color=GBD_GREEN, pad=12)
 
 
 def set_suptitle_font(fig: plt.Figure, title: str, fontsize: int = 16, **kwargs) -> None:
-    """Set a figure suptitle with Montserrat font; `kwargs` go to `suptitle`."""
-    fig.suptitle(title, fontname=TITLE_FONT, fontsize=fontsize, **kwargs)
+    """Set a page title in the title font and GBD green; `kwargs` go to `suptitle`."""
+    fig.suptitle(
+        title,
+        fontfamily=TITLE_FONT,
+        fontsize=fontsize,
+        fontweight="bold",
+        color=GBD_GREEN,
+        **kwargs,
+    )
 
 
 # Apply GBD styling on module import
@@ -179,10 +210,10 @@ def create_horizontal_percentage_barplot(
         data=data,
         y=y_col,
         x=percentage_col,
-        hue=y_col,
-        # Exactly one color per bar: seaborn warns when the list is longer or shorter.
-        palette=list(islice(cycle(GBD_COLORS), data[y_col].nunique())),
-        legend=False,
+        # One color: the bars are one series, and their lengths already rank them.
+        color=GBD_GREEN,
+        # Seaborn otherwise dulls the color it is given.
+        saturation=1,
         ax=ax,
     )
     # Bars are keyed on the full label and only the tick text is shortened: two labels that
@@ -197,6 +228,6 @@ def create_horizontal_percentage_barplot(
             pct = data.iloc[i][percentage_col]
             x = patch.get_width()
             y = patch.get_y() + patch.get_height() / 2
-            ax.text(x + 1, y, f"{pct:.1f}%", va="center", fontsize=10, color="black")
+            ax.text(x + 1, y, f"{pct:.1f}%", va="center", fontsize=10)
 
     ax.tick_params(axis="y", labelsize=10)

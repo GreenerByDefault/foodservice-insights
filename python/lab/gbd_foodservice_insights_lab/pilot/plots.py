@@ -10,6 +10,7 @@ from gbd_foodservice_insights.categories import (
 )
 from gbd_foodservice_insights.plotting_utils import (
     GBD_COLORS,
+    GBD_GREEN,
     add_grid,
     format_month_labels,
     set_suptitle_font,
@@ -307,7 +308,7 @@ def _plot_baseline_pilot_split(
             y_positions[i],
             row[plant_label],
             height=bar_height,
-            color=GBD_COLORS[1],  # Green
+            color=GBD_GREEN,
             label=plant_label if i == 0 else "",
         )
 
@@ -317,7 +318,7 @@ def _plot_baseline_pilot_split(
             row[animal_label],
             height=bar_height,
             left=row[plant_label],
-            color=GBD_COLORS[0],  # Blue
+            color=GBD_COLORS[1],
             label=animal_label if i == 0 else "",
         )
 

@@ -10,6 +10,8 @@ import pandas as pd
 from gbd_foodservice_insights.categories import drink_categories, food_categories
 from gbd_foodservice_insights.plotting_utils import (
     GBD_COLORS,
+    GBD_GREEN,
+    GBD_MUTED,
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
@@ -64,7 +66,7 @@ def _draw_unavailable(ax: plt.Axes, title: str, message: str) -> None:
     """Stand in for a panel whose data is missing, keeping its title."""
     ax.axis("off")
     ax.text(0.5, 0.6, title, ha="center", va="center", fontsize=12, fontweight="bold")
-    ax.text(0.5, 0.42, message, ha="center", va="center", fontsize=10, color="gray")
+    ax.text(0.5, 0.42, message, ha="center", va="center", fontsize=10, color=GBD_MUTED)
 
 
 def _set_ylim_from_zero(ax: plt.Axes, series: list[pd.Series]) -> None:
@@ -99,7 +101,7 @@ def _draw_metric_over_time_on_axis(
         data_sorted["value"].values,
         marker="o",
         linewidth=2,
-        color=GBD_COLORS[0],
+        color=GBD_GREEN,
     )
     ax.set_xticks(x_positions)
     ax.set_xticklabels(format_month_labels(data_sorted["month_year"]), rotation=45)
@@ -132,7 +134,7 @@ def _draw_multi_series_metric_over_time_on_axis(
             ha="center",
             va="center",
             fontsize=10,
-            color="gray",
+            color=GBD_MUTED,
         )
         return
 
@@ -266,8 +268,10 @@ def draw_emissions_per_diner(
     )
 
 
-_PLANT_COLOR = GBD_COLORS[2]
-_NON_PLANT_COLOR = GBD_COLORS[0]
+_PLANT_COLOR = GBD_GREEN
+# A warm neutral, so plant stands out as the share that matters. It stays apart from the green
+# under protanopia and deuteranopia, which GBD's darker browns do not.
+_NON_PLANT_COLOR = "#9A8A76"
 
 
 def _draw_share_bar_axis(
@@ -311,9 +315,9 @@ def _draw_share_bar_axis(
             ha="center",
             va="bottom",
             fontsize=10,
-            color="#444444",
+            color=GBD_MUTED,
         )
-    ax.axvline(50, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
+    ax.axvline(50, color=GBD_MUTED, linestyle="--", linewidth=0.8, alpha=0.6)
     add_grid(ax, axis="x")
 
 
@@ -337,7 +341,7 @@ def _draw_monthly_share_axis(
     monthly_sorted = monthly.sort_values("month_year").copy()
     x_pos = range(len(monthly_sorted))
     ax.plot(x_pos, monthly_sorted[value_column].values, marker="o", color=_PLANT_COLOR)
-    ax.axhline(50, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
+    ax.axhline(50, color=GBD_MUTED, linestyle="--", linewidth=0.8, alpha=0.6)
     ax.set_ylim(0, _share_axis_top(monthly_sorted[value_column]))
     ax.set_ylabel(y_label)
     ax.set_xticks(list(x_pos))
