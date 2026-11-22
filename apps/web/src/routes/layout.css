@@ -1,41 +1,48 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/jost";
+@import "@fontsource/poppins/400.css";
+@import "@fontsource/poppins/500.css";
+@import "@fontsource/poppins/600.css";
+@import "@fontsource/poppins/700.css";
 
 @custom-variant dark (&:is(.dark *));
 
-/* Colors after greenerbydefault.com (captured 2026-10-18). The teal is darker than GBD's #1B9F8D on
-   purpose: theirs is too light for AA contrast. `--primary` has to carry white button text and also
-   read as text on `--accent`, which is what a hovered list row shows. */
+/* Colors after greenerbydefault.com's 2026 rebrand (captured 2026-11-22): cream page, brown text,
+   deep green, and a chartreuse accent. Contrast on the cream background:
+     - green 6.5:1 and brown 11.5:1, so either carries text; green also reads on sand (5.9:1),
+       which is what a hovered list row shows.
+     - chartreuse is 1.4:1, so on cream it is decoration only: never text, a focus ring or a link
+       underline. On green it is 4.7:1 and may carry text.
+   GBD's own link green (#049250) is 3.8:1 on cream, which fails AA, so links use `--primary`. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.21 0.02 255);
+  --background: oklch(0.983 0.011 84.6);
+  --foreground: oklch(0.334 0.026 66.7);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.21 0.02 255);
+  --card-foreground: oklch(0.334 0.026 66.7);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.02 255);
-  --primary: oklch(0.51 0.105 181);
-  --primary-hover: oklch(0.44 0.105 181);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.965 0.006 250);
-  --secondary-foreground: oklch(0.21 0.02 255);
-  --muted: oklch(0.965 0.006 250);
-  --muted-foreground: oklch(0.52 0.025 258);
-  --accent: oklch(0.965 0.006 250);
-  --accent-foreground: oklch(0.21 0.02 255);
-  --heading: oklch(0.369 0.068 252);
+  --popover-foreground: oklch(0.334 0.026 66.7);
+  --primary: oklch(0.457 0.114 154.5);
+  --primary-hover: oklch(0.389 0.095 155.1);
+  --primary-foreground: oklch(0.983 0.011 84.6);
+  --secondary: oklch(0.951 0.017 84.6);
+  --secondary-foreground: oklch(0.334 0.026 66.7);
+  --muted: oklch(0.951 0.017 84.6);
+  --muted-foreground: oklch(0.498 0.028 67.1);
+  --accent: oklch(0.951 0.017 84.6);
+  --accent-foreground: oklch(0.334 0.026 66.7);
+  --heading: oklch(0.457 0.114 154.5);
+  --highlight: oklch(0.873 0.185 112);
   --destructive: oklch(0.52 0.245 27.325);
-  --border: oklch(0.915 0.008 250);
-  --input: oklch(0.915 0.008 250);
-  --ring: oklch(0.51 0.105 181);
+  --border: oklch(0.9 0.025 83.4);
+  --input: oklch(0.9 0.025 83.4);
+  --ring: oklch(0.457 0.114 154.5);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --radius: 0.375rem;
+  --radius: 0.5rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -82,9 +89,11 @@
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", sans-serif;
-  --font-heading: "Jost Variable", sans-serif;
+  --font-sans: "Poppins", sans-serif;
+  /* The same family as the body, like GBD's site; its own token so the two can split later. */
+  --font-heading: "Poppins", sans-serif;
   --color-heading: var(--heading);
+  --color-highlight: var(--highlight);
   --color-primary-hover: var(--primary-hover);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -139,7 +148,7 @@
   h1,
   h2,
   h3 {
-    @apply font-heading text-heading;
+    @apply font-heading font-bold tracking-tight text-heading;
   }
 
   /* tw-animate-css ignores this preference. A count of 1 stops the OTP caret's infinite blink

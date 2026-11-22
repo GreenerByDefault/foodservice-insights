@@ -27,8 +27,7 @@
     "valibot": "catalog:"
   },
   "devDependencies": {
-    "@fontsource-variable/inter": "catalog:",
-    "@fontsource-variable/jost": "catalog:",
+    "@fontsource/poppins": "catalog:",
     "@gbd/browser-testing": "workspace:*",
     "@internationalized/date": "catalog:",
     "@lucide/svelte": "catalog:",

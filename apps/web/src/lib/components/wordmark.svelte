@@ -1,9 +1,9 @@
 <script lang="ts">
 import { APP_NAME } from '@gbd/core';
-import favicon from '#lib/assets/favicon.svg';
+import mark from '#lib/assets/mark.svg';
 import { cn } from '#lib/utils/shadcn.js';
 
-/** The app's name beside its mark, linking home. A text stand-in until GBD supplies a logo. */
+/** The app's name beside its mark, linking home. Our own mark in GBD's style until GBD supplies one. */
 interface Props {
   class?: string;
 }
@@ -12,7 +12,7 @@ let { class: className }: Props = $props();
 </script>
 
 <!-- `/` is right for a signed-in visitor too: it redirects them to `/orgs`. -->
-<a href="/" class={cn('flex shrink-0 items-center gap-2', className)}>
-  <img src={favicon} alt="" class="size-6">
-  <span class="font-heading text-lg font-medium text-heading">{APP_NAME}</span>
+<a href="/" class={cn('flex shrink-0 items-center gap-2.5', className)}>
+  <img src={mark} alt="" width="46" height="28" class="h-7 w-auto">
+  <span class="font-heading text-xl font-bold tracking-tight text-heading">{APP_NAME}</span>
 </a>

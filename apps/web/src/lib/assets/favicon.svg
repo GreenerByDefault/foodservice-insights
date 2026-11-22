@@ -1,11 +1,11 @@
 <!-- The two raster copies in `static/` are generated from this file; after changing it,
      regenerate them from `apps/web`:
        rsvg-convert -w 32 -h 32 src/lib/assets/favicon.svg | magick - static/favicon.ico
-       rsvg-convert -w 180 -h 180 -b '#234162' src/lib/assets/favicon.svg -o static/apple-touch-icon.png
+       rsvg-convert -w 180 -h 180 -b '#016939' src/lib/assets/favicon.svg -o static/apple-touch-icon.png
      The touch icon is filled to the edge because iOS rounds its corners itself. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <title>PLATE</title>
-  <rect width="32" height="32" rx="7" fill="#234162" />
-  <path d="M8 24C8 14.6 14.6 8 24 8c0 9.4-6.6 16-16 16Z" fill="#1B9F8D" />
-  <path d="M8 24 18 14" stroke="#234162" stroke-width="2" stroke-linecap="round" />
+  <circle cx="16" cy="16" r="16" fill="#016939" />
+  <path d="M9 23C9 14.7 14.7 9 23 9c0 8.3-5.7 14-14 14Z" fill="#FDF9F1" />
+  <path d="M9 23 17.5 14.5" stroke="#016939" stroke-width="2" stroke-linecap="round" />
 </svg>

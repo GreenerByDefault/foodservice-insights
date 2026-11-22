@@ -15,10 +15,7 @@ catalogs:
     '@biomejs/biome':
       specifier: 2.6.7
       version: 2.6.7
-    '@fontsource-variable/inter':
-      specifier: ^5.3.0
-      version: 5.3.0
-    '@fontsource-variable/jost':
+    '@fontsource/poppins':
       specifier: ^5.3.0
       version: 5.3.0
     '@internationalized/date':
@@ -223,10 +220,7 @@ importers:
         specifier: 'catalog:'
         version: 1.5.0(typescript@6.0.3)
     devDependencies:
-      '@fontsource-variable/inter':
-        specifier: 'catalog:'
-        version: 5.3.0
-      '@fontsource-variable/jost':
+      '@fontsource/poppins':
         specifier: 'catalog:'
         version: 5.3.0
       '@gbd/browser-testing':
@@ -698,11 +692,8 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
-  '@fontsource-variable/inter@5.3.0':
-    resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
-
-  '@fontsource-variable/jost@5.3.0':
-    resolution: {integrity: sha512-9FS8iBMJnfyPqQOi9dfMjSwYBIWd0kBD3/jl8VvtbIMY2pK+CSp3oAaTLS1V60rDoM7AfyPvuT+IUfJfGeCTKg==}
+  '@fontsource/poppins@5.3.0':
+    resolution: {integrity: sha512-cms1nM7U6SN8epIV1WMVOV8VsA645aSm3wHfzIQnkk188U341ThbJGSl2Sv54V29gnDbT2arMPfLzvVIIVCceQ==}
 
   '@internationalized/date@3.12.4':
     resolution: {integrity: sha512-M1dEn4c1U1HsSlaVR8upZtSqvXrTkHDfv18H01uCSJyjVLDxnBR38v/fMxecmlwXKR4i9HeZcmgQAPE6A+aGJQ==}
@@ -2315,9 +2306,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@fontsource-variable/inter@5.3.0': {}
-
-  '@fontsource-variable/jost@5.3.0': {}
+  '@fontsource/poppins@5.3.0': {}
 
   '@internationalized/date@3.12.4':
     dependencies:

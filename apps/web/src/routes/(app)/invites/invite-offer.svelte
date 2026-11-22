@@ -72,9 +72,7 @@ async function decline() {
     <Card.Content class="gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex min-w-0 flex-col gap-1">
         <!-- Wraps rather than truncating: the organization's name is what the invitee is deciding on. -->
-        <h2
-          class={['text-lg font-medium break-words', invite.isExpired && 'text-muted-foreground']}
-        >
+        <h2 class={['text-lg break-words', invite.isExpired && 'text-muted-foreground']}>
           {invite.organizationName}
         </h2>
         {#if invite.isExpired}
