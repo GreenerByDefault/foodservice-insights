@@ -21,9 +21,6 @@ export async function attemptMemberWrite(
   db: DatabaseExecutor,
   write: (transaction: Transaction<Database>) => Promise<void>,
 ): Promise<'done' | 'last-admin'> {
-  // Caught outside the transaction, not inside it: the violation has already aborted the
-  // transaction, so returning normally from inside would ask Postgres to commit it, and Kysely
-  // throws `AbortedTransactionError` when that commit comes back as a rollback.
   try {
     await withTransaction(db, write);
   } catch (cause) {

@@ -50,7 +50,6 @@ export async function _renameOrganization(
 
   const outcome = await withDbErrorHandling(
     async () => {
-      // Caught outside the transaction: see `attemptMemberWrite` for why not inside.
       try {
         await withTransaction(db, async (transaction) => {
           await transaction

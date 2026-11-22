@@ -67,9 +67,6 @@ export async function _createOrganization(
 
   const outcome = await withDbErrorHandling(
     async () => {
-      // Caught outside the transaction: see `attemptMemberWrite` for why not inside. Only the
-      // organization's own two unique constraints are an expected outcome; anything else
-      // propagates as a genuine database failure for withDbErrorHandling to classify.
       try {
         const organizationId = await withTransaction(db, async (transaction) => {
           const organization = await transaction
