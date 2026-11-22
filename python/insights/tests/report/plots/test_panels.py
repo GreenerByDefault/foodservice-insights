@@ -256,6 +256,24 @@ def test_monthly_plant_drawers_plot_the_share_in_month_order(
 
     assert ax.get_title() == expected
     assert _y_values(ax) == [[48.0, 55.3], [50, 50]]  # The second is the 50% reference line.
+    assert ax.get_ylim() == (0, 67)
+
+
+@pytest.mark.parametrize(
+    ("shares", "expected_top"),
+    [([20.0, 31.4], 38), ([80.0, 95.0], 100), ([0.0, 0.0], 100), ([np.nan, np.nan], 100)],
+)
+def test_monthly_plant_share_axis_tops_out_a_fifth_above_the_highest_share(
+    shares: list[float], expected_top: int
+):
+    split = dataclasses.replace(
+        PLANT_SPLIT, monthly=pd.DataFrame({"month_year": [JAN, FEB], "plant_pct": shares})
+    )
+    _fig, ax = plt.subplots()
+
+    panels.draw_plant_share_by_month(ax, split)
+
+    assert ax.get_ylim() == (0, expected_top)
 
 
 @pytest.mark.parametrize(

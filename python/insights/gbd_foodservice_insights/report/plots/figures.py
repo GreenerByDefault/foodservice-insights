@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from matplotlib.container import BarContainer
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights.plotting_utils import (
@@ -131,6 +132,12 @@ def plot_category_totals(monthly_category_data: pd.DataFrame, metric: Metric) ->
         order=category_totals.sort_values(metric.column, ascending=False)["category"],
         ax=ax,
     )
+    # Styled like `plot_emissions_by_category`'s labels. Seaborn draws no bar for a missing
+    # total, so the labels come from the drawn bars rather than from `category_totals`.
+    (bars,) = ax.containers
+    assert isinstance(bars, BarContainer)
+    ax.bar_label(bars, fmt="{:,.0f}", padding=5, fontsize=8, color="gray")
+    ax.set_xlim(right=category_totals[metric.column].max() * 1.1)
     ax.tick_params(axis="y", labelsize=10)
     set_title_font(ax, f"{metric.label} by Category Across All Months")
     ax.set_xlabel(metric.label)
