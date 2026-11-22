@@ -130,8 +130,8 @@ class Scenario:
     argument: str | None = None
 
 
-def parse_scenario(report_name: str | None) -> Scenario:
-    if report_name is None or not report_name.startswith(SCENARIO_PREFIX):
+def parse_scenario(report_name: str) -> Scenario:
+    if not report_name.startswith(SCENARIO_PREFIX):
         return Scenario(name=None)
 
     body = report_name.removeprefix(SCENARIO_PREFIX)

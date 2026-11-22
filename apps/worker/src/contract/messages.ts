@@ -41,7 +41,7 @@ const wholeNumber = v.pipe(v.number(), v.integer(), v.minValue(1));
 const RunManifestSchema = v.strictObject({
   analysisAttemptId: v.pipe(v.string(), v.regex(UUID_PATTERN)),
   report: v.strictObject({
-    name: v.nullable(nonEmptyString),
+    name: nonEmptyString,
     siteName: v.nullable(nonEmptyString),
     organizationName: nonEmptyString,
     unitSystem: v.picklist(UNIT_SYSTEMS),
@@ -289,7 +289,7 @@ export type ReportCounts = { basis: CountsBasis; monthly: unknown };
 export type RunManifestInput = {
   analysisAttemptId: AnalysisAttemptId;
   report: {
-    name: string | null;
+    name: string;
     siteName: string | null;
     organizationName: string;
     unitSystem: UnitSystem;
