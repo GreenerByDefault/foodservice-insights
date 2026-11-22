@@ -1,10 +1,10 @@
-/** Files that people mistake for a CSV, recognised by their bytes so we can say which one it is.
+/** Files that people mistake for a CSV, recognized by their bytes so we can say which one it is.
  *
- * This is a diagnostic, not a security control: recognising a signature only decides what we try
+ * This is a diagnostic, not a security control: recognizing a signature only decides what we try
  * next, never what we trust. For an `.xlsx`, that "what's next" is real — the browser's `excel/`
  * converter does unzip it — so the zip-bomb guard lives there, in `excel/zip.ts`, checked against
  * the archive's declared size before anything is inflated. An `.xls` has no such path; it is
- * recognised only so the rejection can name it rather than call it a corrupt CSV.
+ * recognized only so the rejection can name it rather than call it a corrupt CSV.
  *
  * Four bytes for the zip signature, not two: a CSV whose title line starts "PKG SUMMARY" shares
  * `PK` with every zip, but not the local-file-header bytes that follow. Matching the full header

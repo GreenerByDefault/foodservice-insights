@@ -11,7 +11,7 @@
  * relies on the deferred trigger that requires an admin. A fixture that still works is itself
  * evidence the schema behaves.
  *
- * Values that must be unique are randomised, because tests run concurrently against one database.
+ * Values that must be unique are randomized, because tests run concurrently against one database.
  */
 
 export * from './analysis-attempt.ts';

@@ -48,7 +48,7 @@ class PlantAnimalSplit:
     # In the report's metric: kilos or servings.
     plant_total: float
     animal_total: float
-    # `month_year`, `plant`, `animal`, and `plant_pct`, which is NaN in a month totalling 0.
+    # `month_year`, `plant`, `animal`, and `plant_pct`, which is NaN in a month totaling 0.
     monthly: pd.DataFrame
 
 

@@ -13,7 +13,7 @@ let handle: BlobStore | undefined;
 
 /** The web app's blob store handle, built on first use.
  *
- * Lazy because the build imports this module to analyse the routes, with no env vars set.
+ * Lazy because the build imports this module to analyze the routes, with no env vars set.
  *
  * Route handlers call this directly. Helper functions should instead take a `BlobStore`
  * parameter, so tests can hand them one scoped to a throwaway prefix.

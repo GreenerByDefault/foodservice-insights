@@ -40,7 +40,7 @@ def detect_unusual_sales(
 
     This exists to catch row-level values that are implausibly high for their
     category and are more likely to be entry, unit, or OCR mistakes than real
-    purchasing behaviour. Category-level medians and MAD keep the baseline
+    purchasing behavior. Category-level medians and MAD keep the baseline
     robust to skewed data, while ratio-based fallbacks still catch obvious
     extremes in categories with very low spread.
     """

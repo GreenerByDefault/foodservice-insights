@@ -152,13 +152,13 @@ def create_title_page(
 
 
 def _format_co2e(kg: float) -> str:
-    """Human-scale CO₂e: tonnes from 2,000 kg, with one decimal below 10 tonnes."""
+    """Human-scale CO₂e: metric tons from 2,000 kg, with one decimal below 10 metric tons."""
     if kg < 2000:
         return f"{kg:,.0f} kg"
-    tonnes = kg / 1000
-    if round(tonnes, 1) < 10:
-        return f"{tonnes:.1f} tonnes"
-    return f"{tonnes:,.0f} tonnes"
+    metric_tons = kg / 1000
+    if round(metric_tons, 1) < 10:
+        return f"{metric_tons:.1f} metric tons"
+    return f"{metric_tons:,.0f} metric tons"
 
 
 class CategoryShare(NamedTuple):
@@ -181,7 +181,7 @@ class ExecutiveNarrative:
     total_co2e_kg: float
     # `None` without headcounts.
     co2e_per_head: Co2ePerHead | None
-    # Percentages of the categorised food by weight.
+    # Percentages of the categorized food by weight.
     plant_pct: float
     animal_pct: float
     # Whether any animal product was bought, which `animal_pct` rounds away below 0.05%.
@@ -292,7 +292,7 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
     per_head = narrative.co2e_per_head
     paragraphs.append(
         f"Over this period the kitchen purchased about {narrative.total_food_kg:,.0f} kg "
-        "of categorised food. Producing that food, up to the farm gate, released an estimated "
+        "of categorized food. Producing that food, up to the farm gate, released an estimated "
         f"{headline} of carbon dioxide equivalent (CO₂e), the standard unit for comparing the "
         "climate impact of different foods. "
         + (
@@ -317,7 +317,7 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
     paragraphs.append(f"The biggest contributors were {top_text}.")
 
     paragraphs.append(
-        "All of the categorised food was plant-based."
+        "All of the categorized food was plant-based."
         if not narrative.any_animal
         else (
             "Within the categories this report tracks (mainly animal proteins, dairy, and "
@@ -696,7 +696,7 @@ def quality_lines(findings: Sequence[Finding], *, show_successes: bool) -> list[
     ]
     lines = [
         (
-            "This section summarises the automated checks run on your data before this report "
+            "This section summarizes the automated checks run on your data before this report "
             "was produced."
         ),
         "",
@@ -812,18 +812,18 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
 def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
     """Methodology note for the final page of the PDF. `diner_or_meal` is `None` without
     headcounts."""
-    normalising = (
+    normalizing = (
         []
         if diner_or_meal is None
         else [
-            f"  Per-{diner_or_meal} figures account for this by normalising against the number "
+            f"  Per-{diner_or_meal} figures account for this by normalizing against the number "
             f"of {diner_or_meal}s served."
         ]
     )
     return [
         (
             "This report was produced by Greener By Default using procurement data provided by "
-            "your organisation."
+            "your organization."
         ),
         "",
         "What is procurement data?",
@@ -846,7 +846,7 @@ def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
         "How should I interpret the monthly figures?",
         "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with",
         "  seasonal menus, catering events, term dates, and other operational factors.",
-        *normalising,
+        *normalizing,
         "",
         "How should I use this report?",
         "  The highest-carbon categories and products are the most impactful places to focus",

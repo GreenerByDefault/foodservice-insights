@@ -67,7 +67,7 @@ describe('convertWorkbook', () => {
     test.for([
       ['a built-in number format', 'built-in'],
       ['a custom number format', 'custom'],
-    ] as const)('writes a date recognised by %s as YYYY-MM-DD', async ([, style]) => {
+    ] as const)('writes a date recognized by %s as YYYY-MM-DD', async ([, style]) => {
       await expect(csvFrom([[{ date: '2026-01-05', style }]])).resolves.toBe('2026-01-05\n');
     });
 

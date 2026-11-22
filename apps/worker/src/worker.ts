@@ -3,7 +3,7 @@
  * rows nobody else will.
  *
  * Every method here is called directly by a test; `run()` is the only scheduler, and it is thin on
- * purpose. The behaviour each method wires up belongs to the module it calls —
+ * purpose. The behavior each method wires up belongs to the module it calls —
  * `attempt/directive.ts` decides what a live attempt needs, `attempt/verdict.ts` what a dead
  * child means, `sweeps/` what a row nobody owns needs — so this file is about *when* and *in what
  * order*, not about what.

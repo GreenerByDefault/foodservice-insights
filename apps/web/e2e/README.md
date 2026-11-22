@@ -4,7 +4,7 @@ Two suites share this directory, separated by suffix and by Playwright project:
 
 | Suffix | Asserts | Runs in |
 | --- | --- | --- |
-| `*.e2e.ts` | behaviour | host browser |
+| `*.e2e.ts` | behavior | host browser |
 | `*.screenshot.ts` | pixels, and axe's accessibility rules ([`lib/a11y.ts`](lib/a11y.ts)) | browser in Docker |
 
 See [`../playwright.config.ts`](../playwright.config.ts).
@@ -20,7 +20,7 @@ other axis: **what part of the product a spec covers.**
 | | |
 | --- | --- |
 | `lib/` | Helpers a spec imports. No tests, no side effects at import — except `lib/poll-interval.ts`, which reads `WORKER_MODE` at import, the same caveat `@gbd/browser-testing/fixtures` calls out for `@gbd/db/env`. |
-| `fixtures/` | The report-state catalogue, the built-to-spec organization builder, and the extended `test` that commits and cleans up both — on top of the shared identity and organization in [`@gbd/browser-testing/fixtures`](../../../packages/browser-testing/src/fixtures.ts). |
+| `fixtures/` | The report-state catalog, the built-to-spec organization builder, and the extended `test` that commits and cleans up both — on top of the shared identity and organization in [`@gbd/browser-testing/fixtures`](../../../packages/browser-testing/src/fixtures.ts). |
 | `setup/` | Getting the containerized browser up, taking it down, and optimizing screenshots afterward. Not tests of the app. |
 | `__screenshots__/` | The committed PNGs, nested to match the spec that captures them, and by viewport. |
 | everything else | Specs, both suites. |
@@ -91,7 +91,7 @@ chosen a display name, `'pinned'` for a screenshot that renders the signed-in ad
 [`packages/browser-testing/src/identity.ts`](../../../packages/browser-testing/src/identity.ts)
 owns all of it, including why GoTrue's users have to be mirrored into the run's database.
 
-Screenshots and e2e share the catalogue of report states, not any rows, so a behavioural spec is
+Screenshots and e2e share the catalog of report states, not any rows, so a behavioral spec is
 free to mutate what it created without affecting another test.
 
 A spec that needs more of an organization than that — a whole list of reports, a roster, a view

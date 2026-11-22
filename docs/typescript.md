@@ -55,7 +55,7 @@ stale code. Not every package implements every task.
 
 **Component tests** render a single component in a real browser via
 `vitest-browser-svelte` and Playwright's Chromium. They are fast, so prefer them over
-e2e tests for anything that is really about one component's behaviour.
+e2e tests for anything that is really about one component's behavior.
 
 **Web e2e tests** build the app and run it with Playwright. Debug with:
 

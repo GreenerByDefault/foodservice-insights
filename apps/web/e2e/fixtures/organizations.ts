@@ -5,7 +5,7 @@
  * organizations at once.
  *
  * Names collide on `organization_name_unique_ci`, so every caller passes its own unique one — a
- * random suffix for a behavioural spec, a fixed name for a screenshot whose committed image
+ * random suffix for a behavioral spec, a fixed name for a screenshot whose committed image
  * renders it.
  */
 
@@ -35,7 +35,7 @@ import { deriveOrganizationSlug } from '../../src/lib/server/orgs/slug.ts';
 export type OrganizationMemberSpec = {
   displayName?: string;
   /** Defaults to a random address — set this for a screenshot spec, whose committed image needs
-   * the same text on every run, unlike a behavioural spec that only asserts the row exists. A set
+   * the same text on every run, unlike a behavioral spec that only asserts the row exists. A set
    * address is run-lived rather than per-test (`findOrInsertAppUser`), so `--repeat-each` finds
    * the user the first run made instead of colliding on it. */
   email?: string;

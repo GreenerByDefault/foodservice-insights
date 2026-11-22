@@ -94,7 +94,7 @@ export const MAX_SHEETS_NAMED = 5;
 export const MAX_EXAMPLE_VALUES = 3;
 
 /** How much of a cell a problem message may quote back before it is elided. Long enough to
- * recognise the row by, short enough not to wrap the line it sits on.
+ * recognize the row by, short enough not to wrap the line it sits on.
  */
 export const MAX_QUOTED_CHARS = 40;
 

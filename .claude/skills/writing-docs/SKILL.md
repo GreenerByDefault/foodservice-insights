@@ -32,7 +32,7 @@ Comments covers the same question for code comments.
 - **Prefer documentation that executes.** A schema invariant belongs in a test that asserts
   the database rejects the violation. A cross-language contract belongs in golden fixtures
   that both sides parse. Those cannot rot silently; prose can.
-- **Docs carry intent; code carries mechanism.** If a refactor that changes no behaviour
+- **Docs carry intent; code carries mechanism.** If a refactor that changes no behavior
   would force you to edit a doc, that doc is describing mechanism — fix the doc.
 - **Record rejected alternatives as one-liners** (`*Rejected: X because Y.*`), wherever the
   decision itself is documented — a code comment counts. But only do this if there's a good

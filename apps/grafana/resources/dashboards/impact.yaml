@@ -66,8 +66,8 @@ spec:
                       SELECT
                         (SELECT count(*) FROM in_range) AS "Reports delivered",
                         (SELECT count(DISTINCT organization_id) FROM in_range) AS "Organizations",
-                        (SELECT sum(categorized_kilograms) / 1000 FROM in_range) AS "Food analyzed (tonnes)",
-                        (SELECT sum(total_co2e_kg) / 1000 FROM in_range) AS "CO₂e analyzed (tonnes)",
+                        (SELECT sum(categorized_kilograms) / 1000 FROM in_range) AS "Food analyzed (metric tons)",
+                        (SELECT sum(total_co2e_kg) / 1000 FROM in_range) AS "CO₂e analyzed (metric tons)",
                         (SELECT sum(plant_pct_by_weight * categorized_kilograms) / nullif(sum(categorized_kilograms), 0) / 100
                           FROM in_range) AS "Plant share by weight",
                         (SELECT avg(l.plant_pct_by_weight - f.plant_pct_by_weight)
@@ -80,7 +80,7 @@ spec:
             transformations: []
         description: 'Over the time range, counting only reports delivered: how many,
           and for how many organizations; the food they categorized, and its emissions,
-          in tonnes; and the plant share of that food by weight. Plant share gain per org
+          in metric tons; and the plant share of that food by weight. Plant share gain per org
           is how many percentage points an organization''s plant share
           has risen from its first report ever to its latest in the time range, averaged
           over the organizations with at least two reports. 40% to 45% is a gain of
@@ -114,7 +114,7 @@ spec:
                   value: 0
               - matcher:
                   id: byName
-                  options: Food analyzed (tonnes)
+                  options: Food analyzed (metric tons)
                 properties:
                 - id: unit
                   value: locale
@@ -122,7 +122,7 @@ spec:
                   value: 0
               - matcher:
                   id: byName
-                  options: CO₂e analyzed (tonnes)
+                  options: CO₂e analyzed (metric tons)
                 properties:
                 - id: unit
                   value: locale
@@ -191,7 +191,7 @@ spec:
             queryOptions: {}
             transformations: []
         description: The emissions of the food in the reports delivered each month,
-          in UTC, in tonnes of CO₂e. A report counts in the month it was delivered,
+          in UTC, in metric tons of CO₂e. A report counts in the month it was delivered,
           not the months its food was bought, so this tracks how much the product
           analyzes rather than when anyone emitted it. Includes reports since deleted.
           A file uploaded twice counts twice.

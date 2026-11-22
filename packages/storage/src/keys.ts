@@ -53,7 +53,7 @@ export const RESULT_FILE_FORMATS = {
 } as const satisfies Record<ResultFileKind, { extension: string; contentType: string }>;
 
 /** The trailing slash is load-bearing: `deletePrefix` matches the string, not path segments, so
- * `org/{id}` alone would reach into a differently-named neighbour.
+ * `org/{id}` alone would reach into a differently-named neighbor.
  */
 export function organizationPrefix(organizationId: OrganizationId): string {
   return `org/${organizationId}/`;

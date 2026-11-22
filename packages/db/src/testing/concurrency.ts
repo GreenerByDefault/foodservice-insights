@@ -36,7 +36,7 @@ const BLOCK_TIMEOUT_MS = 2_000;
 
 const POLL_INTERVAL_MS = 5;
 
-/** Fixture organizations carry this prefix so a later run can recognise ones left behind. */
+/** Fixture organizations carry this prefix so a later run can recognize ones left behind. */
 const FIXTURE_NAME_PREFIX = 'Concurrency fixture ';
 
 /** How old an abandoned fixture must be before the sweep will touch it. Long enough that no
@@ -96,13 +96,13 @@ async function closeAll(
   opened: readonly ConcurrentTransaction[],
 ): Promise<void> {
   // A committed or rolled back transaction has already handed its connection back to the pool,
-  // where another query may be using it by now. Cancelling its backend would then cancel that
+  // where another query may be using it by now. Canceling its backend would then cancel that
   // query instead, so the pid is only safe to touch while the transaction still owns it.
   const dangling = opened.filter(
     ({ transaction }) => !transaction.isCommitted && !transaction.isRolledBack,
   );
 
-  // Cancel from the pool, not from the transaction itself: node-pg serialises queries per
+  // Cancel from the pool, not from the transaction itself: node-pg serializes queries per
   // connection, so a `ROLLBACK` sent to a backend that is still waiting on a lock queues up behind
   // that wait rather than ending it.
   for (const { pid } of dangling) {
@@ -204,7 +204,7 @@ async function isBlockedBy(
 function neverBlocked(error: unknown): Error {
   if (error === undefined) {
     return new Error(
-      'concurrency harness: the statement completed instead of blocking, so nothing serialised ' +
+      'concurrency harness: the statement completed instead of blocking, so nothing serialized ' +
         'the two transactions',
     );
   }
@@ -215,7 +215,7 @@ function neverBlocked(error: unknown): Error {
 }
 
 /** Neither of these is ever a verdict about the schema: one means the blocker held its lock for
- * longer than the test allows, the other that cleanup cancelled the statement. Left unlabelled they
+ * longer than the test allows, the other that cleanup canceled the statement. Left unlabeled they
  * arrive as a `DatabaseError` at an `expect(...).rejects` and read as a genuine rejection. */
 function asHarnessFailure(error: unknown): Error | undefined {
   if (!(error instanceof DatabaseError)) return undefined;
@@ -228,7 +228,7 @@ function asHarnessFailure(error: unknown): Error | undefined {
   }
   if (error.code === POSTGRES_CODE_QUERY_CANCELED) {
     return new Error(
-      'concurrency harness: the blocked statement was cancelled, which only cleanup does',
+      'concurrency harness: the blocked statement was canceled, which only cleanup does',
       { cause: error },
     );
   }
@@ -347,7 +347,7 @@ export async function raceAgainstCommittedWrite<F, T, R>(
   });
 }
 
-/** A name the sweep below will recognise. Use it for any organization a test commits itself. */
+/** A name the sweep below will recognize. Use it for any organization a test commits itself. */
 export function fixtureOrganizationName(): string {
   return `${FIXTURE_NAME_PREFIX}${crypto.randomUUID()}`;
 }

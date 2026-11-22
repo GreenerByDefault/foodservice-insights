@@ -105,7 +105,7 @@ def categorize_unique_products(
     # --- Clean product names for uncategorized items ---
     unique_products_df = clean_product_names(unique_products_df, llm)
 
-    # --- Reuse categories for recognised cleaned names ---
+    # --- Reuse categories for recognized cleaned names ---
     unique_products_df = categorize_using_cleaned_name_history(unique_products_df, cache)
 
     # --- LLM categorization for still-uncategorized items ---

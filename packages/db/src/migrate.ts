@@ -12,7 +12,7 @@ function migrationFolder(): string {
 
 /** Apply every migration that has not run yet, all in one transaction.
  *
- * Safe to run concurrently from several processes: Kysely serialises them on a session-level
+ * Safe to run concurrently from several processes: Kysely serializes them on a session-level
  * advisory lock, so the loser waits and then finds nothing to do.
  *
  * @returns the migrations applied by this call, in order.

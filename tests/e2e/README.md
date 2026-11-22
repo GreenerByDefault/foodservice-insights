@@ -23,7 +23,7 @@ The one tier that exercises more than one component at a time:
 
 Every package's other test suite stops short of that: `apps/web/e2e` seeds rows straight into the database with no
 worker involved, and `apps/worker/src/worker.test.ts` drives the TypeScript `fake-child.ts` instead
-of a real child. This tier is only the wiring between components — a component's own behaviour
+of a real child. This tier is only the wiring between components — a component's own behavior
 belongs to its own tier.
 
 The worker runs in `WORKER_MODE=mock-llm` (see

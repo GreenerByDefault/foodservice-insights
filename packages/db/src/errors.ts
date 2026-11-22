@@ -1,7 +1,7 @@
 /** Telling a database outage apart from a statement Postgres refused.
  *
  * The two arrive as different classes, which is the whole reason this file exists. A statement
- * Postgres replied to — a violated constraint, a cancelled query — comes back as `pg`'s
+ * Postgres replied to — a violated constraint, a canceled query — comes back as `pg`'s
  * `DatabaseError` carrying a SQLSTATE. A database we never reached, or a connection that died under
  * us, comes back as a bare `Error` from the driver or from Node's socket layer, with no SQLSTATE
  * anywhere. So `instanceof DatabaseError` sees only half of what can go wrong, and the half it
@@ -58,7 +58,7 @@ export const TRANSIENT_DRIVER_MESSAGES: readonly string[] = [
 ];
 
 /** Whether a failure means the statement never ran to completion — the database unreachable, the
- * connection dropped, a statement cancelled, a race lost — rather than Postgres refusing what we
+ * connection dropped, a statement canceled, a race lost — rather than Postgres refusing what we
  * sent it. Retrying the identical statement can succeed.
  *
  * `'Connection terminated'` without `'unexpectedly'` is deliberately absent: `pg` uses that wording

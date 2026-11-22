@@ -2,7 +2,7 @@ import { reportHref } from '../../src/lib/hrefs.ts';
 /** The one thing no other layer can check: a real click, through the real dialog, hitting the
  * real `POST .../cancel` route, converging on the canceled screen without a page reload.
  *
- * Everything else about cancelling — the dialog's confirm/decline wiring, the feature client's
+ * Everything else about canceling — the dialog's confirm/decline wiring, the feature client's
  * status handling, the canceled screen's copy — is unit- and component-tested already.
  */
 

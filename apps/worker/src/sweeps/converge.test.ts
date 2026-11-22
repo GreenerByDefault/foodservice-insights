@@ -175,7 +175,7 @@ describe('reapExpiredAttempts', () => {
         const pendingReport = await insertReport(transaction);
         const pending = await insertAnalysisAttempt(transaction, { reportId: pendingReport.id });
 
-        // Claimed, backdated past the lease expiry, then finished — modelling a legitimately slow
+        // Claimed, backdated past the lease expiry, then finished — modeling a legitimately slow
         // but successful attempt, so the guard being tested is `status`, not merely a fresh lease.
         const succeededWorkerId = aWorkerId();
         const { attemptId: succeededId, reportId: succeededReport } = await processingAttempt(

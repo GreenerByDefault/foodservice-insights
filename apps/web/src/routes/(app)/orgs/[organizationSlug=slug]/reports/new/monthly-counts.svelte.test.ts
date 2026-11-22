@@ -4,7 +4,7 @@ import type { CountDraft } from '#lib/reports/monthly-counts.js';
 import MonthlyCounts from './monthly-counts.svelte';
 
 describe('MonthlyCounts', () => {
-  test('renders a labelled, required row for every month', async () => {
+  test('renders a labeled, required row for every month', async () => {
     const counts: CountDraft = $state({});
     const screen = await render(MonthlyCounts, {
       months: ['2026-01', '2026-02'],

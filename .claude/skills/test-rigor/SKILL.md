@@ -20,7 +20,7 @@ For each test file in scope, read it alongside the source it tests and make thre
    where full equality would work. Where the full value truly is noisy, keep the partial match
    and say why in the diff.
 3. **Noise.** Cut or merge tests that duplicate another test's coverage, assert what the type
-   system or a library already guarantees, or test implementation detail rather than behaviour.
+   system or a library already guarantees, or test implementation detail rather than behavior.
    A brittle test (exact wording of an incidental error message, a snapshot of a large unstable
    structure) is a candidate too.
 

@@ -40,7 +40,7 @@ function runBucketName(): string {
  *
  * Checks existence first rather than letting the empty-then-delete calls fail into that case:
  * `ListObjectsV2` against a missing bucket answers `NoSuchBucket`, a name `isNotFoundError`
- * doesn't recognise — it exists for a missing *key*, which Supabase Storage reports
+ * doesn't recognize — it exists for a missing *key*, which Supabase Storage reports
  * indistinguishably from a missing bucket (see `packages/storage/src/errors.ts`), not for a
  * missing bucket found by name up front like this.
  */

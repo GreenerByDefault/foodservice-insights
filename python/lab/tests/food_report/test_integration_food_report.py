@@ -79,7 +79,7 @@ def test_food_report_end_to_end_produces_valid_artifacts(staged_report_inputs, t
         region="us",
     )
 
-    # 1. The run completed and reported a recognised quality status. The staged
+    # 1. The run completed and reported a recognized quality status. The staged
     #    data has sparse categories, so quality may legitimately be a warning or
     #    invalid; what must hold is that the run itself succeeded.
     assert result["run_status"] == "success"

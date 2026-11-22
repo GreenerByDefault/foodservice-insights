@@ -259,7 +259,7 @@ def test_executive_summary_page_leads_with_the_headline_and_fits_the_page() -> N
 
     texts = _summary_page(narrative)
 
-    assert [t.text for t in texts[:2]] == ["Executive Summary", "2.5 tonnes CO₂e"]
+    assert [t.text for t in texts[:2]] == ["Executive Summary", "2.5 metric tons CO₂e"]
     assert texts[2].text.startswith("the greenhouse gas footprint of food purchased by The")
     assert " ".join(t.text for t in texts).endswith("The methodology is explained at the back.")
     assert all(t.y > 0 for t in texts)
@@ -410,7 +410,7 @@ def test_text_pages_without_headcounts_say_every_figure_is_a_total(
         "serve, so compare months with that in mind."
     ) in text
     assert "per diner" not in text.lower()
-    assert "normalising" not in text
+    assert "normalizing" not in text
 
 
 @pytest.mark.parametrize(
@@ -442,7 +442,7 @@ def test_quality_lines_explain_an_invalid_status() -> None:
         ],
         show_successes=True,
     ) == [
-        "This section summarises the automated checks run on your data before this report "
+        "This section summarizes the automated checks run on your data before this report "
         "was produced.",
         "",
         "One or more data issues were found that may affect the accuracy of these results. "
@@ -464,7 +464,7 @@ def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
         ],
         show_successes=False,
     ) == [
-        "This section summarises the automated checks run on your data before this report "
+        "This section summarizes the automated checks run on your data before this report "
         "was produced.",
         "",
         "Your data passed most checks, but a few things are worth noting. See the details below.",
@@ -480,7 +480,7 @@ def test_quality_lines_for_the_customer_say_so_when_every_check_passed() -> None
         [_finding("success", "All required columns present."), _finding("info", "A note.")],
         show_successes=False,
     ) == [
-        "This section summarises the automated checks run on your data before this report "
+        "This section summarizes the automated checks run on your data before this report "
         "was produced.",
         "",
         "All automated data checks passed — your data looks complete and consistent.",
@@ -808,12 +808,12 @@ def test_executive_narrative_omits_categories_without_emissions() -> None:
     ("kg", "expected"),
     [
         (1999.4, "1,999 kg"),
-        (2000, "2.0 tonnes"),
-        (2501, "2.5 tonnes"),
-        (9949, "9.9 tonnes"),
-        (9960, "10 tonnes"),
-        (12_499, "12 tonnes"),
-        (1_234_567, "1,235 tonnes"),
+        (2000, "2.0 metric tons"),
+        (2501, "2.5 metric tons"),
+        (9949, "9.9 metric tons"),
+        (9960, "10 metric tons"),
+        (12_499, "12 metric tons"),
+        (1_234_567, "1,235 metric tons"),
     ],
 )
 def test_format_co2e(kg: float, expected: str) -> None:
@@ -842,8 +842,8 @@ def _narrative(**overrides: Any) -> ExecutiveNarrative:
 
 def test_narrative_paragraphs_describe_the_footprint() -> None:
     assert _narrative_paragraphs(_narrative()) == [
-        "Over this period the kitchen purchased about 1,234 kg of categorised food. Producing "
-        "that food, up to the farm gate, released an estimated 2.5 tonnes of carbon dioxide "
+        "Over this period the kitchen purchased about 1,234 kg of categorized food. Producing "
+        "that food, up to the farm gate, released an estimated 2.5 metric tons of carbon dioxide "
         "equivalent (CO₂e), the standard unit for comparing the climate impact of different "
         "foods. That works out "
         "at roughly 1.23 kg of CO₂e per meal.",
@@ -862,8 +862,8 @@ def test_narrative_paragraphs_describe_the_footprint() -> None:
 
 def test_narrative_paragraphs_without_headcounts_say_the_figures_are_totals() -> None:
     assert _narrative_paragraphs(_narrative(co2e_per_head=None))[0] == (
-        "Over this period the kitchen purchased about 1,234 kg of categorised food. Producing "
-        "that food, up to the farm gate, released an estimated 2.5 tonnes of carbon dioxide "
+        "Over this period the kitchen purchased about 1,234 kg of categorized food. Producing "
+        "that food, up to the farm gate, released an estimated 2.5 metric tons of carbon dioxide "
         "equivalent (CO₂e), the standard unit for comparing the climate impact of different "
         "foods. No diner or meal "
         "counts were provided, so these figures are totals. Sites differ in size, so they can't "
@@ -884,7 +884,7 @@ def test_narrative_paragraphs_caveat_the_quality() -> None:
 
     assert paragraphs[1:] == [
         "The biggest contributors were Legumes (70%) and Cheese (30%).",
-        "All of the categorised food was plant-based.",
+        "All of the categorized food was plant-based.",
         "Some data-quality notes apply to this analysis; they are listed in plain language on "
         "the next page.",
         "The pages that follow show how the footprint breaks down by month, category and "
@@ -918,7 +918,7 @@ def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> N
 
     assert _narrative_paragraphs(narrative)[1:] == [
         "The biggest contributors were Legumes (100%).",
-        "All of the categorised food was plant-based.",
+        "All of the categorized food was plant-based.",
         "The pages that follow show how the footprint breaks down by month, category and "
         "product. The methodology is explained at the back.",
     ]

@@ -61,7 +61,7 @@ export async function expectScreenshots(
     await expect(page).toHaveScreenshot(shot, { fullPage: true, clip });
     // Every width, since a Tailwind breakpoint can swap which markup is visible, and axe skips
     // what is hidden. After the capture, which waits for the page to settle: a scan mid-transition
-    // would measure contrast on half-faded colours.
+    // would measure contrast on half-faded colors.
     await expectNoA11yViolations(page, join(dir, ...shot));
   }
 

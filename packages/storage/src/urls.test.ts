@@ -1,8 +1,8 @@
-/** Proves a signed URL is honoured by a real Supabase Storage S3 endpoint.
+/** Proves a signed URL is honored by a real Supabase Storage S3 endpoint.
  *
  * Every fetch here is a plain `fetch()` with no SDK and no credentials — the request a browser
  * makes once `/file/:id` redirects it. It checks that Supabase accepts our path-style,
- * explicitly-credentialed URL and honours the response-header overrides we depend on.
+ * explicitly-credentialed URL and honors the response-header overrides we depend on.
  */
 
 import { describe, expect, test } from 'vitest';

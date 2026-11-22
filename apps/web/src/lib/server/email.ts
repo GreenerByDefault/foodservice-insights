@@ -18,7 +18,7 @@ let handle: Emailer | undefined;
 
 /** The web app's emailer handle, built on first use.
  *
- * Lazy because the build imports this module to analyse the routes, with no env vars set.
+ * Lazy because the build imports this module to analyze the routes, with no env vars set.
  */
 export function emailer(): Emailer {
   handle ??= initializeEmailer({

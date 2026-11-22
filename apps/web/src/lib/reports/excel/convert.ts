@@ -126,7 +126,7 @@ function isoDateOf(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/** Excel's own precision. The sheet XML serialises a formula result like `=B2*0.453592` as
+/** Excel's own precision. The sheet XML serializes a formula result like `=B2*0.453592` as
  * `5.669900000000001`, which `csv/rules/weights.ts` refuses for its digit count — although Excel
  * both displays and saves-as-CSV `5.6699`. Rounding to what Excel holds is transcription, not a
  * guess.

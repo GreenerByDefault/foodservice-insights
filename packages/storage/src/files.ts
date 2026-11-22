@@ -116,7 +116,7 @@ function describeFile(body: Uint8Array, contentType: string): Omit<StoredFile, '
     byteSize: body.byteLength,
     contentType,
     // Copied out of the `Buffer` `digest()` returns, so the value is the plain `Uint8Array` the
-    // type promises — a `Buffer` would satisfy the type but serialise as something else.
+    // type promises — a `Buffer` would satisfy the type but serialize as something else.
     checksumSha256: Uint8Array.from(createHash('sha256').update(body).digest()),
   };
 }

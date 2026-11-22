@@ -50,7 +50,7 @@ async function uploadReport(
   await expect(page).toHaveURL(new RegExp(`/orgs/${organizationSlug}/reports/[0-9a-f-]+$`));
 }
 
-test('a report uploaded through the form is analysed, downloadable, and emailed about', async ({
+test('a report uploaded through the form is analyzed, downloadable, and emailed about', async ({
   page,
   user,
   org,

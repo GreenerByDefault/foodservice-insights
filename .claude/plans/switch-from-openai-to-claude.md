@@ -34,7 +34,7 @@ since the Oct 25 import of GBD's final files. GBD's cleanups are in them: the 58
 - **The hard cases are rare but expensive:**
   - Rows by kind: 538 Kosher or Halal, 523 meatballs or sausages, 495 vegan, plant-based or Quorn,
     604 soups, and 136 texture-modified ("Level 4").
-  - **Still labelled Pork after GBD's cleanup:**
+  - **Still labeled Pork after GBD's cleanup:**
     - 5 Halal rows, such as "Aminah Halal Slicd Beef Pepperoni" and "Chicken Meatballs in Tomato
       Sauce Halal PC".
     - 13 rows that name beef, chicken or turkey and no pork, such as "Beef sausages" and "Hot Dog
@@ -129,7 +129,7 @@ refuses to run without it.
 
 **Sample, ~900 products with a fixed seed:**
 - Each hard slice above, capped at 100 rows.
-- Every row that names a non-pork meat but is labelled Pork.
+- Every row that names a non-pork meat but is labeled Pork.
 - 400 random rows.
 
 **Run:**
