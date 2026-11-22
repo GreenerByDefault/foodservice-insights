@@ -52,7 +52,7 @@ MAX_POSTGRES_INTEGER: Final = 2**31 - 1
 
 @dataclass(frozen=True)
 class ReportInputs:
-    name: str | None
+    name: str
     site_name: str | None
     organization_name: str
     unit_system: UnitSystem
@@ -89,7 +89,7 @@ def parse_run_manifest(text: str) -> RunManifest:
     manifest = RunManifest(
         analysis_attempt_id=analysis_attempt_id,
         report=ReportInputs(
-            name=report.nullable_string("name"),
+            name=report.string("name"),
             site_name=report.nullable_string("siteName"),
             organization_name=report.string("organizationName"),
             unit_system=report.literal("unitSystem", UNIT_SYSTEMS),

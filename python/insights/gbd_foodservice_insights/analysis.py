@@ -111,7 +111,7 @@ class AnalysisRequest:
     run_id: str  # opaque; log correlation only
     input_csv: Path  # product,date,weight — UTF-8, ISO dates, plain numbers
     output_directory: Path  # where to write the pdf and xlsx
-    report_name: str | None
+    report_name: str
     site_name: str | None
     organization_name: str
     counts: MonthlyCounts | None  # `None` when the uploader chose not to give counts
@@ -192,8 +192,7 @@ def analyze(
                 report,
                 charts,
                 pdf_path,
-                # A null name predates the upload form requiring one.
-                title=request.report_name or "Food Report",
+                title=request.report_name,
                 client_name=_client(request),
                 show_quality_successes=False,
             )

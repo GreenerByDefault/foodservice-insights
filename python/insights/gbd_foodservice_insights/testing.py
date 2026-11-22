@@ -159,7 +159,7 @@ SAMPLE_COUNTS: Final = MonthlyCounts("people", MappingProxyType(dict.fromkeys(SA
 def a_request(
     directory: Path,
     *,
-    report_name: str | None = None,
+    report_name: str = "Q1 2026 dining",
     site_name: str | None = None,
     counts: MonthlyCounts | None = SAMPLE_COUNTS,
     unit_system: UnitSystem = "kg",

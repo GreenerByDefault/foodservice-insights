@@ -32,9 +32,8 @@ from worker_child.testing import (
 # ----------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("report_name", [None, "Q1 2026 dining"])
-def test_a_name_not_starting_with_bang_is_the_happy_path(report_name: str | None) -> None:
-    assert parse_scenario(report_name) == Scenario(name=None)
+def test_a_name_not_starting_with_bang_is_the_happy_path() -> None:
+    assert parse_scenario("Q1 2026 dining") == Scenario(name=None)
 
 
 def test_a_bare_scenario_name_has_no_argument() -> None:
