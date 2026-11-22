@@ -33,18 +33,30 @@ _TEXT_PAGE_TOP_Y = 0.86
 _TEXT_PAGE_BOTTOM_Y = 0.08
 _TEXT_PAGE_FONT_SIZE = 11
 
+_TITLE_LINE_HEIGHT = 0.05
 _TITLE_CLIENT_LINE_HEIGHT = 0.04
 
 
 def create_title_page(
     pdf: PdfSink,
+    title: str,
     client: str,
     subtitle: str,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
     """Render a branded title page in the PDF."""
     fig, ax = new_text_figure(fig_size)
-    draw_heading(ax, 0.65, "Food Report", fontsize=28, va="center")
+    title_lines = wrap_to_width(
+        title,
+        fig_size[0] - 2 * PAGE_MARGIN_IN,
+        fontsize=28,
+        fontfamily=TITLE_FONT,
+        fontweight="bold",
+    )
+    # A long title grows up the page, so its last line keeps its place above the client.
+    for index, line in enumerate(title_lines):
+        y = 0.65 + (len(title_lines) - 1 - index) * _TITLE_LINE_HEIGHT
+        draw_heading(ax, y, line, fontsize=28, va="center")
     # Decoration only: chartreuse is too faint on white to carry text.
     ax.plot(
         [0.44, 0.56],

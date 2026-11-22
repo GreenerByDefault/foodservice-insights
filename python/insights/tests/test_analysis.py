@@ -508,9 +508,19 @@ def test_hands_the_report_the_forms_answers(
         "report_progress": report_progress,
     }
     assert fake_report.pdf_kwargs == {
+        "title": "Food Report",
         "client_name": client,
         "show_quality_successes": False,
     }
+
+
+def test_titles_the_pdf_with_the_report_name(tmp_path: Path, fake_report: FakeReport) -> None:
+    request = a_request(tmp_path, report_name="Spring Menu Review")
+    request.input_csv.write_text(input_csv_text([("Cheddar Cheese", "2025-01-15", 10.0)]))
+
+    analyze(request, llm=KeywordLlmClient())
+
+    assert fake_report.pdf_kwargs["title"] == "Spring Menu Review"
 
 
 # ----------------------------------------------------------------------

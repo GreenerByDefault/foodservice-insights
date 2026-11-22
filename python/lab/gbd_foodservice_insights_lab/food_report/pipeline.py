@@ -422,6 +422,7 @@ def _write_pdf(
             report,
             charts,
             path,
+            title="Food Report",
             client_name=client_name,
             show_quality_successes=show_quality_successes,
         )

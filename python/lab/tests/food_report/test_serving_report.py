@@ -304,7 +304,7 @@ def test_write_serving_pdf_summarises_as_key_values_without_the_procurement_pros
         "Food Report",
         "Executive Summary",
         "",
-        "Category Template",
+        "Servings by Category and Month",
         "Data Completeness & Quality",
     ]
     assert recording_pdf.pages[0][:3] == ["Food Report", "Acme", "Serving | Jan 2024 – Feb 2024"]

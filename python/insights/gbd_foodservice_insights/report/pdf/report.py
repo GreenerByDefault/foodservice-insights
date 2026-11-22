@@ -13,6 +13,7 @@ from gbd_foodservice_insights.plotting_utils import (
     close_new_figures_on_error,
 )
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, date_range_label
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.pdf.content import (
     REFERENCES_HEADING,
     about_pages,
@@ -85,12 +86,13 @@ def write_report_pdf(
     charts: ReportCharts,
     path: Path,
     *,
+    title: str,
     client_name: str,
     show_quality_successes: bool,
 ) -> None:
-    """Write the report's PDF. With ``show_quality_successes`` (the data scientist's report),
-    the quality section lists passed checks and notes too; without it (the customer's), only
-    warnings and issues."""
+    """Write the report's PDF, under ``title`` on its cover. With ``show_quality_successes``
+    (the data scientist's report), the quality section lists passed checks and notes too;
+    without it (the customer's), only warnings and issues."""
     quality_status = quality_status_from_findings(report.findings)
     aggregation = report.aggregation
     diner_or_meal = None if report.headcounts is None else report.headcounts.diner_or_meal
@@ -107,7 +109,7 @@ def write_report_pdf(
         for fig in charts.figures:
             body.savefig(fig)
 
-        create_category_template_pages(body, aggregation.template)
+        create_category_template_pages(body, aggregation.template, KILOS)
         if aggregation.animal_emissions_intensity is not None:
             create_animal_intensity_page(body, aggregation.animal_emissions_intensity)
         if aggregation.animal_emissions_concentration is not None:
@@ -116,14 +118,14 @@ def write_report_pdf(
             create_substitution_scenarios_page(body, aggregation.substitution_scenarios)
 
         methodology_index = len(body.figures)
-        for title, lines in zip(
+        for page_title, lines in zip(
             ("About This Report", "About This Report (cont.)"),
             about_pages(diner_or_meal),
             strict=True,
         ):
             create_text_page(
                 body,
-                title,
+                page_title,
                 lines,
                 bold_lines={
                     line for line in lines if line.endswith("?") or line == REFERENCES_HEADING
@@ -132,7 +134,9 @@ def write_report_pdf(
 
         with PdfPages(path) as pdf_pages:
             pdf = _NumberedPdf(pdf_pages)
-            create_title_page(pdf, client_name, f"Procurement | {date_range_label(report.rows)}")
+            create_title_page(
+                pdf, title, client_name, f"Procurement | {date_range_label(report.rows)}"
+            )
             # The summary takes the next page, and the body follows it.
             first_body_page = pdf.page_count + 2
             create_executive_summary_page(

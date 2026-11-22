@@ -14,6 +14,7 @@ from gbd_foodservice_insights.plotting_utils import (
     GBD_SAND,
     LETTER_LANDSCAPE,
 )
+from gbd_foodservice_insights.report.metric import Metric
 from gbd_foodservice_insights.report.pdf.layout import (
     PdfSink,
     draw_heading,
@@ -30,9 +31,10 @@ _MULTILINE_FONT_SIZE = 11.25
 def create_category_template_pages(
     pdf: PdfSink,
     template: pd.DataFrame,
+    metric: Metric,
     fig_size: tuple[float, float] = LETTER_LANDSCAPE,
 ) -> None:
-    """Render the category x month template, splitting its months across as many pages as
+    """Render the category x month table of ``metric``, splitting its months across as many pages as
     they need to render unclipped."""
     display_df = _display_table(_format_category_template_for_pdf(template))
     # One font size on every page, since the columns are measured at it. Each page repeats the
@@ -43,10 +45,8 @@ def create_category_template_pages(
     month_width = _table_width_in(fig_size) - widths[0]
     pages = _pack_columns(widths[1:], month_width)
     for page_number, page_columns in enumerate(pages, start=1):
-        heading = (
-            "Category Template"
-            if len(pages) == 1
-            else f"Category Template ({page_number} of {len(pages)})"
+        heading = f"{metric.label} by Category and Month" + (
+            "" if len(pages) == 1 else f" ({page_number} of {len(pages)})"
         )
         columns = [index + 1 for index in page_columns]
         slack = (month_width - sum(widths[index] for index in columns)) / max(len(columns), 1)
@@ -190,8 +190,22 @@ def _table_column_widths_in(display_df: pd.DataFrame, font_size: float) -> list[
 
 
 def _pack_columns(widths: list[float], available_width: float) -> list[list[int]]:
-    """Greedily group column indexes, in order, into pages whose widths fit
-    ``available_width``. A column too wide for any page gets a page of its own."""
+    """Group column indexes, in order, into as few pages fitting ``available_width`` as they
+    need, balanced so the last page is not left holding a column or two. A column too wide for
+    any page gets a page of its own."""
+    page_count = len(_pack_columns_greedily(widths, available_width))
+    # The narrowest page width that still needs no more pages spreads the columns most evenly.
+    narrow, wide = 0.0, available_width
+    for _ in range(30):
+        middle = (narrow + wide) / 2
+        if len(_pack_columns_greedily(widths, middle)) <= page_count:
+            wide = middle
+        else:
+            narrow = middle
+    return _pack_columns_greedily(widths, wide)
+
+
+def _pack_columns_greedily(widths: list[float], available_width: float) -> list[list[int]]:
     pages: list[list[int]] = [[]]
     used = 0.0
     for index, width in enumerate(widths):
