@@ -2,7 +2,8 @@
 
 Procedures that whoever runs the app at GBD does by hand in production, in a vendor's dashboard.
 A person runs each one; an AI agent may read or write them but never performs one. When an alert
-fires, its rule says what firing means; then follow the logs runbook.
+fires, its rule says what firing means; then
+[trace the problem through the logs](trace-a-problem-through-the-logs.md).
 
 ## Where things are
 
@@ -27,6 +28,8 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 - [Review cache suggestions](review-cache-suggestions.md) in Supabase Studio.
 - [Rotate a secret](rotate-a-secret.md) in the `production` Environment.
 - [Deploy the worker](deploy-the-worker.md), the one deploy done by hand.
+- [Trace a problem through the logs](trace-a-problem-through-the-logs.md), from a user's report,
+  an alert or a failed report to the lines that explain it.
 
 ## Writing one
 

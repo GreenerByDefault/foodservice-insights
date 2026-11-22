@@ -6,40 +6,51 @@ Both apps forward their stdout to one Better Stack source (#659, `docs/architect
 is left is everything the team reads that stream through, and the two alerts
 [`alerts.md`](alerts.md) gave to Better Stack: the uptime monitor and the `error`-line alert.
 
+**The repo half is on the `finish-better-stack` branch**: the runbook
+`docs/runbooks/trace-a-problem-through-the-logs.md`, its line in the runbooks README, and
+`docs/architecture.md` § Logs and § Alerts written as if the checklist below is done. Merge it,
+deleting this plan in the same PR, once the checklist is done and its **Open**s are settled.
+
 Facts from two production lines (2026-10-18), a web access line and a worker's `Worker started`:
 
 - **Each line names its app in `syslog.appname`**: `foodservice-insights-web` or
-  `foodservice-insights-worker`. `message_json.hostname` names the pod. So the loggers need no
-  `service` binding.
+  `foodservice-insights-worker`. `message_json.hostname` names the pod.
 - **The JSON is parsed** into `message_json`, and pino's `level` label is lifted to the top-level
-  `level`. **`message` is empty**: the text is `message_json.msg`, so Live tail shows blank lines
-  until its view is set to show `msg`.
-- **The access line carries what the saved views need**: `requestId`, `routeId`, `path`, `status`,
-  `durationMs`, `isDataRequest`, `userId`. `Worker started` carries `workerGitSha`.
+  `level`. **`message` is empty**: the text is `message_json.msg`.
+- **The access line carries what the presets need**: `requestId`, `routeId`, `path`, `status`,
+  `durationMs`, `isDataRequest`, `userId`. `Worker started` carries `workerGitSha`. An attempt's
+  lines carry `attemptId` and `reportId`.
 - **Probes and polls are not in the stream.** Their access lines are `debug`
-  ([`hooks.server.ts`](../../apps/web/src/hooks.server.ts) `UNATTENDED_ROUTES`), below
-  production's level, so the stream at `info` is what people did.
-- **`error` lines are already rare and deduplicated.** The worker logs only the first failure of a
-  streak at `error` ([`failureStreak`](../../apps/worker/src/failures.ts)). `handleError` logs at
-  `error` only what no route anticipated, and SvelteKit's own 404s and 405s are not logged.
+  ([`hooks.server.ts`](../../apps/web/src/hooks.server.ts) `UNATTENDED_ROUTES`).
+- **`error` lines are already rare and deduplicated** ([`failureStreak`](../../apps/worker/src/failures.ts),
+  `handleError`).
+
+Facts from Better Stack's docs (2026-11-22):
+
+- **Saved views are Live tail "Presets"** (top left of Live tail). It ships a few for HTTP
+  requests, database queries and errors, keyed to its integrations' field names. Ours need our
+  own.
+- **No ready-made dashboard fits.** About 150 templates, nearly all tied to an integration
+  (Kubernetes, Heroku, Vercel, the clouds). None reads a generic JSON source from App Platform.
+- **Dashboards chart metrics, not lines.** Every source gets a `logs_count` metric with a `level`
+  label for free. Charting a JSON field, such as `durationMs` by `routeId`, needs a
+  **Logs to metrics** extraction on the source first
+  ([docs](https://betterstack.com/docs/logs/dashboards/logs-to-metrics/)).
+- **A log alert is an alert on a dashboard chart**: there is no separate Alerts page
+  ([docs](https://betterstack.com/docs/logs/dashboards/alerts/)).
+- **Seats:** a "Team member (Telemetry access)" is free. A "Responder (Incidents + Telemetry)" is
+  paid per seat, and the uptime docs route incidents to responders and on-call.
 - **The free plan:** logs kept 3 days, 3 GB a month. We write tens of megabytes. 10 monitors and
-  heartbeats, checked every 3 minutes, alerting by email or Slack
-  ([pricing](https://betterstack.com/pricing),
-  [check frequency](https://betterstack.com/docs/uptime/check-frequency/)). Nano keeps 30 days.
-  The pricing page lists dashboards, SQL and anomaly alerts without saying which plan has them.
-- **A failure's durable record is on its row**: `failure_reason` and `failure_detail` on
-  `analysis_attempt`. Logs add how it failed, for three days.
+  heartbeats, checked every 3 minutes, alerting by email or Slack. The pricing page does not say
+  which plan has dashboards, SQL, log alerts or escalation policies.
 
-Not yet seen in production, checked in PR 1:
+Still open, settled by the checklist:
 
-- An attempt's lines, the child's exit included, found by `attemptId`.
-- A record at the size cap arriving whole. Post an oversized report to `/csp-report`: its `warn`
-  line arrives with `truncated` naming what was dropped.
-- **Open:** which of saved views, a dashboard, and an alert on a log query the free plan
-  includes. Try each in the UI; whatever it refuses waits for Nano.
-- **Open:** whether the free plan's uptime alerts reach every team member, or only the account
-  owner. The pricing page's free team seat is Telemetry only. If only the owner, the monitor
-  emails a shared address the team reads.
+- **Open:** whether the free plan allows each of presets, Logs to metrics, dashboards and a chart
+  alert. Whatever it refuses waits for Nano.
+- **Open:** whether presets are shared with the whole team, or only with whoever made them.
+- **Open:** whether a free plan's incidents email every team member, or only responders and the
+  account owner. If only the owner, the monitor emails a shared address the team reads.
 
 ## Decisions
 
@@ -48,85 +59,129 @@ Not yet seen in production, checked in PR 1:
 Buy Nano the first time someone needs a line older than three days and it is gone, which will
 probably be the first support question.
 
-### Saved views live in Better Stack; procedures live in the runbook
+### Presets live in Better Stack; procedures live in the runbook
 
-A view is a filter made in a few clicks over three days of data, so it is kept where it is used,
-and a copy in the repo would drift from it. What the UI cannot hold is a procedure that crosses
-systems, such as going from a user's report to the row and then to the lines. That is one runbook,
-`docs/runbooks/trace-a-problem-through-the-logs.md`, following [its conventions](../../docs/runbooks/README.md#writing-one).
+A preset is a filter made in a few clicks, kept where it is used; a copy in the repo would drift.
+The procedure that crosses systems, from a user's report to the row and then to the lines, is the
+runbook. Looking up one `requestId`, `attemptId`, `reportId` or `userId` is a search, not a
+preset.
 
-The views, each one condition on top of the whole stream:
+### A dashboard over the access lines, if Logs to metrics is free
 
-| View | Lines | For |
-| --- | --- | --- |
-| Web | `syslog.appname` is the web | Everything one app did |
-| Worker | `syslog.appname` is the worker | " |
-| Errors | `level` is `error` or `fatal` | What the alert fires on, to read when it does |
-| Warnings and up | `level` is `warn`, `error` or `fatal` | Children that exited nonzero, failed verdicts, CSP reports |
-| Server errors | `msg` is `Request` and `status` ≥ 500 | Which routes are failing, and for whom |
-| Slow requests | `msg` is `Request` and `durationMs` over the `REQUEST_DURATION_P95_MS` rule in [`.do/web.yaml`](../../.do/web.yaml) | The requests behind the host's latency alert |
-| Attempts | `attemptId` exists | Every attempt's claim, child exit and verdict, in order |
-| Starts and stops | `msg` is `Worker started` or `Shutting down`, or starts `Received a signal` | Deploys and restarts, and which commit the worker ran |
+Requests by status, and p95 `durationMs` by `routeId`: the per-route half of
+`docs/requirements.md` § Observability's "request durations and error counts", which App
+Platform's Insights tab charts only per app. If the free plan refuses Logs to metrics, the
+dashboard holds only the error chart the alert needs, and the per-route charts wait for Nano.
 
-Looking up one `requestId`, `attemptId`, `reportId` or `userId` is a search, not a view. The
-runbook entry names the field.
+### The monitor and the `error`-line alert, made in the UI
 
-### A dashboard over the access lines
-
-Requests by status, and p95 `durationMs` by `routeId`. That is the per-route half of
-`docs/requirements.md` § Observability's "request durations and error counts", which App Platform's
-Insights tab charts only per app. Made in the UI, if the free plan has dashboards.
-
-### The monitor and the `error`-line alert
-
-Both made in the UI and named in `docs/architecture.md` § Alerts, so they are not invisible.
 *Rejected: Better Stack's Terraform provider.* That is state to keep for a few settings made once.
 
-- **One monitor on the public `/health/ready`**, through the same DNS and edge a user goes
-  through, at `plate.greenerbydefault.org`. Three minutes is slow for a page, but the host's
-  readiness probe and the data rules see most outages sooner. *Considered, not done: paying for
-  30-second checks.* Buy them if an outage is ever reported to us before the monitor fires.
-- **An alert on any `error` or `fatal` line** from either app. These are already kept for things a
-  person should read, and the alert catches what no other layer does: a 500 on a page, a sweep
-  that keeps failing, or a verdict write waiting out a database blip. If the free plan cannot
-  alert on a log query, the Errors view is read whenever another alert fires, until logs are paid
-  for.
-- Both email every team member, per [`alerts.md`](alerts.md) § Delivery.
-- *Considered, not done: a heartbeat from the worker.* It would be free and would say "no worker
-  is alive" during a quiet hour. Every failure mode is caught without it: a dead fleet shows up as
-  queue wait once there is demand, and a crash loop as `RESTART_COUNT`. Add one if that
-  quiet-hour notice is ever missed.
-- *Considered, not done: a scheduled check that submits a form.* A wrong `PROTOCOL_HEADER` fails
-  every mutating request while every GET passes. But a person checks that by hand, and
-  it changes only with configuration. A mutating request every few minutes in production would
-  also write rows into the very metrics the data rules count.
-- *Rejected: an error tracker (Sentry, or Better Stack's own).* It means an SDK in both processes,
-  and what it buys is grouping. That matters only once errors are too frequent to read one by one,
-  and until then the `error`-line alert is the same signal.
-- *Considered, not done: a status page.* The free plan has one, but the users are a few
-  organizations we talk to directly.
+- **One monitor on the public `/health/ready`**, through the same DNS and edge a user goes through.
+  *Considered, not done: paying for 30-second checks.* Buy them if an outage is ever reported to
+  us before the monitor fires.
+- **An alert on any `error` or `fatal` line** from either app. If the free plan cannot alert on a
+  chart, the Errors preset is read whenever another alert fires, until logs are paid for.
+- *Considered, not done: a heartbeat from the worker.* A dead fleet shows up as queue wait once
+  there is demand, and a crash loop as `RESTART_COUNT`.
+- *Considered, not done: a scheduled check that submits a form.* It would write rows into the
+  metrics the data rules count.
+- *Rejected: an error tracker (Sentry, or Better Stack's own).* An SDK in both processes, for
+  grouping we do not need while errors are few enough to read one by one.
+- *Considered, not done: a status page.* The users are a few organizations we talk to directly.
 
-## PR 1 — read the stream, and alert on it
+## The Better Stack checklist
 
-Production serves traffic, so nothing waits. Everything but the docs is by hand.
+All by hand, in [Better Stack](https://telemetry.betterstack.com). Do them in order: step 1 checks
+the field names every later step uses.
 
-- The checks under § Context's "Not yet seen", settling both **Open**s.
-- Live tail's view shows `message_json.msg` as the line.
-- Every team member invited, as Telemetry members.
-- The saved views, the dashboard, the monitor and the alert, as far as the free plan allows.
-- `docs/runbooks/trace-a-problem-through-the-logs.md`, with a line in its README's § The runbooks. From a user's report,
-  the `X-Request-Id` or the time and their `userId`. From a failed attempt, `failure_reason` on its
-  row, then its `attemptId`. Lines older than three days are gone.
-- `docs/architecture.md`:
-  - § Logs: a line's app is `syslog.appname`.
-  - § Alerts: the Outside row names the monitor and the log alert, made in Better Stack's UI, in
-    place of its **Open**.
-- Delete this plan.
+### 1. Check the field names
 
-## Verification
+In Telemetry → Live tail, click a recent web `Request` line to expand it. Confirm that
+`syslog.appname`, `level`, `message_json.msg`, `message_json.status`, `message_json.durationMs`
+and `message_json.routeId` are there under those names. If a name differs, use the real one below.
+Then search `message_json.status>=200`: if that finds nothing, Better Stack typed `status` as a
+string, and the numeric presets need a regex instead.
 
-- A request to the web app is found by the `requestId` its response carried.
+### 2. Make Live tail show the message
+
+Sources → our source → Configure → Advanced settings → the Live tail message format. Set it to
+`{message_json.msg|message}` and save. Setting it on the source, rather than through the Message
+column's `⋯` → Configure, makes it everyone's default.
+
+### 3. Invite the team
+
+Team → invite each person as a **Team member (Telemetry access)**, which is free. Not as a
+Responder, which is a paid seat.
+
+### 4. The presets
+
+Skip the built-in presets. For each row, type the query into Live tail's search, check that it
+returns what the row says, then Presets → New, with the row's name.
+
+| Preset | Query | For |
+| --- | --- | --- |
+| Web | `syslog.appname="foodservice-insights-web"` | Everything one app did |
+| Worker | `syslog.appname="foodservice-insights-worker"` | " |
+| Errors | `level=~/^(error\|fatal)$/` | What the alert fires on, to read when it does |
+| Warnings and up | `level=~/^(warn\|error\|fatal)$/` | Children that exited nonzero, failed verdicts, CSP reports |
+| Server errors | `message_json.msg=Request message_json.status>=500` | Which routes are failing, and for whom |
+| Slow requests | `message_json.msg=Request message_json.durationMs>5000` | The requests behind the host's latency alert. 5000 is `REQUEST_DURATION_P95_MS` in [`.do/web.yaml`](../../.do/web.yaml) |
+| Attempts | `message_json.attemptId=*` | Every attempt's claim, child exit and verdict, in order |
+| Starts and stops | `message_json.msg=~/^(Worker started\|Received a signal)/` | Deploys and restarts, and which commit the worker ran |
+
+(The `\|` is only Markdown escaping: type a plain `|`.) Then ask a teammate whether they see the
+presets, which settles that **Open**.
+
+### 5. The error chart and its alert
+
+Dashboards → Create dashboard → **Blank dashboard**, named "Foodservice Insights". Add a chart,
+choose SQL, and use the free `logs_count` metric:
+
+```sql
+SELECT {{time}} AS time, sum(logs_count) AS value
+FROM {{source}}
+WHERE time BETWEEN {{start_time}} AND {{end_time}}
+  AND label('level') IN ('error', 'fatal')
+GROUP BY time
+```
+
+Name it "Error and fatal lines". On the chart's **Alerts** tab, add a **Threshold** alert, "value
+above 0", as a single incident, named "Error or fatal log line". Under who to notify, pick email to
+every team member if it is offered.
+
+If `label('level')` reads `info` for every line, it is the syslog level rather than pino's. Then
+filter on a Logs to metrics label made from `message_json.level` instead.
+
+### 6. The per-route charts
+
+Sources → our source → Configure → **Extract metrics**. Add a metric from
+`message_json.durationMs` with the aggregations count and p95, and labels from
+`message_json.routeId` and `message_json.status`. It probably counts only lines that arrive after
+it is made, so give it a day before judging the charts. Then add two charts to the dashboard,
+with the query builder: count by `status`, and p95 by `routeId`.
+
+If the free plan refuses Extract metrics, skip this step and note it in the PR.
+
+### 7. The monitor
+
+Uptime → Monitors → Create monitor → "URL becomes unavailable", for
+`https://plate.greenerbydefault.org/health/ready`, at the free plan's 3 minutes. Name it "Web app
+ready". Under "How should we escalate incidents?", choose email.
+
+### 8. Verify
+
+- A request to the web app is found by the `requestId` its response carried (`X-Request-Id`).
 - An attempt's lines, the child's exit included, are found by `attemptId`.
-- An oversized `/csp-report` arrives as one parsed `warn` line, with `truncated`.
-- A temporary monitor on a path that answers 404 emails everyone. Delete it after.
-- If the log alert exists: a temporary alert on `level` `info` emails everyone. Delete it after.
+- An oversized report posted to `/csp-report` arrives as one parsed `warn` line, with `truncated`
+  naming what was dropped.
+- A temporary monitor on a path that answers 404 emails everyone. Write down who got it, which
+  settles the incident-email **Open**. Then delete the monitor. If only the owner got it, point the
+  monitor and the alert at a shared address the team reads.
+- A temporary copy of the error alert with `'info'` in place of `'error', 'fatal'` emails the same
+  people. Delete it after.
+
+### 9. Land the branch
+
+Fix anything the checklist proved wrong in `docs/architecture.md` § Alerts, such as an alert the
+free plan refused, then delete this plan and open the PR.
