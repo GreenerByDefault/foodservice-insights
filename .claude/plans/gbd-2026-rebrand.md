@@ -2,152 +2,58 @@
 
 ## Context
 
-greenerbydefault.com relaunched with a new logo and visual identity. Our styling (#640, #642,
-October 2026) copied their *old* site: navy, teal `#1B9F8D`, Jost headings and Inter body text.
-GBD will send visual edits later. This plan matches their new look now, so those edits only
-need to change tokens. The scope is UI and styling, not UX: layouts and copy stay as they are.
+greenerbydefault.com relaunched with a new logo and visual identity, and GBD will send visual
+edits later. The web app already wears the new look: `apps/web/src/routes/layout.css` holds every
+color, the font and the radius as tokens, so GBD's edits should only ever change tokens. What is
+left is the marketing page's brand treatment, the emails and the PDF, which share no tokens with
+the web app and copy the palette by hand. The scope is UI and styling, not UX: layouts and copy
+stay as they are.
 
-**What their site uses (from the live site, 2026-11-22):**
+**The palette**, as the web app ships it. Emails and the PDF copy these hex values:
 
-| Element | Value |
-| --- | --- |
-| Font | Poppins 400/500/600/700 for everything, body text included |
-| Headings | Bold 700, UPPERCASE, tracking -0.05em, deep green |
-| Brand green | `#016939`: headings, buttons, full-bleed bands |
-| Page background | Cream `#FDF9F1`, on every page |
-| Body text | Warm brown `#403428` |
-| Accent | Chartreuse `#D9E027`: announcement bar, underline under a key headline word, button text on green |
-| Buttons | Pill shape (`border-radius: 300px`), bold, uppercase. Cream or chartreuse text on green |
-| Logo | Green pill holding a cream circle with a leaf, beside "GREENER BY DEFAULT" |
-
-**Contrast, which the token comment in `layout.css` should record:**
-
-| Pair | Ratio | Rule |
+| Role | Hex | Web token |
 | --- | --- | --- |
-| Green on cream | 6.5:1 | AA |
-| Cream on green | 6.5:1 | AA |
-| Chartreuse on green | 4.7:1 | AA |
-| Brown on cream | 11.5:1 | AA |
-| Chartreuse on cream | 1.4:1 | Decoration only. Never text, a focus ring or a link underline |
-| GBD's link green `#049250` on cream | 3.8:1 | Fails AA, so links use `#016939` |
+| Green (buttons, headings, links, focus) | `#016939` | `--primary`, `--heading`, `--ring` |
+| Green, hovered | `#01532D` | `--primary-hover` |
+| Cream (page) | `#FDF9F1` | `--background`, `--primary-foreground` |
+| Brown (body text) | `#403428` | `--foreground` |
+| Sand (hovered rows, muted fills) | `#F4EEE2` | `--muted`, `--accent` |
+| Muted text | `#6E6052` | `--muted-foreground` |
+| Borders | `#E6DDCC` | `--border`, `--input` |
+| Chartreuse (accent) | `#D9E027` | `--highlight`, so `bg-highlight` and `text-highlight` |
 
-**Decisions made with the user:**
-- Draw an original PLATE mark in the new style. Swap it for official art when GBD sends some.
-- Use Poppins everywhere, matching their site.
-- UPPERCASE only for marketing-page headings, eyebrow labels and buttons. In-app headings stay sentence case, because they show user content such as report and org names.
-- Restyle the emails and the PDF too.
-- Do not prune screenshots first.
+Poppins is the only family, for body and headings alike; `font-heading` stays a separate token
+so the two can split later. Buttons are uppercase pills; in-app headings are bold green in
+sentence case, because they show user content such as report and org names. UPPERCASE headings
+are for the marketing page and eyebrow labels only.
 
-Throwaway mockups of the target look are in `.playwright-mcp/` (gitignored):
-`mockup-marketing.png` and `mockup-report.png`.
+**Contrast decides where chartreuse may go.** On cream it is 1.4:1, so there it is decoration
+only: never text, a focus ring or a link underline. On green it is 4.7:1 and may carry text.
+GBD's own link green `#049250` is 3.8:1 on cream, which fails AA, so links use `#016939`.
+`layout.css`'s header comment records the ratios.
+
+**Decisions made with the user:** an original PLATE mark in GBD's idiom (`lib/assets/mark.svg`,
+with `favicon.svg` as the disc) until GBD sends official art; Poppins everywhere; restyle the
+emails and the PDF too; no screenshot pruning before the redesign.
+
+The marketing mockup this plan follows: a cream hero with a small green uppercase eyebrow; an
+uppercase, tightly tracked green headline with "climate impact" underlined by a thick chartreuse
+bar; a green pill CTA with chartreuse text; then a full-bleed green "How it works" band with a
+cream uppercase heading and chartreuse numbered discs.
 
 ## PR breakdown
 
-| PR | What | Screenshots | Depends on |
-| --- | --- | --- | --- |
-| 1 | Web: tokens, Poppins, buttons, logo, `error.html` | all 168 | — |
-| 2 | Web: marketing page brand treatment | 3 (`marketing`) | 1 |
-| 3 | Emails: `packages/email` + Supabase auth templates | none | — (palette from 1) |
-| 4 | PDF report (Python) | none | — (palette from 1) |
+| PR | What | Screenshots |
+| --- | --- | --- |
+| 1 | Web: marketing page brand treatment | 3 (`marketing`) |
+| 2 | Emails: `packages/email` + Supabase auth templates | none |
+| 3 | PDF report (Python) | none |
 
-The logo goes in PR 1 because every screen's header shows it. Putting it in its own PR would
-regenerate all 168 images a second time. PRs 3 and 4 are independent, and either can land in
-parallel once PR 1 has settled the palette.
+All three are independent of one another.
 
-On approval, run `/plan-adopt` to bring this plan into `.claude/plans/` as
-`gbd-2026-rebrand.md`, following the repo convention for features that span several PRs. Then
-fold each PR back in with `/plan-advance`.
+## PR 1: marketing page (`apps/web/src/routes/+page.svelte`)
 
-## PR 1: web app restyle
-
-**Tokens** in `apps/web/src/routes/layout.css`, the only file that defines them. Write the
-values in oklch to match the file. Replace the header comment with the new capture date and
-the contrast rules above.
-
-| Token | Value |
-| --- | --- |
-| `--background` | cream `#FDF9F1` |
-| `--foreground`, and every `*-foreground` that currently holds the navy-ish `0.21 0.02 255` | brown `#403428` |
-| `--card`, `--popover` | white, so they stand off the cream page |
-| `--primary`, `--ring`, `--heading` | green `#016939` |
-| `--primary-hover` | about `#01532D` |
-| `--primary-foreground` | cream `#FDF9F1` |
-| `--secondary`, `--muted`, `--accent` | sand `#F4EEE2` (green on sand is 5.5:1) |
-| `--muted-foreground` | `#6E6052` (5.8:1 on cream, 5.2:1 on sand) |
-| `--border`, `--input` | `#E6DDCC` |
-| `--highlight` (new) | chartreuse `#D9E027`, mapped as `--color-highlight` in `@theme inline` |
-| `--radius` | `0.5rem` |
-| `--destructive` | unchanged |
-
-**Fonts**
-- In the `pnpm-workspace.yaml` catalog and `apps/web/package.json`, replace
-  `@fontsource-variable/inter` and `@fontsource-variable/jost` with `@fontsource/poppins`.
-  Poppins has no variable cut.
-- Import only `400.css`, `500.css`, `600.css` and `700.css`.
-- Set both `--font-sans` and `--font-heading` to `"Poppins", sans-serif`. Keep `font-heading` as
-  its own token so GBD can split the two fonts later with a one-line change.
-
-**Headings**
-- In the `@layer base` rule for `h1, h2, h3`, add `font-bold tracking-tight`.
-- Remove the `font-medium` that #640 put on headings: `page-heading.svelte:16`,
-  `error-page.svelte:54`, `wordmark.svelte`, `ui/dialog/dialog-title.svelte`,
-  `ui/alert-dialog/alert-dialog-title.svelte` and `ui/field/field-legend.svelte`. Grep
-  `font-medium` next to `font-heading` and `text-heading` to find any others.
-
-**Buttons** (`apps/web/src/lib/components/ui/button/button.svelte`)
-- In the base classes, change `rounded-md` to `rounded-full` and `font-medium` to
-  `font-semibold uppercase tracking-wide`.
-- Drop the `rounded-[min(var(--radius-md),Npx)]` caps on the `xs`, `sm`, `icon-xs` and `icon-sm`
-  sizes. Keep `in-data-[slot=button-group]:rounded-md`.
-- Give the `link` variant `normal-case tracking-normal font-medium`, since it sits inside
-  running text.
-- Raise `default` to `h-10 px-4` and `lg` to `h-11 px-5`, so pill buttons have room. Update the
-  WCAG 2.5.5 comment to match: `lg` now reaches 44px.
-- Change `outline` to a green border with green text (`border-primary text-primary`), as in the
-  mockup.
-- Buttons that display user content opt out with `normal-case`:
-  `routes/(app)/shell/organization-switcher.svelte` (org name) and
-  `routes/(app)/shell/user-menu.svelte` (initials). Audit every file that uses `buttonVariants`
-  or `<Button` for others.
-
-**Form controls**
-- `ui/input`, the OTP slots and any select trigger get a white fill (`bg-card`), so they stand
-  off the cream page, as GBD's forms do. Check `ui/input/input.svelte` for its current
-  `bg-transparent`.
-
-**Logo**
-- Redraw `apps/web/src/lib/assets/favicon.svg` as a green disc with a cream leaf. That reads at
-  16px.
-- Add `lib/assets/mark.svg`: a green pill holding a cream disc with a green leaf (the mockup's
-  header mark). This is our own drawing in GBD's idiom, not a copy of their logo.
-- `wordmark.svelte` shows `mark.svg` beside `APP_NAME` in Poppins bold green with tight tracking.
-  Update its doc comment, which currently says the mark is a stand-in until GBD supplies a logo.
-- Regenerate `static/favicon.ico` and `static/apple-touch-icon.png` with the commands in the
-  SVG's header comment, with the `-b` color changed to `#016939`.
-
-**`apps/web/src/error.html`**
-- Re-copy the values by hand: cream background, brown text, muted `#6E6052`, green h1 at weight
-  700, and `font-family: "Poppins", system-ui, sans-serif`. The page cannot load the font, so
-  the fallback is expected.
-- This also fixes the drift it already has, where it still uses the old neutral grays.
-
-**Leave alone:**
-- The amber `data-quality-notice.svelte` and `timeline.svelte`. Warning semantics stay amber,
-  and the mockup shows amber sitting fine on cream. Revisit only if a regenerated screenshot
-  clashes.
-- The dialog overlays' `bg-black/10`.
-- The dead `.dark` block.
-
-**Risk:** CSS `uppercase` changes `innerText` but not `textContent` or accessible names.
-Playwright and vitest tests that read `innerText`, or use `useInnerText`, will see capitals.
-Fix the assertion, not the style.
-
-Hand the `.svelte` edits to the `svelte-file-editor` subagent, or run `svelte-autofixer` on
-each changed file (`.claude/rules/web.md`).
-
-## PR 2: marketing page (`apps/web/src/routes/+page.svelte`)
-
-Follow `mockup-marketing.png`:
+Follow the mockup described in Context:
 - **Eyebrow:** "From Greener by Default" in `text-xs font-bold uppercase tracking-widest
   text-primary`.
 - **Hero h1:** `uppercase tracking-tighter leading-none`, at `text-4xl sm:text-6xl`. The words
@@ -165,7 +71,7 @@ Follow `mockup-marketing.png`:
   - Step bodies use `text-primary-foreground/90`. Check axe contrast.
 - **Footer:** keep the "a tool from Greener by Default" link. It inherits the new tokens.
 
-## PR 3: emails
+## PR 2: emails
 
 - In `packages/email/src/messages/layout.ts`, update the styles:
 
@@ -186,7 +92,7 @@ Follow `mockup-marketing.png`:
 - No logo image. An image would need an absolute app-origin URL from `static/` (see the comment
   in `layout.ts`), and that is not worth it now.
 
-## PR 4: PDF report (`python/insights/gbd_foodservice_insights/`)
+## PR 3: PDF report (`python/insights/gbd_foodservice_insights/`)
 
 **Palette** (`plotting_utils.py`)
 - Add named constants: `GBD_GREEN` `#016939`, `GBD_CHARTREUSE` `#D9E027`, `GBD_BROWN`
@@ -238,25 +144,17 @@ Render the PDF and check it.
 
 ## Verification
 
-**PR 1 and PR 2 (web)**
-- `pnpm turbo run screenshots:update --filter=@gbd/web`. This needs Docker and `oxipng`, and
-  runs axe, including color-contrast, at every viewport.
-- Review the diffs, especially:
-  - `reports/succeeded`, `new-report/rejection-every-kind`, `auth/sign-in-email-failed` and
-    `organizations/organization-switcher`
-  - the `mobile/` versions of the header and button wrapping
-  - `marketing` at all three viewports
-- Run `pnpm lint && pnpm check && pnpm test` in the background, and start no other Turbo task
-  until it finishes.
-- `pnpm dev` and click through: hover and focus states on buttons, tabs and list rows; dialogs;
-  toasts; and the favicon in a browser tab.
+**PR 1 (marketing)**
+- `pnpm turbo run screenshots:update --filter=@gbd/web`; axe checks contrast on the green band
+  at every viewport. Only the three `marketing` PNGs should change.
+- `pnpm lint && pnpm check && pnpm test`.
 
-**PR 3 (emails)**
+**PR 2 (emails)**
 - `pnpm --filter @gbd/email preview` to view every app email.
 - `pnpm lint && pnpm check && pnpm test`.
 - Trigger a sign-in code locally and view it in the local Supabase mail catcher.
 
-**PR 4 (PDF)**
+**PR 3 (PDF)**
 - `just lint && just check && just test`.
 - Render a report PDF from the test fixtures that `test_pdf.py` uses, rasterize each page
   (`pdftoppm -png`), and inspect it for overflow, font fallback warnings and chart colors.
