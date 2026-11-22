@@ -48,7 +48,10 @@ from gbd_foodservice_insights.categorization.pipeline import (
     categorize_unique_products,
     summarize_categorization,
 )
-from gbd_foodservice_insights.categorization.steps import merge_categorizations
+from gbd_foodservice_insights.categorization.steps import (
+    canonical_product_names,
+    merge_categorizations,
+)
 from gbd_foodservice_insights.errors import AnalysisError as AnalysisError
 from gbd_foodservice_insights.errors import InvalidInputError as InvalidInputError
 from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataError
@@ -223,8 +226,8 @@ def _summarize_input(df: pd.DataFrame, cache: CategorizationCache) -> InputSumma
     return InputSummary(
         rows=len(df),
         kilograms=float(df["weight"].sum()),
-        # Stripped as `categorize_unique_products` strips, so the match types sum to this.
-        unique_products=df["product"].str.strip().nunique(),
+        # Named as `categorize_unique_products` names them, so the match types sum to this.
+        unique_products=canonical_product_names(df["product"]).nunique(),
         categorization_cache_entries=len(cache.products),
     )
 
