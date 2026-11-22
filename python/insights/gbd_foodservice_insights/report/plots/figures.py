@@ -3,20 +3,22 @@
 from collections.abc import Mapping, Sequence
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import pandas as pd
 import seaborn as sns
 from matplotlib.container import BarContainer
 from matplotlib.figure import Figure
 
 from gbd_foodservice_insights.plotting_utils import (
-    GBD_COLORS,
+    GBD_GREEN,
+    GBD_MUTED,
     LETTER_LANDSCAPE,
     PAGE_FOOTER_HEIGHT,
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
+    set_page_title_font,
     set_suptitle_font,
-    set_title_font,
 )
 from gbd_foodservice_insights.report.aggregation import PlantAnimalSplit, PlantProteinShare
 from gbd_foodservice_insights.report.metric import KILOS, Metric
@@ -49,7 +51,7 @@ def plot_diner_meal_numbers(
     fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     x_positions = range(len(diner_meal_series))
     ax.plot(x_positions, diner_meal_series.values, marker="o")
-    set_title_font(ax, f"Number of {diner_or_meal.title()}s by Month")
+    set_page_title_font(ax, f"Number of {diner_or_meal.title()}s by Month")
     ax.set_xlabel("Month")
     # Padding is relative to each limit's value, not the range, so it assumes positive counts.
     ax.set_ylim(diner_meal_series.min() * 0.8, diner_meal_series.max() * 1.2)
@@ -113,7 +115,7 @@ def plot_overall_drivers(overall_drivers: pd.DataFrame, metric: Metric = KILOS) 
     products = (
         "Top Product" if len(overall_drivers) == 1 else f"Top {len(overall_drivers)} Products"
     )
-    set_title_font(ax, f"{products} by {metric.line_noun.title()}: Overall")
+    set_page_title_font(ax, f"{products} by {metric.line_noun.title()}: Overall")
     _fit_page(fig)
     return fig
 
@@ -130,16 +132,18 @@ def plot_category_totals(monthly_category_data: pd.DataFrame, metric: Metric) ->
         y="category",
         x=metric.column,
         order=category_totals.sort_values(metric.column, ascending=False)["category"],
+        color=GBD_GREEN,
+        saturation=1,
         ax=ax,
     )
     # Styled like `plot_emissions_by_category`'s labels. Seaborn draws no bar for a missing
     # total, so the labels come from the drawn bars rather than from `category_totals`.
     (bars,) = ax.containers
     assert isinstance(bars, BarContainer)
-    ax.bar_label(bars, fmt="{:,.0f}", padding=5, fontsize=8, color="gray")
+    ax.bar_label(bars, fmt="{:,.0f}", padding=5, fontsize=8, color=GBD_MUTED)
     ax.set_xlim(right=category_totals[metric.column].max() * 1.1)
     ax.tick_params(axis="y", labelsize=10)
-    set_title_font(ax, f"{metric.label} by Category Across All Months")
+    set_page_title_font(ax, f"{metric.label} by Category Across All Months")
     ax.set_xlabel(metric.label)
     ax.set_ylabel("")
     _fit_page(fig)
@@ -174,9 +178,10 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
     data = emissions_summary.sort_values("total_kg_co2e", ascending=True).copy()
 
     fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
-    bars = ax.barh(data["category"], data["total_kg_co2e"], color=GBD_COLORS[0])
+    bars = ax.barh(data["category"], data["total_kg_co2e"], color=GBD_GREEN)
     ax.set_xlabel("Total kg CO₂e")
-    set_title_font(ax, "Carbon Emissions by Category")
+    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:,.0f}"))
+    set_page_title_font(ax, "Carbon Emissions by Category")
     add_grid(ax, axis="x")
 
     # Add percentage labels at the right end of each bar
@@ -190,7 +195,7 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
                 va="center",
                 ha="left",
                 fontsize=8,
-                color="gray",
+                color=GBD_MUTED,
             )
     ax.set_xlim(right=x_max * 1.15)
 

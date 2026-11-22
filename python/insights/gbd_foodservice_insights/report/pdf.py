@@ -14,14 +14,22 @@ import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
-from matplotlib.table import Cell
+from matplotlib.table import Cell, Table
 from matplotlib.textpath import text_to_path
 from matplotlib.transforms import Bbox
 
 from gbd_foodservice_insights.plotting_utils import (
+    BODY_FONT,
+    GBD_BORDER,
+    GBD_CHARTREUSE,
+    GBD_CREAM,
+    GBD_GREEN,
+    GBD_MUTED,
+    GBD_SAND,
     LETTER_LANDSCAPE,
     LETTER_PORTRAIT,
     PAGE_FOOTER_HEIGHT,
+    TITLE_FONT,
     close_new_figures_on_error,
 )
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
@@ -55,6 +63,8 @@ _SUMMARY_LINE_HEIGHT = 0.025
 _TITLE_CLIENT_LINE_HEIGHT = 0.04
 
 _TABLE_BBOX = Bbox.from_bounds(0.03, 0.06, 0.94, 0.84)
+# The substitution scenarios' names are drawn larger than the rest of their table.
+_MULTILINE_FONT_SIZE = 11.25
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +109,8 @@ class _NumberedPdf:
             ha="center",
             va="center",
             fontsize=9,
-            fontfamily="Lato",
-            color="gray",
+            fontfamily=BODY_FONT,
+            color=GBD_MUTED,
         )
         try:
             self._pdf.savefig(figure)
@@ -132,14 +142,24 @@ def create_title_page(
         va="center",
         fontsize=28,
         fontweight="bold",
-        fontfamily="Montserrat",
+        fontfamily=TITLE_FONT,
+        color=GBD_GREEN,
+    )
+    # Decoration only: chartreuse is too faint on white to carry text.
+    ax.plot(
+        [0.44, 0.56],
+        [0.605, 0.605],
+        transform=ax.transAxes,
+        color=GBD_CHARTREUSE,
+        linewidth=5,
+        solid_capstyle="round",
     )
     # The client name is shown as typed: title-casing turns "McDonald's" into "Mcdonald'S".
     client_lines = _wrap_to_width(
         client.replace("_", " "),
         fig_size[0] - 2 * _SUMMARY_MARGIN_IN,
         fontsize=20,
-        fontfamily="Montserrat",
+        fontfamily=TITLE_FONT,
     )
     y = 0.55
     for line in client_lines:
@@ -151,7 +171,7 @@ def create_title_page(
             ha="center",
             va="center",
             fontsize=20,
-            fontfamily="Montserrat",
+            fontfamily=TITLE_FONT,
         )
         y -= _TITLE_CLIENT_LINE_HEIGHT
     subtitle_y = min(0.47, y - 0.02)
@@ -163,8 +183,8 @@ def create_title_page(
         ha="center",
         va="center",
         fontsize=14,
-        fontfamily="Lato",
-        color="gray",
+        fontfamily=BODY_FONT,
+        color=GBD_MUTED,
     )
     ax.text(
         0.5,
@@ -174,8 +194,8 @@ def create_title_page(
         ha="center",
         va="center",
         fontsize=12,
-        fontfamily="Montserrat",
-        color="#234162",
+        fontfamily=TITLE_FONT,
+        color=GBD_GREEN,
     )
     ax.text(
         0.5,
@@ -185,8 +205,8 @@ def create_title_page(
         ha="center",
         va="center",
         fontsize=9,
-        fontfamily="Lato",
-        color="gray",
+        fontfamily=BODY_FONT,
+        color=GBD_MUTED,
     )
     pdf.savefig(fig)
     plt.close(fig)
@@ -257,7 +277,8 @@ def new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]
         va="top",
         fontsize=20,
         fontweight="bold",
-        fontfamily="Montserrat",
+        fontfamily=TITLE_FONT,
+        color=GBD_GREEN,
     )
     return fig, ax
 
@@ -284,14 +305,14 @@ def create_executive_summary_page(
         va="top",
         fontsize=34,
         fontweight="bold",
-        fontfamily="Montserrat",
-        color="#006a62",
+        fontfamily=TITLE_FONT,
+        color=GBD_GREEN,
     )
     subtitle = (
         f"the greenhouse gas footprint of food purchased by {narrative.client}, {narrative.period}"
     )
     y = 0.70
-    for line in _wrap_to_width(subtitle, text_width_in, fontsize=12, fontfamily="Lato"):
+    for line in _wrap_to_width(subtitle, text_width_in, fontsize=12, fontfamily=BODY_FONT):
         ax.text(
             0.5,
             y,
@@ -300,14 +321,14 @@ def create_executive_summary_page(
             ha="center",
             va="top",
             fontsize=12,
-            fontfamily="Lato",
-            color="#444444",
+            fontfamily=BODY_FONT,
+            color=GBD_MUTED,
         )
         y -= _SUMMARY_LINE_HEIGHT
 
     y -= 0.035  # gap below the subtitle
     for paragraph in _narrative_paragraphs(narrative, page_refs):
-        for line in _wrap_to_width(paragraph, text_width_in, fontsize=11.5, fontfamily="Lato"):
+        for line in _wrap_to_width(paragraph, text_width_in, fontsize=11.5, fontfamily=BODY_FONT):
             ax.text(
                 left_x,
                 y,
@@ -316,7 +337,7 @@ def create_executive_summary_page(
                 ha="left",
                 va="top",
                 fontsize=11.5,
-                fontfamily="Lato",
+                fontfamily=BODY_FONT,
             )
             y -= _SUMMARY_LINE_HEIGHT
         y -= 0.017  # paragraph gap
@@ -425,7 +446,8 @@ def create_text_page(
             va="top",
             fontsize=16,
             fontweight="bold",
-            fontfamily="Montserrat",
+            fontfamily=TITLE_FONT,
+            color=GBD_GREEN,
         )
 
         y = _TEXT_PAGE_TOP_Y
@@ -439,7 +461,7 @@ def create_text_page(
                 ha="left",
                 va="top",
                 fontsize=10,
-                fontfamily="Lato",
+                fontfamily=BODY_FONT,
                 fontweight="bold" if is_bold_line else "normal",
             )
             y -= _TEXT_PAGE_LINE_HEIGHT
@@ -495,15 +517,33 @@ def create_animal_intensity_page(pdf: PdfSink, intensity: pd.DataFrame) -> None:
 
 def create_substitution_scenarios_page(pdf: PdfSink, scenarios: pd.DataFrame) -> None:
     display_df = _display_table(_format_substitution_scenarios_for_pdf(scenarios))
+    col_widths = [0.30, 0.17, 0.16, 0.16, 0.21]
+    font_size = 10.0
+    # The share of each column a cell's text may fill, as `_table_column_widths_in` reckons it.
+    text_widths_in = [
+        width * _table_width_in(LETTER_LANDSCAPE) * (1 - 2 * Cell.PAD) for width in col_widths
+    ]
     display_df["Scenario"] = display_df["Scenario"].map(
-        lambda value: textwrap.fill(value, width=24, break_long_words=False, break_on_hyphens=False)
+        lambda value: "\n".join(
+            _wrap_to_width(
+                value, text_widths_in[0], fontsize=_MULTILINE_FONT_SIZE, fontfamily=BODY_FONT
+            )
+        )
     )
+    display_df.columns = [
+        "\n".join(
+            _wrap_to_width(
+                column, width_in, fontsize=font_size, fontfamily=BODY_FONT, fontweight="bold"
+            )
+        )
+        for column, width_in in zip(display_df.columns, text_widths_in, strict=True)
+    ]
     _draw_table_page(
         pdf,
         "Substitution Scenarios",
         display_df,
-        col_widths=[0.30, 0.17, 0.16, 0.16, 0.21],
-        font_size=10.0,
+        col_widths=col_widths,
+        font_size=font_size,
         row_scale=1.30,
         multiline_column="Scenario",
     )
@@ -586,7 +626,8 @@ def _draw_table_page(
         va="top",
         fontsize=14,
         fontweight="bold",
-        fontfamily="Montserrat",
+        fontfamily=TITLE_FONT,
+        color=GBD_GREEN,
     )
 
     table = ax.table(
@@ -602,37 +643,43 @@ def _draw_table_page(
 
     for (_, _), cell in table.get_celld().items():
         cell.get_text().set_wrap(True)
-        cell.set_edgecolor("#D9E1EA")
+        cell.set_edgecolor(GBD_BORDER)
         cell.set_linewidth(0.6)
 
+    # A cell centers its text on the row whatever its `va`, so a row fits more lines only by
+    # growing.
     if multiline_column is not None:
         multiline_col_idx = list(display_df.columns).index(multiline_column)
         line_counts = [value.count("\n") + 1 for value in display_df[multiline_column]]
         for row_idx, line_count in enumerate(line_counts, start=1):
-            row_height = table[row_idx, 0].get_height() * max(1.15, 1 + 0.9 * (line_count - 1))
-            for col_idx in range(len(display_df.columns)):
-                table[row_idx, col_idx].set_height(row_height)
-                table[row_idx, col_idx].set_text_props(va="top")
-            table[row_idx, multiline_col_idx].set_text_props(fontsize=11.25, va="top")
+            _scale_row_height(table, row_idx, len(display_df.columns), line_count)
+            table[row_idx, multiline_col_idx].set_text_props(fontsize=_MULTILINE_FONT_SIZE)
 
-    # Style header
+    header_lines = max(str(column).count("\n") + 1 for column in display_df.columns)
+    _scale_row_height(table, 0, len(display_df.columns), header_lines)
     for col_idx in range(len(display_df.columns)):
         cell = table[0, col_idx]
-        cell.set_facecolor("#234162")
-        cell.set_text_props(color="white", fontweight="bold")
-        cell.set_edgecolor("#234162")
+        cell.set_facecolor(GBD_GREEN)
+        cell.set_text_props(color=GBD_CREAM, fontweight="bold")
+        cell.set_edgecolor(GBD_GREEN)
         cell.set_linewidth(0.8)
 
     for row_idx in range(1, len(display_df) + 1):
         for col_idx in range(len(display_df.columns)):
             cell = table[row_idx, col_idx]
             if row_idx % 2 == 0:
-                cell.set_facecolor("#F5F8FB")
+                cell.set_facecolor(GBD_SAND)
             else:
                 cell.set_facecolor("white")
 
     pdf.savefig(fig)
     plt.close(fig)
+
+
+def _scale_row_height(table: Table, row_idx: int, column_count: int, line_count: int) -> None:
+    row_height = table[row_idx, 0].get_height() * max(1.15, 1 + 0.9 * (line_count - 1))
+    for col_idx in range(column_count):
+        table[row_idx, col_idx].set_height(row_height)
 
 
 def create_decision_kpis_page(
@@ -652,7 +699,8 @@ def create_decision_kpis_page(
         va="top",
         fontsize=16,
         fontweight="bold",
-        fontfamily="Montserrat",
+        fontfamily=TITLE_FONT,
+        color=GBD_GREEN,
     )
 
     products = concentration.top_products
@@ -680,7 +728,7 @@ def create_decision_kpis_page(
             ha="left",
             va="top",
             fontsize=11,
-            fontfamily="Lato",
+            fontfamily=BODY_FONT,
         )
         y -= 0.04
 
@@ -695,7 +743,7 @@ def create_decision_kpis_page(
                 ha="left",
                 va="top",
                 fontsize=10.5,
-                fontfamily="Lato",
+                fontfamily=BODY_FONT,
             )
             y -= 0.034
         y -= 0.01
@@ -769,9 +817,15 @@ def _text_width_in(text: str, prop: FontProperties) -> float:
     return width_pt / 72
 
 
-def _wrap_to_width(text: str, max_width_in: float, fontsize: float, fontfamily: str) -> list[str]:
+def _wrap_to_width(
+    text: str,
+    max_width_in: float,
+    fontsize: float,
+    fontfamily: str | Sequence[str],
+    fontweight: str = "normal",
+) -> list[str]:
     """Greedily wrap ``text`` so each line's rendered width fits within ``max_width_in``."""
-    prop = FontProperties(family=fontfamily, size=fontsize)
+    prop = FontProperties(family=fontfamily, size=fontsize, weight=fontweight)
     lines: list[str] = []
     current = ""
     for word in text.split():

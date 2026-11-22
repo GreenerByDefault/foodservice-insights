@@ -4,11 +4,9 @@ import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
-from gbd_foodservice_insights import PACKAGE_DIR
 from gbd_foodservice_insights.plotting_utils import (
     BODY_FONT,
-    FONT_FILES,
-    GBD_COLORS,
+    GBD_GREEN,
     TITLE_FONT,
     close_new_figures_on_error,
     create_horizontal_percentage_barplot,
@@ -19,22 +17,33 @@ from gbd_foodservice_insights.plotting_utils import (
     standardize_title_case,
     wrap_labels,
 )
-from matplotlib.ft2font import FT2Font
+from matplotlib.colors import to_hex
 from matplotlib.patches import Rectangle
 
 
 def test_setup_gbd_fonts_registers_title_and_body_fonts():
     setup_gbd_fonts()
     registered_names = {f.name for f in font_manager.fontManager.ttflist}
-    assert TITLE_FONT in registered_names
-    assert BODY_FONT in registered_names
+    assert {*TITLE_FONT, *BODY_FONT} <= registered_names
 
 
-@pytest.mark.parametrize("font_file", FONT_FILES)
-def test_packaged_fonts_have_the_co2e_subscript_two(font_file: str):
-    """The report writes "CO₂e"; a font without U+2082 would render it as a missing-glyph box."""
-    font = FT2Font(str(PACKAGE_DIR / "data_files" / "fonts" / font_file))
-    assert font.get_char_index(0x2082) != 0
+@pytest.mark.parametrize("family", [TITLE_FONT, BODY_FONT])
+@pytest.mark.parametrize("weight", ["normal", "bold"])
+def test_fonts_render_the_co2e_subscript_two(family: tuple[str, ...], weight: str):
+    """The report writes "CO₂e"; a missing glyph would render as a box."""
+    fig = plt.figure()
+    fig.text(0, 0, "CO₂e", fontfamily=family, fontweight=weight)
+
+    with warnings.catch_warnings(action="error"):
+        fig.canvas.draw()
+
+
+def test_default_text_renders_the_co2e_subscript_two():
+    fig, ax = plt.subplots()
+    ax.set_xlabel("kg CO₂e")
+
+    with warnings.catch_warnings(action="error"):
+        fig.canvas.draw()
 
 
 def test_titles_use_the_title_font():
@@ -43,8 +52,8 @@ def test_titles_use_the_title_font():
     set_title_font(ax, "Panel", fontsize=20)
     set_suptitle_font(fig, "Page")
 
-    assert (ax.title.get_fontname(), ax.title.get_fontsize()) == (TITLE_FONT, 20)
-    assert fig.texts[0].get_fontname() == TITLE_FONT
+    assert (tuple(ax.title.get_fontfamily()), ax.title.get_fontsize()) == (TITLE_FONT, 20)
+    assert tuple(fig.texts[0].get_fontfamily()) == TITLE_FONT
 
 
 def test_format_month_labels_formats_periods():
@@ -82,21 +91,16 @@ def test_horizontal_percentage_barplot_keeps_labels_that_truncate_alike_as_separ
     ] * 2
 
 
-@pytest.mark.parametrize("bar_count", [2, len(GBD_COLORS) + 2])
-def test_horizontal_percentage_barplot_cycles_the_palette_without_warning(
-    bar_count: int,
-):
-    data = pd.DataFrame(
-        {"product": [f"Product {i}" for i in range(bar_count)], "percentage": [10] * bar_count}
-    )
+def test_horizontal_percentage_barplot_draws_every_bar_in_gbd_green_without_warning():
+    data = pd.DataFrame({"product": [f"Product {i}" for i in range(3)], "percentage": [10] * 3})
     _, ax = plt.subplots()
 
     with warnings.catch_warnings(action="error"):
         create_horizontal_percentage_barplot(ax, data, "product", add_percentage_labels=False)
 
-    colors = [bar.get_facecolor() for bar in ax.patches if isinstance(bar, Rectangle)]
-    assert len(set(colors)) == min(bar_count, len(GBD_COLORS))
-    assert colors == [colors[i % len(GBD_COLORS)] for i in range(bar_count)]
+    assert [to_hex(bar.get_facecolor()) for bar in ax.patches if isinstance(bar, Rectangle)] == [
+        GBD_GREEN.lower()
+    ] * 3
 
 
 def test_standardize_title_case_keeps_possessive_s_lowercase():

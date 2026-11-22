@@ -1,5 +1,5 @@
 # Data files
 
-`fonts/` is committed: the Lato and Montserrat Regular/Bold OFL files the report renders with,
-registered via `font_manager.addfont` in `plotting_utils.setup_gbd_fonts()` rather than relied
-on from the OS or worker image.
+`fonts/` is committed: the Poppins Regular/Bold OFL files the report renders with, plus
+Lato Regular/Bold for the ₂ in "CO₂e", which Poppins lacks. `plotting_utils.setup_gbd_fonts()`
+registers them via `font_manager.addfont` rather than relying on the OS or worker image.

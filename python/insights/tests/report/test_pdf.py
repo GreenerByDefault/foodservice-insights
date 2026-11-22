@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pytest
+from gbd_foodservice_insights.plotting_utils import BODY_FONT, TITLE_FONT
 from gbd_foodservice_insights.report import pdf as pdf_module
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration, category_names
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
@@ -39,6 +40,7 @@ from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
+from matplotlib.transforms import Bbox
 from pypdf import PdfReader
 
 JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
@@ -72,13 +74,13 @@ def test_wrap_text_lines_keeps_indentation_and_collapses_blank_lines() -> None:
 def test_wrap_to_width_fits_measured_width_without_losing_words() -> None:
     text = "Producing that food released an estimated 1,931 kg of carbon dioxide equivalent " * 3
 
-    lines = _wrap_to_width(text, max_width_in=3.0, fontsize=11.5, fontfamily="Lato")
+    lines = _wrap_to_width(text, max_width_in=3.0, fontsize=11.5, fontfamily=BODY_FONT)
 
     assert len(lines) > 1
     assert " ".join(lines) == " ".join(text.split())
     assert all(
         text_to_path.get_text_width_height_descent(
-            line, FontProperties(family="Lato", size=11.5), ismath=False
+            line, FontProperties(family=BODY_FONT, size=11.5), ismath=False
         )[0]
         <= 3.0 * 72
         for line in lines
@@ -86,12 +88,12 @@ def test_wrap_to_width_fits_measured_width_without_losing_words() -> None:
 
 
 def test_wrap_to_width_keeps_an_overlong_word_on_its_own_line() -> None:
-    assert _wrap_to_width("a " + "x" * 200 + " b", 1.0, fontsize=12, fontfamily="Lato") == [
+    assert _wrap_to_width("a " + "x" * 200 + " b", 1.0, fontsize=12, fontfamily=BODY_FONT) == [
         "a",
         "x" * 200,
         "b",
     ]
-    assert _wrap_to_width("   ", 1.0, fontsize=12, fontfamily="Lato") == []
+    assert _wrap_to_width("   ", 1.0, fontsize=12, fontfamily=BODY_FONT) == []
 
 
 def _finding(
@@ -199,7 +201,7 @@ def test_title_page_wraps_a_long_client_name_above_the_subtitle() -> None:
     )
     texts = _title_page(client)
     name_lines, subtitle = texts[1:-3], texts[-3]
-    prop = FontProperties(family="Montserrat", size=20)
+    prop = FontProperties(family=TITLE_FONT, size=20)
 
     assert len(name_lines) > 1
     assert " ".join(t.text for t in name_lines) == client
@@ -561,7 +563,7 @@ def test_quality_lines_with_no_findings_say_nothing_was_detected() -> None:
 
 class _RecordingTablePdf:
     """Stands in for ``PdfPages``, keeping each table page's heading, column labels, and the
-    cells whose text runs past the cell's right edge."""
+    cells whose text runs past the cell's right, top or bottom edge."""
 
     def __init__(self) -> None:
         self.headings: list[str] = []
@@ -585,8 +587,14 @@ class _RecordingTablePdf:
         self.overflowing += [
             cell.get_text().get_text()
             for cell in cells.values()
-            if cell.get_text().get_window_extent(renderer).x1 > cell.get_window_extent(renderer).x1
+            if _overflows(
+                cell.get_text().get_window_extent(renderer), cell.get_window_extent(renderer)
+            )
         ]
+
+
+def _overflows(text: Bbox, cell: Bbox) -> bool:
+    return text.x1 > cell.x1 or text.y1 > cell.y1 or text.y0 < cell.y0
 
 
 @pytest.mark.parametrize("months", [3, 6, 12, 24])
@@ -762,14 +770,16 @@ def test_display_table_formats_cells_as_text_and_surfaces_a_named_index() -> Non
     ]
 
 
-def test_substitution_scenarios_page_wraps_a_long_scenario_inside_its_cell() -> None:
+def test_substitution_scenarios_page_wraps_long_scenarios_and_headers_inside_their_cells() -> None:
+    # Six rows, as the report has: fewer leave the table room to hide a row's overflow.
+    long_scenario = "100% cow's-milk-to-oat-milk swap with a long name"
     scenarios = pd.DataFrame(
         {
-            "scenario": ["50% ruminant-to-legume swap with a long name", "10% swap"],
-            "replaced_weight_kg": [10.0, 2.0],
-            "projected_emissions_kg_co2e": [800.0, 900.0],
-            "avoidable_kg_co2e": [100.0, 10.0],
-            "institution_emissions_avoided_pct": [11.1, 1.1],
+            "scenario": [long_scenario] * 5 + ["10% swap"],
+            "replaced_weight_kg": [10.0] * 6,
+            "projected_emissions_kg_co2e": [800.0] * 6,
+            "avoidable_kg_co2e": [100.0] * 6,
+            "institution_emissions_avoided_pct": [11.1] * 6,
         }
     )
     pdf = _RecordingTablePdf()
@@ -777,7 +787,12 @@ def test_substitution_scenarios_page_wraps_a_long_scenario_inside_its_cell() -> 
     create_substitution_scenarios_page(pdf, scenarios)
 
     assert pdf.headings == ["Substitution Scenarios"]
-    assert pdf.scenario_cells == ["50% ruminant-to-legume\nswap with a long name", "10% swap"]
+    assert pdf.overflowing == []
+    wrapped, *_, short = pdf.scenario_cells
+    assert "\n" in wrapped
+    assert wrapped.replace("\n", " ") == long_scenario
+    assert short == "10% swap"
+    assert "\n" in pdf.columns[0][-1]
 
 
 # ----------------------------------------------------------------------

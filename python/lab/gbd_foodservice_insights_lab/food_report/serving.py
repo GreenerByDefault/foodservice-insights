@@ -16,7 +16,11 @@ from typing import Literal
 import matplotlib.pyplot as plt
 import pandas as pd
 from gbd_foodservice_insights.errors import UnusableDataError
-from gbd_foodservice_insights.plotting_utils import LETTER_PORTRAIT, close_new_figures_on_error
+from gbd_foodservice_insights.plotting_utils import (
+    BODY_FONT,
+    LETTER_PORTRAIT,
+    close_new_figures_on_error,
+)
 from gbd_foodservice_insights.report import checks
 from gbd_foodservice_insights.report.aggregation import (
     PlantAnimalSplit,
@@ -290,7 +294,7 @@ def _create_summary_page(
             ha="left",
             va="top",
             fontsize=12,
-            fontfamily="Lato",
+            fontfamily=BODY_FONT,
         )
         y -= 0.035
     pdf.savefig(fig)
