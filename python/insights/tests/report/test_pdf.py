@@ -535,7 +535,7 @@ class _RecordingTablePdf:
 
     def savefig(self, fig: Figure) -> None:
         fig.canvas.draw()  # lays the table out
-        renderer = fig.canvas.get_renderer()  # ty: ignore[unresolved-attribute]
+        renderer = fig.canvas.get_renderer()  # ty: ignore[missing-attribute]
         (ax,) = fig.axes
         (table,) = ax.tables
         cells = table.get_celld()

@@ -8,13 +8,13 @@ dependencies = [
     "matplotlib>=3.10,<4",
     "numpy>=2.5.4,<3",
     "openpyxl>=3.1,<4",
-    "pandas>=2.2,<4",
+    "pandas>=3.1.0,<4",
     "PyYAML>=6,<7",
     "seaborn>=0.13,<1",
 ]
 
 [dependency-groups]
-dev = ["pypdf>=6.21,<7"]
+dev = ["pypdf>=6.21.4,<7"]
 
 [build-system]
 requires = ["hatchling"]
