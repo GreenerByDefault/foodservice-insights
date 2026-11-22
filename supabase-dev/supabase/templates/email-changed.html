@@ -3,16 +3,71 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
     <title>Your email was changed</title>
   </head>
-  <body
-    style="margin:0;padding:24px;background:#f5f5f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5;color:#1c1917;"
-  >
-    <div style="max-width:560px;margin:0 auto;padding:32px;background:#ffffff;border-radius:8px;">
-      <h1 style="margin:0 0 16px;font-size:20px;">Your email was changed</h1>
-      <p>Your PLATE account's email changed from {{ .OldEmail }} to {{ .Email }}.</p>
-      <p>If you made this change, there is nothing to do. If you didn't, reply to this email.</p>
-      <p style="margin:24px 0 0;color:#57534e;font-size:14px;">— PLATE (Greener by Default)</p>
-    </div>
+  <!-- Copies packages/email/src/messages/layout.ts's styles by hand. -->
+  <body style="margin:0;padding:0;background:#FDF9F1;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FDF9F1">
+      <tr>
+        <td
+          align="center"
+          style="padding:32px 16px;background:#FDF9F1;font-family:Poppins,-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;color:#403428;"
+        >
+          <table
+            role="presentation"
+            cellpadding="0"
+            cellspacing="0"
+            width="100%"
+            style="max-width:560px;background:#ffffff;border:1px solid #E6DDCC;border-radius:12px;border-collapse:separate;overflow:hidden;"
+          >
+            <tr>
+              <td
+                bgcolor="#016939"
+                style="padding:20px 32px;background:#016939;border-radius:11px 11px 0 0;"
+              >
+                <span
+                  style="display:inline-block;width:10px;height:10px;margin-right:10px;border-radius:50%;background:#D9E027;vertical-align:middle;"
+                ></span>
+                <span
+                  style="font-size:18px;font-weight:700;letter-spacing:3px;color:#FDF9F1;vertical-align:middle;"
+                  >PLATE</span
+                >
+              </td>
+            </tr>
+            <tr>
+              <td bgcolor="#D9E027" height="4" style="height:4px;font-size:0;line-height:0;">
+                &nbsp;
+              </td>
+            </tr>
+            <tr>
+              <td align="left" style="padding:32px 32px 16px;">
+                <h1
+                  style="margin:0 0 16px;font-size:24px;line-height:1.3;font-weight:700;color:#016939;"
+                >
+                  Your email was changed
+                </h1>
+                <p style="margin:0 0 16px;">
+                  Your PLATE account's email changed from {{ .OldEmail }} to {{ .Email }}.
+                </p>
+                <p style="margin:0 0 16px;">
+                  If you made this change, there is nothing to do. If you didn't, reply to this
+                  email.
+                </p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:16px 0 0;font-size:13px;text-align:center;color:#6E6052;">
+            PLATE is a tool from
+            <a
+              href="https://www.greenerbydefault.com"
+              style="color:#6E6052;text-decoration:underline;"
+              >Greener by Default</a
+            >.
+          </p>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>
