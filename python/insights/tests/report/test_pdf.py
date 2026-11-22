@@ -226,13 +226,13 @@ def _text_page_titles(lines: list[str], bold_lines: set[str] | None = None) -> l
     ("line_count", "titles"),
     [
         (0, ["Title"]),
-        (29, ["Title"]),
-        (30, ["Title", "Title (cont.)"]),
-        (58, ["Title", "Title (cont.)"]),
-        (59, ["Title", "Title (cont.)", "Title (cont.)"]),
+        (28, ["Title"]),
+        (29, ["Title", "Title (cont.)"]),
+        (56, ["Title", "Title (cont.)"]),
+        (57, ["Title", "Title (cont.)", "Title (cont.)"]),
     ],
 )
-def test_text_page_fits_29_lines_per_page(line_count: int, titles: list[str]) -> None:
+def test_text_page_fits_28_lines_per_page(line_count: int, titles: list[str]) -> None:
     assert _text_page_titles([f"line {i}" for i in range(line_count)]) == titles
 
 
