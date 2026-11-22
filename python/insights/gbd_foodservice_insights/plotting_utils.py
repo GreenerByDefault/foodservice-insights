@@ -43,6 +43,10 @@ GBD_COLORS = [
 LETTER_PORTRAIT = (8.5, 11.0)
 LETTER_LANDSCAPE = (11.0, 8.5)
 
+# The strip at the foot of every page, as a fraction of its height, that holds the page number.
+# Charts lay out above it.
+PAGE_FOOTER_HEIGHT = 0.04
+
 # ----------------------------------------------------------------------
 # Font Configuration
 # ----------------------------------------------------------------------

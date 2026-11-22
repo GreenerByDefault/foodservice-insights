@@ -21,6 +21,18 @@ from gbd_foodservice_insights.report.plots.figures import (
 )
 from gbd_foodservice_insights.report.schema import Headcounts
 
+TOP_PRODUCTS_CATEGORY_COUNT = 5
+
+
+def _highest_emitting_categories(
+    emissions_summary: pd.DataFrame, category_drivers: pd.DataFrame
+) -> list[str]:
+    """The categories with the most total kg CO2e that have drivers to chart, highest first."""
+    with_drivers = emissions_summary.loc[
+        emissions_summary["category"].isin(category_drivers["category"].dropna())
+    ]
+    return with_drivers.nlargest(TOP_PRODUCTS_CATEGORY_COUNT, "total_kg_co2e")["category"].tolist()
+
 
 def generate_all_report_plots(
     aggregation: Aggregation,
@@ -45,7 +57,7 @@ def generate_all_report_plots(
         plot_overall_drivers(aggregation.overall_drivers, KILOS),
         *plot_category_drivers_pages(
             aggregation.category_drivers,
-            aggregation.category_drivers["category"].dropna().unique().tolist(),
+            _highest_emitting_categories(emissions_summary, aggregation.category_drivers),
             metric=KILOS,
         ),
     ]

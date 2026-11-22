@@ -14,6 +14,7 @@ from gbd_foodservice_insights.report.pdf import (
     CategoryShare,
     Co2ePerHead,
     ExecutiveNarrative,
+    PageRefs,
     _display_table,
     _executive_narrative,
     _format_animal_emissions_intensity_for_pdf,
@@ -117,8 +118,10 @@ class _RecordingPdf:
 
     def __init__(self) -> None:
         self.pages: list[list[_PageText]] = []
+        self.footers: list[list[str]] = []
 
     def savefig(self, fig: Figure) -> None:
+        self.footers.append([t.get_text() for t in fig.texts])
         self.pages.append(
             [
                 _PageText(t.get_text(), t.get_position()[1], t.get_fontweight() == "bold")
@@ -256,7 +259,7 @@ def test_text_page_bolds_lines_compared_after_stripping() -> None:
 
 def _summary_page(narrative: ExecutiveNarrative) -> list[_PageText]:
     pdf = _RecordingPdf()
-    create_executive_summary_page(pdf, narrative)
+    create_executive_summary_page(pdf, narrative, PageRefs(quality=3, methodology=12))
     return pdf.pages[0]
 
 
@@ -267,7 +270,7 @@ def test_executive_summary_page_leads_with_the_headline_and_fits_the_page() -> N
 
     assert [t.text for t in texts[:2]] == ["Executive Summary", "2.5 metric tons CO₂e"]
     assert texts[2].text.startswith("the greenhouse gas footprint of food purchased by The")
-    assert " ".join(t.text for t in texts).endswith("The methodology is explained at the back.")
+    assert " ".join(t.text for t in texts).endswith("The methodology is on page 12.")
     assert all(t.y > 0 for t in texts)
     ys = [t.y for t in texts[2:]]
     assert ys == sorted(ys, reverse=True)
@@ -366,7 +369,32 @@ def test_write_report_pdf_leaves_the_callers_plots_open(tmp_path: Path) -> None:
     _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[fig]))
 
     assert set(plt.get_fignums()) == before | {fig.number}
+    assert fig.texts == []
     plt.close(fig)
+
+
+def test_write_report_pdf_numbers_every_page_but_the_title(recording_pdf: _RecordingPdf) -> None:
+    fig = plt.figure()
+
+    _write(_report(), charts=ReportCharts(figures=[fig]))
+    plt.close(fig)
+
+    assert recording_pdf.footers == [[], *([str(n)] for n in range(2, 12))]
+
+
+def test_write_report_pdf_points_the_summary_at_the_quality_and_methodology_pages(
+    recording_pdf: _RecordingPdf,
+) -> None:
+    long_warning = _finding("warning", "Something to note. " * 40)
+
+    _write(replace(_report(), findings=(long_warning,) * 12))
+
+    titles = _page_titles(recording_pdf)
+    summary = " ".join(t.text for t in recording_pdf.pages[1])
+    assert titles[2] == "Data Completeness & Quality"
+    assert "they are listed on page 3." in summary
+    assert summary.endswith(f"The methodology is on page {titles.index('About This Report') + 1}.")
+    assert "Data Completeness & Quality (cont.)" in titles
 
 
 def test_about_page_bolds_every_heading(recording_pdf: _RecordingPdf) -> None:
@@ -824,6 +852,9 @@ def test_format_co2e(kg: float, expected: str) -> None:
     assert _format_co2e(kg) == expected
 
 
+_PAGE_REFS = PageRefs(quality=3, methodology=12)
+
+
 def _narrative(**overrides: Any) -> ExecutiveNarrative:
     kwargs: dict[str, Any] = {
         "client": "Acme",
@@ -845,7 +876,7 @@ def _narrative(**overrides: Any) -> ExecutiveNarrative:
 
 
 def test_narrative_paragraphs_describe_the_footprint() -> None:
-    assert _narrative_paragraphs(_narrative()) == [
+    assert _narrative_paragraphs(_narrative(), _PAGE_REFS) == [
         "Over this period the kitchen purchased about 1,234 kg of categorized food. Producing "
         "that food, up to the farm gate, released an estimated 2.5 metric tons of carbon dioxide "
         "equivalent (CO₂e), the standard unit for comparing the climate impact of different "
@@ -860,12 +891,12 @@ def test_narrative_paragraphs_describe_the_footprint() -> None:
         "categories drive most of the footprint. Modest, targeted menu changes in those areas "
         "deliver the largest reductions.",
         "The pages that follow show how the footprint breaks down by month, category and "
-        "product. The methodology is explained at the back.",
+        "product. The methodology is on page 12.",
     ]
 
 
 def test_narrative_paragraphs_without_headcounts_say_the_figures_are_totals() -> None:
-    assert _narrative_paragraphs(_narrative(co2e_per_head=None))[0] == (
+    assert _narrative_paragraphs(_narrative(co2e_per_head=None), _PAGE_REFS)[0] == (
         "Over this period the kitchen purchased about 1,234 kg of categorized food. Producing "
         "that food, up to the farm gate, released an estimated 2.5 metric tons of carbon dioxide "
         "equivalent (CO₂e), the standard unit for comparing the climate impact of different "
@@ -883,16 +914,16 @@ def test_narrative_paragraphs_caveat_the_quality() -> None:
             any_animal=False,
             top_categories=(CategoryShare("Legumes", 70.0), CategoryShare("Cheese", 30.0)),
             quality_status="warning",
-        )
+        ),
+        _PAGE_REFS,
     )
 
     assert paragraphs[1:] == [
         "The biggest contributors were Legumes (70%) and Cheese (30%).",
         "All of the categorized food was plant-based.",
-        "Some data-quality notes apply to this analysis; they are listed in plain language on "
-        "the next page.",
+        "Some data-quality notes apply to this analysis; they are listed on page 3.",
         "The pages that follow show how the footprint breaks down by month, category and "
-        "product. The methodology is explained at the back.",
+        "product. The methodology is on page 12.",
     ]
 
 
@@ -904,7 +935,9 @@ def test_narrative_paragraphs_caveat_the_quality() -> None:
 def test_narrative_paragraphs_never_round_a_nonzero_share_to_zero_or_all(
     plant_pct: float, animal_pct: float
 ) -> None:
-    paragraph = _narrative_paragraphs(_narrative(plant_pct=plant_pct, animal_pct=animal_pct))[2]
+    paragraph = _narrative_paragraphs(
+        _narrative(plant_pct=plant_pct, animal_pct=animal_pct), _PAGE_REFS
+    )[2]
 
     assert "plant-based items made up over 99% of food by weight and animal products under 1%." in (
         paragraph
@@ -920,9 +953,9 @@ def test_executive_narrative_rejects_a_count_of_top_categories_it_cannot_word(co
 def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> None:
     narrative = _executive_narrative(_report(animal_product=None), "Acme", "pass")
 
-    assert _narrative_paragraphs(narrative)[1:] == [
+    assert _narrative_paragraphs(narrative, _PAGE_REFS)[1:] == [
         "The biggest contributors were Legumes (100%).",
         "All of the categorized food was plant-based.",
         "The pages that follow show how the footprint breaks down by month, category and "
-        "product. The methodology is explained at the back.",
+        "product. The methodology is on page 12.",
     ]

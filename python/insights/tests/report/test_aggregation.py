@@ -656,23 +656,22 @@ def test_calculate_ruminant_legume_swap_scenarios_uses_legume_counterfactual():
     expected = pd.DataFrame(
         {
             "scenario": [
-                "10% ruminant-to-legume swap",
                 "25% ruminant-to-legume swap",
                 "50% ruminant-to-legume swap",
                 "100% ruminant-to-legume swap",
             ],
-            "substitution_pct": [10.0, 25.0, 50.0, 100.0],
-            "source_categories": ["Beef and Buffalo Meat, Lamb/mutton & goat meat"] * 4,
-            "replacement_category": ["Legumes"] * 4,
-            "baseline_source_weight_kg": [15.0] * 4,
-            "baseline_source_emissions_kg_co2e": [621.6] * 4,
-            "replaced_weight_kg": [1.5, 3.75, 7.5, 15.0],
-            "remaining_source_weight_kg": [13.5, 11.25, 7.5, 0.0],
-            "replacement_weight_kg": [1.5, 3.75, 7.5, 15.0],
-            "replacement_emission_factor_kg_co2e_per_kg": [1.6] * 4,
-            "projected_emissions_kg_co2e": [561.84, 472.2, 322.8, 24.0],
-            "avoidable_kg_co2e": [59.76, 149.4, 298.8, 597.6],
-            "institution_emissions_avoided_pct": [9.42, 23.55, 47.1, 94.2],
+            "substitution_pct": [25.0, 50.0, 100.0],
+            "source_categories": ["Beef and Buffalo Meat, Lamb/mutton & goat meat"] * 3,
+            "replacement_category": ["Legumes"] * 3,
+            "baseline_source_weight_kg": [15.0] * 3,
+            "baseline_source_emissions_kg_co2e": [621.6] * 3,
+            "replaced_weight_kg": [3.75, 7.5, 15.0],
+            "remaining_source_weight_kg": [11.25, 7.5, 0.0],
+            "replacement_weight_kg": [3.75, 7.5, 15.0],
+            "replacement_emission_factor_kg_co2e_per_kg": [1.6] * 3,
+            "projected_emissions_kg_co2e": [472.2, 322.8, 24.0],
+            "avoidable_kg_co2e": [149.4, 298.8, 597.6],
+            "institution_emissions_avoided_pct": [23.55, 47.1, 94.2],
         }
     )
     pd.testing.assert_frame_equal(result, expected)
@@ -733,23 +732,22 @@ def test_calculate_milk_oat_swap_scenarios_uses_oat_milk_counterfactual():
     expected = pd.DataFrame(
         {
             "scenario": [
-                "10% cow's-milk-to-oat-milk swap",
-                "20% cow's-milk-to-oat-milk swap",
+                "25% cow's-milk-to-oat-milk swap",
                 "50% cow's-milk-to-oat-milk swap",
                 "100% cow's-milk-to-oat-milk swap",
             ],
-            "substitution_pct": [10.0, 20.0, 50.0, 100.0],
-            "source_categories": ["Milk (Cow's milk)"] * 4,
-            "replacement_category": ["Oat Milk"] * 4,
-            "baseline_source_weight_kg": [20.0] * 4,
-            "baseline_source_emissions_kg_co2e": [43.4] * 4,
-            "replaced_weight_kg": [2.0, 4.0, 10.0, 20.0],
-            "remaining_source_weight_kg": [18.0, 16.0, 10.0, 0.0],
-            "replacement_weight_kg": [2.0, 4.0, 10.0, 20.0],
-            "replacement_emission_factor_kg_co2e_per_kg": [0.89] * 4,
-            "projected_emissions_kg_co2e": [40.84, 38.28, 30.6, 17.8],
-            "avoidable_kg_co2e": [2.56, 5.12, 12.8, 25.6],
-            "institution_emissions_avoided_pct": [4.28, 8.57, 21.42, 42.84],
+            "substitution_pct": [25.0, 50.0, 100.0],
+            "source_categories": ["Milk (Cow's milk)"] * 3,
+            "replacement_category": ["Oat Milk"] * 3,
+            "baseline_source_weight_kg": [20.0] * 3,
+            "baseline_source_emissions_kg_co2e": [43.4] * 3,
+            "replaced_weight_kg": [5.0, 10.0, 20.0],
+            "remaining_source_weight_kg": [15.0, 10.0, 0.0],
+            "replacement_weight_kg": [5.0, 10.0, 20.0],
+            "replacement_emission_factor_kg_co2e_per_kg": [0.89] * 3,
+            "projected_emissions_kg_co2e": [37.0, 30.6, 17.8],
+            "avoidable_kg_co2e": [6.4, 12.8, 25.6],
+            "institution_emissions_avoided_pct": [10.71, 21.42, 42.84],
         }
     )
     pd.testing.assert_frame_equal(result, expected)
@@ -766,7 +764,7 @@ def test_calculate_milk_oat_swap_scenarios_avoids_divide_by_zero_when_total_emis
 
     result = calculate_milk_oat_swap_scenarios(df, region="us")
 
-    assert result["institution_emissions_avoided_pct"].tolist() == [0.0, 0.0, 0.0, 0.0]
+    assert result["institution_emissions_avoided_pct"].tolist() == [0.0, 0.0, 0.0]
 
 
 def test_run_aggregation_pipeline_fills_the_procurement_tables_from_the_rows():
@@ -798,12 +796,10 @@ def test_run_aggregation_pipeline_fills_the_procurement_tables_from_the_rows():
     ]
     assert result.substitution_scenarios is not None
     assert result.substitution_scenarios["scenario"].tolist() == [
-        "10% ruminant-to-legume swap",
         "25% ruminant-to-legume swap",
         "50% ruminant-to-legume swap",
         "100% ruminant-to-legume swap",
-        "10% cow's-milk-to-oat-milk swap",
-        "20% cow's-milk-to-oat-milk swap",
+        "25% cow's-milk-to-oat-milk swap",
         "50% cow's-milk-to-oat-milk swap",
         "100% cow's-milk-to-oat-milk swap",
     ]

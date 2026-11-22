@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 from gbd_foodservice_insights.plotting_utils import (
     GBD_COLORS,
     LETTER_LANDSCAPE,
+    PAGE_FOOTER_HEIGHT,
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
@@ -30,6 +31,11 @@ from gbd_foodservice_insights.report.plots.panels import (
     draw_total_emissions,
 )
 from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
+
+
+def _fit_page(fig: Figure, top: float = 1.0) -> None:
+    """Lay out ``fig`` between the page footer and ``top``, as a fraction of the page height."""
+    fig.tight_layout(rect=(0, PAGE_FOOTER_HEIGHT, 1, top))
 
 
 def plot_diner_meal_numbers(
@@ -53,7 +59,7 @@ def plot_diner_meal_numbers(
     ax.set_xticks(x_positions)
     ax.set_xticklabels(formatted_labels, rotation=45)
 
-    plt.tight_layout()
+    _fit_page(fig)
     return fig
 
 
@@ -84,7 +90,7 @@ def plot_category_drivers_pages(
             draw_category_drivers(ax, category_drivers, category, metric=metric)
         for ax in axes.flat[len(page_categories) :]:
             ax.axis("off")
-        fig.tight_layout(rect=(0, 0, 1, 0.93))
+        _fit_page(fig, top=0.93)
         pages.append(fig)
     return pages
 
@@ -107,7 +113,7 @@ def plot_overall_drivers(overall_drivers: pd.DataFrame, metric: Metric = KILOS) 
         "Top Product" if len(overall_drivers) == 1 else f"Top {len(overall_drivers)} Products"
     )
     set_title_font(ax, f"{products} by {metric.line_noun.title()}: Overall")
-    plt.tight_layout()
+    _fit_page(fig)
     return fig
 
 
@@ -129,7 +135,7 @@ def plot_category_totals(monthly_category_data: pd.DataFrame, metric: Metric) ->
     set_title_font(ax, f"{metric.label} by Category Across All Months")
     ax.set_xlabel(metric.label)
     ax.set_ylabel("")
-    fig.tight_layout()
+    _fit_page(fig)
     return fig
 
 
@@ -152,7 +158,7 @@ def plot_food_and_drink_comparison_page(
             metric=metric,
             diner_or_meal=headcounts.diner_or_meal,
         )
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    _fit_page(fig, top=0.94)
     return fig
 
 
@@ -181,7 +187,7 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
             )
     ax.set_xlim(right=x_max * 1.15)
 
-    plt.tight_layout()
+    _fit_page(fig)
     return fig
 
 
@@ -201,7 +207,7 @@ def plot_emissions_summary_over_time(
             headcounts.by_month,
             diner_or_meal=headcounts.diner_or_meal,
         )
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    _fit_page(fig, top=0.92)
     return fig
 
 
@@ -224,5 +230,5 @@ def plot_plant_breakdown_overview(
     draw_plant_share_by_month(axes[0, 1], plant_animal_split)
     draw_plant_protein_share(axes[1, 0], plant_protein_share, metric=metric)
     draw_plant_protein_share_by_month(axes[1, 1], plant_protein_share)
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    _fit_page(fig, top=0.93)
     return fig

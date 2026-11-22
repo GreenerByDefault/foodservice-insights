@@ -15,15 +15,14 @@ from gbd_foodservice_insights.emissions import get_emission_factor
 from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.schema import Headcounts, Region
 
+_DEFAULT_SWAP_LEVELS = (0.25, 0.50, 1.00)
 _RUMINANT_SWAP_SOURCE_CATEGORIES = (
     "Beef and Buffalo Meat",
     "Lamb/mutton & goat meat",
 )
 _RUMINANT_SWAP_TARGET_CATEGORY = "Legumes"
-_DEFAULT_RUMINANT_SWAP_LEVELS = (0.10, 0.25, 0.50, 1.00)
 _MILK_SWAP_SOURCE_CATEGORIES = ("Milk (Cow's milk)",)
 _MILK_SWAP_TARGET_CATEGORY = "Oat Milk"
-_DEFAULT_MILK_SWAP_LEVELS = (0.10, 0.20, 0.50, 1.00)
 
 
 @dataclass(frozen=True)
@@ -410,7 +409,7 @@ def calculate_ruminant_legume_swap_scenarios(
     df: pd.DataFrame,
     *,
     region: Region = "us",
-    substitution_levels: tuple[float, ...] = _DEFAULT_RUMINANT_SWAP_LEVELS,
+    substitution_levels: tuple[float, ...] = _DEFAULT_SWAP_LEVELS,
 ) -> pd.DataFrame:
     """Calculate avoidable emissions from replacing ruminant meat with legumes."""
     return calculate_category_swap_scenarios(
@@ -427,7 +426,7 @@ def calculate_milk_oat_swap_scenarios(
     df: pd.DataFrame,
     *,
     region: Region = "us",
-    substitution_levels: tuple[float, ...] = _DEFAULT_MILK_SWAP_LEVELS,
+    substitution_levels: tuple[float, ...] = _DEFAULT_SWAP_LEVELS,
 ) -> pd.DataFrame:
     """Calculate avoidable emissions from replacing cow's milk with oat milk."""
     return calculate_category_swap_scenarios(
