@@ -6,7 +6,7 @@ requires-python = ">=3.14"
 dependencies = [
     "chardet>=7.7.0,<8",
     "gbd-foodservice-insights",
-    "google-genai>=2.34.0,<3",
+    "google-genai>=3.6.1,<4",
     "ipython>=8,<10",
     "Levenshtein>=0.27,<1",
     "llmwhisperer-client>=2.10.0,<3",
