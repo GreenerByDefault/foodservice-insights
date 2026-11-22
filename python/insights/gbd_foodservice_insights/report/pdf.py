@@ -21,6 +21,7 @@ from matplotlib.transforms import Bbox
 from gbd_foodservice_insights.plotting_utils import (
     LETTER_LANDSCAPE,
     LETTER_PORTRAIT,
+    PAGE_FOOTER_HEIGHT,
     close_new_figures_on_error,
 )
 from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
@@ -65,6 +66,46 @@ class PdfSink(Protocol):
     """All the page writers need of ``PdfPages``, so a test can record pages instead."""
 
     def savefig(self, figure: Figure, /) -> None: ...
+
+
+class _PageCollector:
+    """Holds pages back, so the pages that refer to them can be written once their numbers are
+    known."""
+
+    def __init__(self) -> None:
+        self.figures: list[Figure] = []
+
+    def savefig(self, figure: Figure, /) -> None:
+        self.figures.append(figure)
+
+
+class _NumberedPdf:
+    """Stamps a page number in the footer of each page after the title page."""
+
+    def __init__(self, pdf: PdfSink) -> None:
+        self._pdf = pdf
+        self.page_count = 0
+
+    def savefig(self, figure: Figure, /) -> None:
+        self.page_count += 1
+        if self.page_count == 1:
+            self._pdf.savefig(figure)
+            return
+        # Removed after saving, because a chart figure belongs to the caller.
+        number = figure.text(
+            0.5,
+            PAGE_FOOTER_HEIGHT / 2,
+            str(self.page_count),
+            ha="center",
+            va="center",
+            fontsize=9,
+            fontfamily="Lato",
+            color="gray",
+        )
+        try:
+            self._pdf.savefig(figure)
+        finally:
+            number.remove()
 
 
 def _new_text_figure(fig_size: tuple[float, float] = LETTER_PORTRAIT) -> tuple[Figure, plt.Axes]:
@@ -166,6 +207,13 @@ class CategoryShare(NamedTuple):
     pct_of_footprint: float
 
 
+class PageRefs(NamedTuple):
+    """The page numbers the executive summary points readers to."""
+
+    quality: int
+    methodology: int
+
+
 class Co2ePerHead(NamedTuple):
     diner_or_meal: DinerOrMeal
     kg: float
@@ -217,6 +265,7 @@ def new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]
 def create_executive_summary_page(
     pdf: PdfSink,
     narrative: ExecutiveNarrative,
+    page_refs: PageRefs,
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
     """Render the executive summary for readers who will never hear the report explained: a
@@ -257,7 +306,7 @@ def create_executive_summary_page(
         y -= _SUMMARY_LINE_HEIGHT
 
     y -= 0.035  # gap below the subtitle
-    for paragraph in _narrative_paragraphs(narrative):
+    for paragraph in _narrative_paragraphs(narrative, page_refs):
         for line in _wrap_to_width(paragraph, text_width_in, fontsize=11.5, fontfamily="Lato"):
             ax.text(
                 left_x,
@@ -285,7 +334,7 @@ def _share_text(pct: float, *, nonzero: bool) -> str:
     return f"{pct:.0f}%"
 
 
-def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
+def _narrative_paragraphs(narrative: ExecutiveNarrative, page_refs: PageRefs) -> list[str]:
     headline = _format_co2e(narrative.total_co2e_kg)
     paragraphs = []
 
@@ -334,12 +383,12 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
 
     if narrative.quality_status != "pass":
         paragraphs.append(
-            "Some data-quality notes apply to this analysis; they are listed in plain "
-            "language on the next page."
+            "Some data-quality notes apply to this analysis; they are listed on page "
+            f"{page_refs.quality}."
         )
     paragraphs.append(
         "The pages that follow show how the footprint breaks down by month, category and "
-        "product. The methodology is explained at the back."
+        f"product. The methodology is on page {page_refs.methodology}."
     )
     return paragraphs
 
@@ -940,42 +989,53 @@ def write_report_pdf(
     aggregation = report.aggregation
     diner_or_meal = None if report.headcounts is None else report.headcounts.diner_or_meal
 
-    with close_new_figures_on_error(), PdfPages(path) as pdf:
-        create_title_page(pdf, client_name, f"Procurement | {date_range_label(report.rows)}")
-        create_executive_summary_page(
-            pdf, _executive_narrative(report, client_name, quality_status)
-        )
+    with close_new_figures_on_error():
+        body = _PageCollector()
         create_text_page(
-            pdf,
+            body,
             "Data Completeness & Quality",
             quality_lines(report.findings, show_successes=show_quality_successes),
         )
-        create_text_page(pdf, "How to Read This Report", _how_to_read_lines(diner_or_meal))
+        create_text_page(body, "How to Read This Report", _how_to_read_lines(diner_or_meal))
 
         for fig in charts.figures:
-            pdf.savefig(fig)
+            body.savefig(fig)
 
-        create_category_template_pages(pdf, aggregation.template)
+        create_category_template_pages(body, aggregation.template)
         if aggregation.animal_emissions_intensity is not None:
-            create_animal_intensity_page(pdf, aggregation.animal_emissions_intensity)
+            create_animal_intensity_page(body, aggregation.animal_emissions_intensity)
         if aggregation.animal_emissions_concentration is not None:
-            create_decision_kpis_page(pdf, aggregation.animal_emissions_concentration)
+            create_decision_kpis_page(body, aggregation.animal_emissions_concentration)
         if aggregation.substitution_scenarios is not None:
-            create_substitution_scenarios_page(pdf, aggregation.substitution_scenarios)
+            create_substitution_scenarios_page(body, aggregation.substitution_scenarios)
 
+        methodology_index = len(body.figures)
         for title, lines in zip(
             ("About This Report", "About This Report (cont.)"),
             _about_pages(diner_or_meal),
             strict=True,
         ):
             create_text_page(
-                pdf,
+                body,
                 title,
                 lines,
                 bold_lines={
                     line for line in lines if line.endswith("?") or line == _REFERENCES_HEADING
                 },
             )
+
+        with PdfPages(path) as pdf_pages:
+            pdf = _NumberedPdf(pdf_pages)
+            create_title_page(pdf, client_name, f"Procurement | {date_range_label(report.rows)}")
+            # The summary takes the next page, and the body follows it.
+            first_body_page = pdf.page_count + 2
+            create_executive_summary_page(
+                pdf,
+                _executive_narrative(report, client_name, quality_status),
+                PageRefs(quality=first_body_page, methodology=first_body_page + methodology_index),
+            )
+            for fig in body.figures:
+                pdf.savefig(fig)
 
     logger.info("PDF report saved to %s", path)
 
