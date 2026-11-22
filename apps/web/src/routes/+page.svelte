@@ -38,31 +38,39 @@ const steps = [
 
   <main class="flex flex-1 flex-col">
     <section class="page-width flex flex-col items-start gap-6 py-16 sm:py-24">
-      <p class="text-sm font-medium text-primary">From Greener by Default</p>
-      <h1 class="max-w-2xl text-4xl font-medium text-balance sm:text-5xl">
-        See the climate impact of your food purchasing
+      <p class="text-xs font-bold tracking-widest text-primary uppercase">
+        From Greener by Default
+      </p>
+      <h1
+        class="max-w-2xl text-4xl leading-[1.15] tracking-tighter text-balance uppercase sm:text-6xl"
+      >
+        See the
+        <span class="underline decoration-highlight decoration-[0.1em] underline-offset-[0.12em]"
+          >climate impact</span
+        >
+        of your food purchasing
       </h1>
-      <p class="max-w-xl text-lg text-muted-foreground">
+      <p class="max-w-xl text-lg font-medium text-foreground">
         Upload your procurement data and get back a report on the emissions behind what your
         kitchens buy, with recommendations for lowering them.
       </p>
       <Button href="/sign-in" size="lg" class="px-4">Get started</Button>
     </section>
 
-    <section class="flex-1 bg-primary/5">
+    <section class="flex-1 bg-primary text-primary-foreground">
       <div class="page-width flex flex-col gap-8 py-16">
-        <h2 class="text-2xl font-medium">How it works</h2>
+        <h2 class="text-2xl text-primary-foreground uppercase">How it works</h2>
         <ol class="grid gap-8 sm:grid-cols-3 sm:gap-6">
           {#each steps as step, index (step.title)}
             <li class="flex flex-col gap-2">
               <span
-                class="flex size-8 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground"
+                class="flex size-8 items-center justify-center rounded-full bg-highlight text-sm font-bold text-primary"
                 aria-hidden="true"
               >
                 {index + 1}
               </span>
-              <h3 class="font-medium">{step.title}</h3>
-              <p class="text-sm text-muted-foreground">{step.body}</p>
+              <h3 class="text-primary-foreground">{step.title}</h3>
+              <p class="text-sm text-primary-foreground/90">{step.body}</p>
             </li>
           {/each}
         </ol>

@@ -3,10 +3,10 @@
 ## Context
 
 greenerbydefault.com relaunched with a new logo and visual identity, and GBD will send visual
-edits later. The web app already wears the new look: `apps/web/src/routes/layout.css` holds every
-color, the font and the radius as tokens, so GBD's edits should only ever change tokens. What is
-left is the marketing page's brand treatment, the emails and the PDF, which share no tokens with
-the web app and copy the palette by hand. The scope is UI and styling, not UX: layouts and copy
+edits later. The web app, marketing page included, already wears the new look:
+`apps/web/src/routes/layout.css` holds every color, the font and the radius as tokens, so GBD's
+edits should only ever change tokens. What is left is the emails and the PDF, which share no
+tokens with the web app and copy the palette by hand. The scope is UI and styling, not UX: layouts and copy
 stay as they are.
 
 **The palette**, as the web app ships it. Emails and the PDF copy these hex values:
@@ -37,42 +37,16 @@ GBD's own link green `#049250` is 3.8:1 on cream, which fails AA, so links use `
 with `favicon.svg` as the disc) until GBD sends official art; Poppins everywhere; restyle the
 emails and the PDF too; no screenshot pruning before the redesign.
 
-The marketing mockup this plan follows: a cream hero with a small green uppercase eyebrow; an
-uppercase, tightly tracked green headline with "climate impact" underlined by a thick chartreuse
-bar; a green pill CTA with chartreuse text; then a full-bleed green "How it works" band with a
-cream uppercase heading and chartreuse numbered discs.
-
 ## PR breakdown
 
 | PR | What | Screenshots |
 | --- | --- | --- |
-| 1 | Web: marketing page brand treatment | 3 (`marketing`) |
-| 2 | Emails: `packages/email` + Supabase auth templates | none |
-| 3 | PDF report (Python) | none |
+| 1 | Emails: `packages/email` + Supabase auth templates | none |
+| 2 | PDF report (Python) | none |
 
-All three are independent of one another.
+The two are independent of each other.
 
-## PR 1: marketing page (`apps/web/src/routes/+page.svelte`)
-
-Follow the mockup described in Context:
-- **Eyebrow:** "From Greener by Default" in `text-xs font-bold uppercase tracking-widest
-  text-primary`.
-- **Hero h1:** `uppercase tracking-tighter leading-none`, at `text-4xl sm:text-6xl`. The words
-  "climate impact" sit in a `<span>` with a chartreuse underline bar: a `bg-highlight` gradient
-  sized to about 8px at the baseline. That keeps the bar decorative, with no text on
-  chartreuse.
-- **Lead paragraph:** `text-lg font-medium text-foreground`.
-- **CTA:** a green pill with chartreuse text (`text-highlight`, 4.7:1 on green), like GBD's
-  "Donate" button. Add a `brand` variant to `button.svelte` only if a second use appears;
-  otherwise use a class on this one button.
-- **"How it works" band:**
-  - Use a full-bleed `bg-primary text-primary-foreground` band in place of `bg-primary/5`.
-  - The h2 is uppercase and cream (override `text-heading`).
-  - Step numbers are chartreuse discs with green numerals.
-  - Step bodies use `text-primary-foreground/90`. Check axe contrast.
-- **Footer:** keep the "a tool from Greener by Default" link. It inherits the new tokens.
-
-## PR 2: emails
+## PR 1: emails
 
 - In `packages/email/src/messages/layout.ts`, update the styles:
 
@@ -93,7 +67,7 @@ Follow the mockup described in Context:
 - No logo image. An image would need an absolute app-origin URL from `static/` (see the comment
   in `layout.ts`), and that is not worth it now.
 
-## PR 3: PDF report (`python/insights/gbd_foodservice_insights/`)
+## PR 2: PDF report (`python/insights/gbd_foodservice_insights/`)
 
 **Palette** (`plotting_utils.py`)
 - Add named constants: `GBD_GREEN` `#016939`, `GBD_CHARTREUSE` `#D9E027`, `GBD_BROWN`
@@ -145,17 +119,12 @@ Render the PDF and check it.
 
 ## Verification
 
-**PR 1 (marketing)**
-- `pnpm turbo run screenshots:update --filter=@gbd/web`; axe checks contrast on the green band
-  at every viewport. Only the three `marketing` PNGs should change.
-- `pnpm lint && pnpm check && pnpm test`.
-
-**PR 2 (emails)**
+**PR 1 (emails)**
 - `pnpm --filter @gbd/email preview` to view every app email.
 - `pnpm lint && pnpm check && pnpm test`.
 - Trigger a sign-in code locally and view it in the local Supabase mail catcher.
 
-**PR 3 (PDF)**
+**PR 2 (PDF)**
 - `just lint && just check && just test`.
 - Render a report PDF from the test fixtures that `test_pdf.py` uses, rasterize each page
   (`pdftoppm -png`), and inspect it for overflow, font fallback warnings and chart colors.
