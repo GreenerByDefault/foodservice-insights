@@ -56,9 +56,7 @@ async function remove() {
 
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       <Button
         {...props}
         variant="ghost"

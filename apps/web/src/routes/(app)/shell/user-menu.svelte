@@ -40,9 +40,7 @@ async function signOut() {
 
 <DropdownMenu.Root>
   <DropdownMenu.Trigger>
-    {#snippet child({
-      props,
-    })}
+    {#snippet child({ props })}
       <Button
         {...props}
         variant="secondary"
@@ -68,9 +66,7 @@ async function signOut() {
     <DropdownMenu.Separator class="my-2" />
 
     <DropdownMenu.Item class="px-3 py-2">
-      {#snippet child({
-        props,
-      })}
+      {#snippet child({ props })}
         <a {...props} href="/account" class={cnChildProps(props, 'flex items-center gap-2')}>
           <UserIcon class="size-4 shrink-0" />
           Your account
@@ -79,9 +75,7 @@ async function signOut() {
     </DropdownMenu.Item>
 
     <DropdownMenu.Item class="px-3 py-2">
-      {#snippet child({
-        props,
-      })}
+      {#snippet child({ props })}
         <a {...props} href="/invites" class={cnChildProps(props, 'flex items-center gap-2')}>
           <MailIcon class="size-4 shrink-0" />
           Your invitations

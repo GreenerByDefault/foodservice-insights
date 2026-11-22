@@ -2,8 +2,8 @@
  * both answer with when it would.
  *
  * `organization_member_at_least_one_admin` (docs/requirements.md § Roles: an organization always has
- * one admin) checks at end-of-statement, so `attemptMemberWrite` can catch it here without any
- * extra step, inside a test's `withRollback` as much as in production.
+ * one admin) checks at end-of-statement, so `attemptMemberWrite` can catch it without any extra step, inside
+ * a test's `withRollback` as much as in production.
  */
 
 import { type Database, type DatabaseExecutor, withTransaction } from '@gbd/db';
@@ -21,16 +21,17 @@ export async function attemptMemberWrite(
   db: DatabaseExecutor,
   write: (transaction: Transaction<Database>) => Promise<void>,
 ): Promise<'done' | 'last-admin'> {
-  return await withTransaction(db, async (transaction) => {
-    try {
-      await write(transaction);
-    } catch (cause) {
-      if (isCheckViolation(cause, ORGANIZATION_MEMBER_AT_LEAST_ONE_ADMIN)) return 'last-admin';
-      throw cause;
-    }
+  // Caught outside the transaction, not inside it: the violation has already aborted the
+  // transaction, so returning normally from inside would ask Postgres to commit it, and Kysely
+  // throws `AbortedTransactionError` when that commit comes back as a rollback.
+  try {
+    await withTransaction(db, write);
+  } catch (cause) {
+    if (isCheckViolation(cause, ORGANIZATION_MEMBER_AT_LEAST_ONE_ADMIN)) return 'last-admin';
+    throw cause;
+  }
 
-    return 'done';
-  });
+  return 'done';
 }
 
 /** The 409 for a write that would leave the organization with no admin. */

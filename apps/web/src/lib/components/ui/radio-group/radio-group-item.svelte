@@ -19,9 +19,7 @@ let {
   )}
   {...restProps}
 >
-  {#snippet children({
-    checked,
-  })}
+  {#snippet children({ checked })}
     <div data-slot="radio-group-indicator" class="flex size-4 items-center justify-center">
       {#if checked}
         <CircleIcon

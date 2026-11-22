@@ -37,9 +37,7 @@ function keepOpenWhileSubmitting(event: Event) {
       </Dialog.Description>
     </Dialog.Header>
     <InviteForm {organizationSlug} onInvited={() => (open = false)} bind:submitting>
-      {#snippet cancel(
-        label,
-      )}
+      {#snippet cancel(label)}
         <Dialog.Close class={buttonVariants({ variant: 'outline' })} disabled={submitting}>
           {label}
         </Dialog.Close>
