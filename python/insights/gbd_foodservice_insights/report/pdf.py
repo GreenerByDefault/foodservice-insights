@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 _TEXT_PAGE_TOP_Y = 0.88
 _TEXT_PAGE_BOTTOM_Y = 0.06
-_TEXT_PAGE_LINE_HEIGHT = 0.03
+_TEXT_PAGE_LINE_HEIGHT = 0.029
 _TEXT_PAGE_WRAP_CHARS = 92
 
 _SUMMARY_MARGIN_IN = 1.0
@@ -238,7 +238,9 @@ def create_executive_summary_page(
         fontfamily="Montserrat",
         color="#006a62",
     )
-    subtitle = f"the climate footprint of food purchased by {narrative.client}, {narrative.period}"
+    subtitle = (
+        f"the greenhouse gas footprint of food purchased by {narrative.client}, {narrative.period}"
+    )
     y = 0.70
     for line in _wrap_to_width(subtitle, text_width_in, fontsize=12, fontfamily="Lato"):
         ax.text(
@@ -290,9 +292,9 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
     per_head = narrative.co2e_per_head
     paragraphs.append(
         f"Over this period the kitchen purchased about {narrative.total_food_kg:,.0f} kg "
-        f"of categorised food. Producing that food released an estimated {headline} of carbon "
-        "dioxide equivalent (CO₂e), the standard measure for comparing the climate impact of "
-        "different foods. "
+        "of categorised food. Producing that food, up to the farm gate, released an estimated "
+        f"{headline} of carbon dioxide equivalent (CO₂e), the standard unit for comparing the "
+        "climate impact of different foods. "
         + (
             "No diner or meal counts were provided, so these figures are totals. Sites differ "
             "in size, so they can't be compared directly with other sites."
@@ -318,10 +320,12 @@ def _narrative_paragraphs(narrative: ExecutiveNarrative) -> list[str]:
         "All of the categorised food was plant-based."
         if not narrative.any_animal
         else (
-            "Plant-based items made up "
-            f"{_share_text(narrative.plant_pct, nonzero=narrative.plant_pct > 0)} of the "
-            "categorised food by weight, and animal products "
-            f"{_share_text(narrative.animal_pct, nonzero=True)}. Animal products carry far "
+            "Within the categories this report tracks (mainly animal proteins, dairy, and "
+            "their plant-based alternatives), plant-based items made up "
+            f"{_share_text(narrative.plant_pct, nonzero=narrative.plant_pct > 0)} of food by "
+            f"weight and animal products {_share_text(narrative.animal_pct, nonzero=True)}. "
+            "Fruit, vegetables, and other foods outside these categories are not included. "
+            "Animal products carry far "
             "higher emissions per kilogram, so a small number of categories drive most of the "
             "footprint. Modest, targeted menu changes in those areas deliver the largest "
             "reductions."
@@ -786,10 +790,10 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
     )
     return [
         "The charts in this report show your catering operation's food purchasing patterns",
-        "and associated carbon footprint over the reporting period.",
+        "and associated greenhouse gas footprint over the reporting period.",
         "",
         "Key things to look for:",
-        "  \u2022 Which food categories contribute most to your total carbon footprint.",
+        "  \u2022 Which food categories contribute most to your total greenhouse gas footprint.",
         "  \u2022 Which specific products are the biggest drivers within those categories.",
         "  \u2022 How purchasing volumes vary month to month.",
         "",
@@ -797,7 +801,7 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
         "",
         "The plant vs. animal breakdown shows the proportion of food purchased from",
         "plant-based vs. animal-based sources. Shifting this ratio is one of the most",
-        "effective ways to reduce your carbon footprint.",
+        "effective ways to reduce your greenhouse gas footprint.",
         "",
         "The top driver products are the ones you bought the most of by weight, which makes",
         "them a good place to start when planning menu changes. They are not ranked by carbon:",
@@ -833,9 +837,11 @@ def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
             "is then applied."
         ),
         "  These factors are drawn from peer-reviewed life-cycle assessment research.",
+        "  These factors cover emissions from production up to the farm gate. They do not",
+        "  include processing, transport, packaging, storage, or cooking.",
         "  Total carbon is the sum of (weight \u00d7 emissions factor) across all items.",
-        "  This means two foods with the same weight can have very different carbon footprints",
-        "  depending on how they are produced.",
+        "  This means two foods with the same weight can have very different greenhouse gas",
+        "  footprints depending on how they are produced.",
         "",
         "How should I interpret the monthly figures?",
         "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with",

@@ -220,13 +220,13 @@ def _text_page_titles(lines: list[str], bold_lines: set[str] | None = None) -> l
     ("line_count", "titles"),
     [
         (0, ["Title"]),
-        (28, ["Title"]),
-        (29, ["Title", "Title (cont.)"]),
-        (56, ["Title", "Title (cont.)"]),
-        (57, ["Title", "Title (cont.)", "Title (cont.)"]),
+        (29, ["Title"]),
+        (30, ["Title", "Title (cont.)"]),
+        (58, ["Title", "Title (cont.)"]),
+        (59, ["Title", "Title (cont.)", "Title (cont.)"]),
     ],
 )
-def test_text_page_fits_28_lines_per_page(line_count: int, titles: list[str]) -> None:
+def test_text_page_fits_29_lines_per_page(line_count: int, titles: list[str]) -> None:
     assert _text_page_titles([f"line {i}" for i in range(line_count)]) == titles
 
 
@@ -260,7 +260,7 @@ def test_executive_summary_page_leads_with_the_headline_and_fits_the_page() -> N
     texts = _summary_page(narrative)
 
     assert [t.text for t in texts[:2]] == ["Executive Summary", "2.5 tonnes CO₂e"]
-    assert texts[2].text.startswith("the climate footprint of food purchased by The University")
+    assert texts[2].text.startswith("the greenhouse gas footprint of food purchased by The")
     assert " ".join(t.text for t in texts).endswith("The methodology is explained at the back.")
     assert all(t.y > 0 for t in texts)
     ys = [t.y for t in texts[2:]]
@@ -843,13 +843,16 @@ def _narrative(**overrides: Any) -> ExecutiveNarrative:
 def test_narrative_paragraphs_describe_the_footprint() -> None:
     assert _narrative_paragraphs(_narrative()) == [
         "Over this period the kitchen purchased about 1,234 kg of categorised food. Producing "
-        "that food released an estimated 2.5 tonnes of carbon dioxide equivalent (CO₂e), the "
-        "standard measure for comparing the climate impact of different foods. That works out "
+        "that food, up to the farm gate, released an estimated 2.5 tonnes of carbon dioxide "
+        "equivalent (CO₂e), the standard unit for comparing the climate impact of different "
+        "foods. That works out "
         "at roughly 1.23 kg of CO₂e per meal.",
         "The biggest contributors were Beef and Buffalo Meat (60% of the food footprint), "
         "Cheese (20%) and Legumes (10%).",
-        "Plant-based items made up 63% of the categorised food by weight, and animal products "
-        "37%. Animal products carry far higher emissions per kilogram, so a small number of "
+        "Within the categories this report tracks (mainly animal proteins, dairy, and their "
+        "plant-based alternatives), plant-based items made up 63% of food by weight and animal "
+        "products 37%. Fruit, vegetables, and other foods outside these categories are not "
+        "included. Animal products carry far higher emissions per kilogram, so a small number of "
         "categories drive most of the footprint. Modest, targeted menu changes in those areas "
         "deliver the largest reductions.",
         "The pages that follow show how the footprint breaks down by month, category and "
@@ -860,8 +863,9 @@ def test_narrative_paragraphs_describe_the_footprint() -> None:
 def test_narrative_paragraphs_without_headcounts_say_the_figures_are_totals() -> None:
     assert _narrative_paragraphs(_narrative(co2e_per_head=None))[0] == (
         "Over this period the kitchen purchased about 1,234 kg of categorised food. Producing "
-        "that food released an estimated 2.5 tonnes of carbon dioxide equivalent (CO₂e), the "
-        "standard measure for comparing the climate impact of different foods. No diner or meal "
+        "that food, up to the farm gate, released an estimated 2.5 tonnes of carbon dioxide "
+        "equivalent (CO₂e), the standard unit for comparing the climate impact of different "
+        "foods. No diner or meal "
         "counts were provided, so these figures are totals. Sites differ in size, so they can't "
         "be compared directly with other sites."
     )
@@ -898,9 +902,8 @@ def test_narrative_paragraphs_never_round_a_nonzero_share_to_zero_or_all(
 ) -> None:
     paragraph = _narrative_paragraphs(_narrative(plant_pct=plant_pct, animal_pct=animal_pct))[2]
 
-    assert paragraph.startswith(
-        "Plant-based items made up over 99% of the categorised food by weight, and animal "
-        "products under 1%."
+    assert "plant-based items made up over 99% of food by weight and animal products under 1%." in (
+        paragraph
     )
 
 
