@@ -7,6 +7,7 @@ import pytest
 from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.categorization.cache import NO_MATCHES_FOUND, CategorizationCache
 from gbd_foodservice_insights.categorization.steps import (
+    canonical_product_names,
     categorize_using_cleaned_name_history,
     categorize_using_historical_classifications,
     categorize_with_llm,
@@ -28,6 +29,38 @@ def _cache(
         products=pd.DataFrame({"product": products, "category": categories}),
         cleaned_name_index=cleaned_name_index or {},
     )
+
+
+def test_canonical_product_names_names_each_product_by_its_most_common_spelling():
+    products = pd.Series(
+        [" Ice cream", "Ice Cream", "ICE-CREAM ", "Ice cream", "Oat Milk", "oat milk", "Rice"]
+    )
+
+    assert canonical_product_names(products).tolist() == [
+        "Ice cream",
+        "Ice cream",
+        "Ice cream",
+        "Ice cream",
+        "Oat Milk",
+        "Oat Milk",
+        "Rice",
+    ]
+
+
+def test_canonical_product_names_keeps_products_apart_that_differ_only_in_non_ascii_letters():
+    products = pd.Series(["豆腐 1kg", "牛肉 1kg", "JALAPEÑO", "jalapeño", "Jalapeno"])
+
+    assert canonical_product_names(products).tolist() == [
+        "豆腐 1kg",
+        "牛肉 1kg",
+        "JALAPEÑO",
+        "JALAPEÑO",
+        "Jalapeno",
+    ]
+
+
+def test_canonical_product_names_keeps_each_punctuation_only_product_apart():
+    assert canonical_product_names(pd.Series([".", "***", "."])).tolist() == [".", "***", "."]
 
 
 def test_categorize_using_historical_classifications_matches_the_cache():

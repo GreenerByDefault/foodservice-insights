@@ -31,6 +31,36 @@ logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------
+# Product identity
+# ----------------------------------------------------------------------
+def canonical_product_names(products: pd.Series) -> pd.Series:
+    """Strips each product and renames every spelling of it to the one on the most rows, ties
+    going to the first alphabetically, so "Ice cream" and "Ice Cream" are one product from
+    categorization through the report."""
+    stripped = products.str.strip()
+    spellings = stripped.value_counts().rename_axis("spelling").reset_index(name="rows")
+    # Not `normalize_product_name`: it drops every non-ASCII letter, so "豆腐 1kg" and
+    # "牛肉 1kg" would become one product. Borrowing a category on that key is guarded by
+    # unanimity; merging two products' rows is not.
+    key = spellings["spelling"].str.casefold().str.replace(r"[\W_]+", " ", regex=True).str.strip()
+    # A product of only punctuation has no letters to compare, so it is its own product.
+    spellings["key"] = key.where(key != "", spellings["spelling"])
+
+    canonical = (
+        spellings.sort_values(["rows", "spelling"], ascending=[False, True], kind="stable")
+        .drop_duplicates("key")
+        .set_index("key")["spelling"]
+    )
+    renamed = stripped.map(spellings.set_index("spelling")["key"].map(canonical))
+    logger.info(
+        "Product spellings: %d spellings became %d products.",
+        len(spellings),
+        len(canonical),
+    )
+    return renamed
+
+
+# ----------------------------------------------------------------------
 # Historical reuse
 # ----------------------------------------------------------------------
 def categorize_using_historical_classifications(

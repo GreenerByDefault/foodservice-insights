@@ -112,6 +112,25 @@ def test_categorize_unique_products_reuses_cleaned_names_and_skips_llm():
     )
 
 
+def test_categorize_unique_products_treats_spellings_of_a_product_as_one_product():
+    df = pd.DataFrame(
+        {
+            "product": ["Greek Yogurt", "GREEK YOGURT", "Greek Yogurt "],
+            "date": pd.to_datetime(["2025-01-01"] * 3),
+            "weight": [1.0, 2.0, 3.0],
+        }
+    )
+    llm = KeywordLlmClient()
+
+    categorized = categorize_unique_products(df=df, llm=llm, cache=EMPTY_CACHE)
+
+    assert llm.calls == [("clean", "Greek Yogurt"), ("match", "greek yogurt")]
+    assert categorized.cleaned_df["product"].tolist() == ["Greek Yogurt"] * 3
+    assert categorized.new_categorizations == (
+        NewCategorization("Greek Yogurt", "greek yogurt", "Yogurt"),
+    )
+
+
 def test_categorize_unique_products_characterization(caplog: pytest.LogCaptureFixture) -> None:
     """Near-miss model answers resolve to their category; an answer that names no category
     ("pork", "None") becomes "No Matches Found" with a warning. A cache row with surrounding

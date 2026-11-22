@@ -26,6 +26,7 @@ from gbd_foodservice_insights.categorization.steps import (
     MATCH_TYPE_CLEANED,
     MATCH_TYPE_LLM,
     MATCH_TYPE_RAW,
+    canonical_product_names,
     categorize_using_cleaned_name_history,
     categorize_using_historical_classifications,
     categorize_with_llm,
@@ -46,7 +47,7 @@ class NewCategorization:
 
 @dataclass(frozen=True)
 class CategorizedProducts:
-    cleaned_df: pd.DataFrame  # the input rows, with product stripped
+    cleaned_df: pd.DataFrame  # the input rows, with products named by `canonical_product_names`
     unique_products_df: pd.DataFrame  # one row per product, with its category and match_type
     unrecognized_llm_answers: int  # per unique cleaned name sent to the LLM, not per product
     new_categorizations: tuple[NewCategorization, ...]
@@ -95,7 +96,7 @@ def categorize_unique_products(
             raise ValueError(f"Column '{col}' contains missing values.")
 
     # Stripping is the cache's match-key rule (`CategorizationCache.from_frame` strips too).
-    df = df.assign(product=df["product"].str.strip())
+    df = df.assign(product=canonical_product_names(df["product"]))
 
     # --- Match against historical categorizations ---
     unique_products_df = df[["product"]].drop_duplicates().copy()
