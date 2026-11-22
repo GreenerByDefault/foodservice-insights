@@ -8,18 +8,20 @@ the one entry point the worker calls; the lab calls the same modules directly.
 ## Where a report change goes
 
 `report/food_report.py`'s `build_food_report()` computes the report in memory, and
-`report/pdf.write_report_pdf()` / `report/excel.write_client_workbook()` write the client-facing
+`report/pdf/report.write_report_pdf()` / `report/excel.write_client_workbook()` write the client-facing
 PDF and workbook. The lab's `gbd_foodservice_insights_lab.food_report.pipeline.run_food_report()`
 wraps those with file handling and the rest of the bundle (chart PNGs, the QA workbook, the run
 manifest, the run log) — see [`python/lab/README.md` § The pipeline](../lab/README.md#the-pipeline). To change:
 
 | What | Where |
 | --- | --- |
-| PDF text, section wording, page order and which tables it includes, quality-summary wording | `report/pdf.py` — `write_report_pdf()` and its `create_*_page()` helpers |
+| PDF page order and which tables it includes | `report/pdf/report.py` — `write_report_pdf()` |
+| PDF wording: quality summary, how-to-read and about pages | `report/pdf/content.py`; the executive summary's is in `report/pdf/summary.py` |
+| How a PDF text or table page is drawn | `report/pdf/text_pages.py`, `report/pdf/tables.py` |
 | How those tables are computed | `report/aggregation.py` |
 | Which charts, in what order | `report/plots/report.py` — `generate_all_report_plots()` |
 | How a page or panel is drawn | `report/plots/figures.py` (`plot_*`), then `report/plots/panels.py` (`draw_*`) |
 | Warnings and diagnostics on the quality pages | `report/checks.py` — `run_all_diagnostics()` |
 | Client workbook tabs | `report/excel.py` — `write_client_workbook()` |
 
-`report/pdf.py` is PDF-only. Never edit a generated PDF; change the code and regenerate.
+`report/pdf/` is PDF-only. Never edit a generated PDF; change the code and regenerate.

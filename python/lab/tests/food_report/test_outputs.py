@@ -181,7 +181,7 @@ def test_run_food_report_creates_multi_artifact_outputs_and_updates_metadata(
     ax.set_title("Test Export Plot")
 
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        "gbd_foodservice_insights.report.pdf.report.write_report_pdf",
         _write_placeholder_pdf,
     )
     monkeypatch.setattr(
@@ -312,7 +312,7 @@ def test_run_food_report_omits_the_data_profile_when_it_cannot_be_computed(
         raise ValueError("profile boom")
 
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        "gbd_foodservice_insights.report.pdf.report.write_report_pdf",
         _write_placeholder_pdf,
     )
     monkeypatch.setattr(
@@ -375,7 +375,7 @@ def test_run_food_report_defaults_outputs_to_named_subdirectory(monkeypatch, foo
     input_path, diner_path, _ = food_report_tmp_data
 
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        "gbd_foodservice_insights.report.pdf.report.write_report_pdf",
         _write_placeholder_pdf,
     )
     monkeypatch.setattr(
@@ -441,7 +441,7 @@ def test_run_food_report_does_not_duplicate_log_lines_across_repeated_runs(
     input_path, diner_path, _ = food_report_tmp_data
 
     monkeypatch.setattr(
-        "gbd_foodservice_insights.report.pdf.write_report_pdf",
+        "gbd_foodservice_insights.report.pdf.report.write_report_pdf",
         _write_placeholder_pdf,
     )
     monkeypatch.setattr(

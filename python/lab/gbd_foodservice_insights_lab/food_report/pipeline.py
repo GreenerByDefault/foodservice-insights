@@ -1,7 +1,7 @@
 """The data scientists' food report: reads a categorized CSV and writes the full bundle.
 
 A procurement report is built by the product's `food_report.build_food_report` and
-`build_report_charts`, and its two deliverables by `pdf.write_report_pdf` and
+`build_report_charts`, and its two deliverables by `pdf.report.write_report_pdf` and
 `excel.write_client_workbook`; a serving report by the lab's own `serving` module. This wrapper
 adds the file handling around them and the rest of the bundle, all lab-only: chart PNGs, the QA
 workbook, the run manifest, the run log, and the write-back into `client_metadata.json`.
@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
-from gbd_foodservice_insights.report import checks, excel, pdf
+from gbd_foodservice_insights.report import checks, excel
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
     ReportCharts,
@@ -25,6 +25,7 @@ from gbd_foodservice_insights.report.food_report import (
     build_report_charts,
 )
 from gbd_foodservice_insights.report.metric import KILOS, Metric
+from gbd_foodservice_insights.report.pdf import report as pdf_report
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import (
     DinerOrMeal,
@@ -417,7 +418,7 @@ def _write_pdf(
             show_quality_successes=show_quality_successes,
         )
     else:
-        pdf.write_report_pdf(
+        pdf_report.write_report_pdf(
             report,
             charts,
             path,

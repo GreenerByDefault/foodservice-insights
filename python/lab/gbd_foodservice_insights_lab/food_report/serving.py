@@ -39,13 +39,10 @@ from gbd_foodservice_insights.report.food_report import (
     validate_rows,
 )
 from gbd_foodservice_insights.report.metric import Metric
-from gbd_foodservice_insights.report.pdf import (
-    create_category_template_pages,
-    create_text_page,
-    create_title_page,
-    new_summary_figure,
-    quality_lines,
-)
+from gbd_foodservice_insights.report.pdf.content import quality_lines
+from gbd_foodservice_insights.report.pdf.summary import new_summary_figure
+from gbd_foodservice_insights.report.pdf.tables import create_category_template_pages
+from gbd_foodservice_insights.report.pdf.text_pages import create_text_page, create_title_page
 from gbd_foodservice_insights.report.plots.figures import (
     plot_category_drivers_pages,
     plot_category_totals,

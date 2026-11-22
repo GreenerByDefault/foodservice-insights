@@ -30,8 +30,8 @@ from gbd_foodservice_insights.analysis import (
     analyze,
 )
 from gbd_foodservice_insights.categorization.llm import OnLlmCall
-from gbd_foodservice_insights.report import pdf
 from gbd_foodservice_insights.report.food_report import FindingCount, FoodReport, ReportCharts
+from gbd_foodservice_insights.report.pdf import summary, tables
 from gbd_foodservice_insights.report.quality import Finding
 from gbd_foodservice_insights.report.schema import Headcounts, quality_status_from_findings
 from gbd_foodservice_insights.testing import (
@@ -379,7 +379,7 @@ def test_analyze_golden_deliverables(tmp_path: Path, monkeypatch: pytest.MonkeyP
         assert procurement.animal_emissions_intensity is not None
         assert procurement.animal_emissions_concentration is not None
         assert procurement.substitution_scenarios is not None
-        narrative = pdf._executive_narrative(
+        narrative = summary.executive_narrative(
             report, client_name, quality_status_from_findings(report.findings)
         )
         pdf_inputs.update(
@@ -387,14 +387,14 @@ def test_analyze_golden_deliverables(tmp_path: Path, monkeypatch: pytest.MonkeyP
                 "title": client_name,
                 "narrative": dataclasses.asdict(narrative),
                 "tables": {
-                    "Category Template": pdf._format_category_template_for_pdf(
+                    "Category Template": tables._format_category_template_for_pdf(
                         report.aggregation.template
                     ),
-                    "Animal Emissions Intensity": pdf._format_animal_emissions_intensity_for_pdf(
+                    "Animal Emissions Intensity": tables._format_animal_emissions_intensity_for_pdf(
                         procurement.animal_emissions_intensity
                     ),
                     "Decision KPIs": dataclasses.asdict(procurement.animal_emissions_concentration),
-                    "Substitution Scenarios": pdf._format_substitution_scenarios_for_pdf(
+                    "Substitution Scenarios": tables._format_substitution_scenarios_for_pdf(
                         procurement.substitution_scenarios
                     ),
                 },
