@@ -4,7 +4,6 @@ import math
 from collections.abc import Mapping
 
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import pandas as pd
 
 from gbd_foodservice_insights.categories import drink_categories, food_categories
@@ -15,6 +14,7 @@ from gbd_foodservice_insights.plotting_utils import (
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
+    group_thousands,
     set_title_font,
     standardize_title_case,
 )
@@ -108,6 +108,7 @@ def _draw_metric_over_time_on_axis(
     ax.set_ylabel(y_label)
     set_title_font(ax, title)
     add_grid(ax)
+    group_thousands(ax.yaxis)
     _set_ylim_from_zero(ax, [data_sorted["value"]])
 
 
@@ -163,6 +164,7 @@ def _draw_multi_series_metric_over_time_on_axis(
     set_title_font(ax, title)
     add_grid(ax)
     ax.legend(frameon=False)
+    group_thousands(ax.yaxis)
     _set_ylim_from_zero(ax, [plot_data["value"] for _, plot_data in non_empty_payloads])
 
 
@@ -247,7 +249,6 @@ def draw_total_emissions(
         title="Total Carbon Emissions Over Time",
         y_label="Total kg CO₂e",
     )
-    ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:,.0f}"))
 
 
 def draw_emissions_per_diner(
