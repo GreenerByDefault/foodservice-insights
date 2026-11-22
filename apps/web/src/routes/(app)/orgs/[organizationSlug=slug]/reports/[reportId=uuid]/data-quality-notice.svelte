@@ -27,7 +27,7 @@ let heading = $derived(
   >
     <TriangleAlertIcon aria-hidden="true" />
     <AlertTitle>
-      <h2 id={headingId} class="text-base font-medium text-foreground">{heading}</h2>
+      <h2 id={headingId} class="text-base font-semibold text-foreground">{heading}</h2>
     </AlertTitle>
     <AlertDescription class="text-pretty">
       <p>Read them before you share the results.</p>

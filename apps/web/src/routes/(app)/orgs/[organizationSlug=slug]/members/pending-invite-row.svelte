@@ -8,7 +8,7 @@ import { revokeInvite } from '#lib/invites/api/revoke-invite.js';
 import { focusPageHeading } from '#lib/utils/focus-page-heading.js';
 import type { InviteRow } from './+page.server.ts';
 
-/** One row of `pending-invites.svelte`'s list: the invite's own state, and its Cancel invite
+/** One row of `pending-invites.svelte`'s list: the invite's own state, and its Cancel
  * button. No confirm dialog — re-inviting the same address supersedes and resends, so canceling
  * the wrong one costs nothing but a moment. */
 interface Props {
@@ -57,7 +57,7 @@ async function revoke() {
       aria-busy={actionState.status === 'loading'}
       aria-label="Cancel invite for {invite.email}"
     >
-      Cancel invite
+      Cancel
     </Button>
     {#if actionState.status === 'error'}
       <p role="alert" class="basis-full text-sm text-destructive">{actionState.message}</p>
