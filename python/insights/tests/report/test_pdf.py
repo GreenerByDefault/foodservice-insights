@@ -26,6 +26,7 @@ from gbd_foodservice_insights.report.pdf import (
     _pack_columns,
     _wrap_text_lines,
     _wrap_to_width,
+    create_animal_intensity_page,
     create_category_template_pages,
     create_decision_kpis_page,
     create_executive_summary_page,
@@ -46,29 +47,34 @@ from pypdf import PdfReader
 JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
 
 
-def test_wrap_text_lines_hangs_wrapped_text_under_its_bullet() -> None:
-    wrapped = _wrap_text_lines(
-        [
-            "  • Warning: Found 1716 rows that are exact duplicates across the key report "
-            "fields and the text needs to wrap onto another visual row to avoid collisions.",
-            "      - Eggs Medium Av51g on 2024-07-01 00:00:00 appears 149 times and should "
-            "also wrap cleanly.",
-        ],
-        width=60,
+def _fits(line: str, max_width_in: float, fontsize: float) -> bool:
+    width_pt, _, _ = text_to_path.get_text_width_height_descent(
+        line, FontProperties(family=BODY_FONT, size=fontsize), ismath=False
     )
+    return width_pt <= max_width_in * 72
 
-    assert wrapped == [
-        "  • Warning: Found 1716 rows that are exact duplicates",
-        "    across the key report fields and the text needs to wrap",
-        "    onto another visual row to avoid collisions.",
-        "      - Eggs Medium Av51g on 2024-07-01 00:00:00 appears 149",
-        "        times and should also wrap cleanly.",
-    ]
+
+@pytest.mark.parametrize(("marker", "hang"), [("  • ", "    "), ("  12. ", "      ")])
+def test_wrap_text_lines_hangs_wrapped_text_under_its_marker(marker: str, hang: str) -> None:
+    text = "Found 1716 rows that are exact duplicates across the key report fields " * 3
+
+    wrapped = _wrap_text_lines([marker + text], max_width_in=3.0, fontsize=11)
+
+    assert len(wrapped) > 2
+    assert wrapped[0].startswith(marker + "Found")
+    assert all(line.startswith(hang) and line[len(hang)] != " " for line in wrapped[1:])
+    assert " ".join(line.strip() for line in wrapped) == (marker + text).strip()
+    assert all(_fits(line, 3.0, 11) for line in wrapped)
 
 
 def test_wrap_text_lines_keeps_indentation_and_collapses_blank_lines() -> None:
-    assert _wrap_text_lines(["  indented", "", "   ", "x"]) == ["  indented", "", "", "x"]
-    assert _wrap_text_lines([]) == [""]
+    assert _wrap_text_lines(["  indented", "", "   ", "x"], 6.5, 11) == [
+        "  indented",
+        "",
+        "",
+        "x",
+    ]
+    assert _wrap_text_lines([], 6.5, 11) == [""]
 
 
 def test_wrap_to_width_fits_measured_width_without_losing_words() -> None:
@@ -231,13 +237,13 @@ def _text_page_titles(lines: list[str], bold_lines: set[str] | None = None) -> l
     ("line_count", "titles"),
     [
         (0, ["Title"]),
-        (28, ["Title"]),
-        (29, ["Title", "Title (cont.)"]),
-        (56, ["Title", "Title (cont.)"]),
-        (57, ["Title", "Title (cont.)", "Title (cont.)"]),
+        (32, ["Title"]),
+        (33, ["Title", "Title (cont.)"]),
+        (64, ["Title", "Title (cont.)"]),
+        (65, ["Title", "Title (cont.)", "Title (cont.)"]),
     ],
 )
-def test_text_page_fits_28_lines_per_page(line_count: int, titles: list[str]) -> None:
+def test_text_page_fits_32_lines_per_page(line_count: int, titles: list[str]) -> None:
     assert _text_page_titles([f"line {i}" for i in range(line_count)]) == titles
 
 
@@ -621,6 +627,24 @@ def test_category_template_fits_every_cell_and_splits_months_across_pages(months
     )
 
 
+def test_animal_intensity_page_fits_every_category_name() -> None:
+    categories = category_names()
+    intensity = pd.DataFrame(
+        {
+            "category": categories,
+            "kilos_total": [123_456.0] * len(categories),
+            "kg_co2e_per_kg_food": [41.35] * len(categories),
+            "total_kg_co2e": [1_234_567.0] * len(categories),
+        }
+    )
+    pdf = _RecordingTablePdf()
+
+    create_animal_intensity_page(pdf, intensity)
+
+    assert pdf.headings == ["Animal Emissions Intensity"]
+    assert pdf.overflowing == []
+
+
 def test_pack_columns_gives_an_overwide_column_its_own_page() -> None:
     assert _pack_columns([1.0, 1.0, 3.0, 1.0], 2.5) == [[0, 1], [2], [3]]
     assert _pack_columns([], 2.5) == [[]]
@@ -647,8 +671,9 @@ def test_decision_kpis_page_states_the_share_and_lists_the_products_in_order() -
         "Decision KPIs",
         "The 2 animal products with the highest emissions accounted for 38.8% of",
         "animal-product emissions (1,353 kg CO₂e):",
-        "1. Ground Beef | 80/20",
-        "2. Cheddar",
+        "",
+        "  1. Ground Beef | 80/20",
+        "  2. Cheddar",
     ]
 
 
@@ -671,11 +696,11 @@ def test_decision_kpis_page_wraps_a_long_product_name_without_losing_words() -> 
         total_animal_kg_co2e=20.0,
     )
 
-    lines = _decision_kpis_page(concentration)[3:]
+    lines = _decision_kpis_page(concentration)[4:]
 
-    assert lines[0].startswith("1. Ground Beef | very long")
+    assert lines[0].startswith("  1. Ground Beef | very long")
     assert " ".join(line.strip() for line in lines[:-1]) == "1. " + product.strip()
-    assert lines[-1] == "2. Cheddar"
+    assert lines[-1] == "  2. Cheddar"
 
 
 # ----------------------------------------------------------------------
@@ -719,6 +744,18 @@ def test_format_category_template_titles_string_labels_only() -> None:
             index=pd.Index(["Beef and Buffalo Meat"], name="Category"),
         ),
     )
+
+
+def test_format_category_template_capitalizes_the_total_row_only() -> None:
+    table = pd.DataFrame(
+        {"2024-01": [10.0, 10.0]},
+        index=pd.Index(["Lamb/mutton & goat meat", "total"], name="category"),
+    )
+
+    assert _format_category_template_for_pdf(table).index.tolist() == [
+        "Lamb/mutton & goat meat",
+        "Total",
+    ]
 
 
 def test_format_category_template_leaves_an_unnamed_index_unnamed() -> None:

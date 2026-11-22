@@ -2,7 +2,6 @@
 
 import logging
 import re
-import textwrap
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -52,13 +51,14 @@ from gbd_foodservice_insights.report.schema import (
 
 logger = logging.getLogger(__name__)
 
-_TEXT_PAGE_TOP_Y = 0.88
-_TEXT_PAGE_BOTTOM_Y = 0.06
-_TEXT_PAGE_LINE_HEIGHT = 0.03
-_TEXT_PAGE_WRAP_CHARS = 92
+# Text pages' coordinates are fractions of the page.
+_TEXT_PAGE_TITLE_Y = 0.92
+_TEXT_PAGE_TOP_Y = 0.86
+_TEXT_PAGE_BOTTOM_Y = 0.08
+_TEXT_PAGE_FONT_SIZE = 11
 
-_SUMMARY_MARGIN_IN = 1.0
-_SUMMARY_LINE_HEIGHT = 0.025
+_PAGE_MARGIN_IN = 1.0
+_LINE_HEIGHT = 0.025
 
 _TITLE_CLIENT_LINE_HEIGHT = 0.04
 
@@ -125,6 +125,14 @@ def _new_text_figure(fig_size: tuple[float, float] = LETTER_PORTRAIT) -> tuple[F
     return fig, ax
 
 
+def _new_page_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
+    """A blank figure whose axes coordinates are page coordinates. The default subplot margins
+    are lopsided, pushing left-aligned text off center."""
+    fig, ax = _new_text_figure(fig_size)
+    ax.set_position((0, 0, 1, 1))
+    return fig, ax
+
+
 def create_title_page(
     pdf: PdfSink,
     client: str,
@@ -157,7 +165,7 @@ def create_title_page(
     # The client name is shown as typed: title-casing turns "McDonald's" into "Mcdonald'S".
     client_lines = _wrap_to_width(
         client.replace("_", " "),
-        fig_size[0] - 2 * _SUMMARY_MARGIN_IN,
+        fig_size[0] - 2 * _PAGE_MARGIN_IN,
         fontsize=20,
         fontfamily=TITLE_FONT,
     )
@@ -265,9 +273,7 @@ class ExecutiveNarrative:
 
 def new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
     """A page headed "Executive Summary", whose axes coordinates are page coordinates."""
-    fig, ax = _new_text_figure(fig_size)
-    # The default subplot margins are lopsided, pushing left-aligned text off the right edge.
-    ax.set_position((0, 0, 1, 1))
+    fig, ax = _new_page_figure(fig_size)
     ax.text(
         0.5,
         0.82,
@@ -292,8 +298,8 @@ def create_executive_summary_page(
     """Render the executive summary for readers who will never hear the report explained: a
     headline figure followed by short prose paragraphs."""
     fig, ax = new_summary_figure(fig_size)
-    text_width_in = fig_size[0] - 2 * _SUMMARY_MARGIN_IN
-    left_x = _SUMMARY_MARGIN_IN / fig_size[0]
+    text_width_in = fig_size[0] - 2 * _PAGE_MARGIN_IN
+    left_x = _PAGE_MARGIN_IN / fig_size[0]
 
     headline = _format_co2e(narrative.total_co2e_kg)
     ax.text(
@@ -324,7 +330,7 @@ def create_executive_summary_page(
             fontfamily=BODY_FONT,
             color=GBD_MUTED,
         )
-        y -= _SUMMARY_LINE_HEIGHT
+        y -= _LINE_HEIGHT
 
     y -= 0.035  # gap below the subtitle
     for paragraph in _narrative_paragraphs(narrative, page_refs):
@@ -339,7 +345,7 @@ def create_executive_summary_page(
                 fontsize=11.5,
                 fontfamily=BODY_FONT,
             )
-            y -= _SUMMARY_LINE_HEIGHT
+            y -= _LINE_HEIGHT
         y -= 0.017  # paragraph gap
 
     pdf.savefig(fig)
@@ -426,20 +432,19 @@ def create_text_page(
     Continuation pages get a ``" (cont.)"`` title suffix. Blank lines render as blank rows;
     lines in ``bold_lines`` (compared after stripping) render in bold.
     """
-    wrapped_lines = _wrap_text_lines(content_lines)
-    bold_lines = {line.strip() for line in (bold_lines or set())}
-    lines_per_page = max(
-        1,
-        int((_TEXT_PAGE_TOP_Y - _TEXT_PAGE_BOTTOM_Y) / _TEXT_PAGE_LINE_HEIGHT) + 1,
+    wrapped_lines = _wrap_text_lines(
+        content_lines, fig_size[0] - 2 * _PAGE_MARGIN_IN, _TEXT_PAGE_FONT_SIZE
     )
+    bold_lines = {line.strip() for line in (bold_lines or set())}
+    lines_per_page = int((_TEXT_PAGE_TOP_Y - _TEXT_PAGE_BOTTOM_Y) / _LINE_HEIGHT) + 1
 
     for page_index in range(0, len(wrapped_lines), lines_per_page):
-        fig, ax = _new_text_figure(fig_size)
+        fig, ax = _new_page_figure(fig_size)
         page_title = title if page_index == 0 else f"{title} (cont.)"
 
         ax.text(
             0.5,
-            0.95,
+            _TEXT_PAGE_TITLE_Y,
             page_title,
             transform=ax.transAxes,
             ha="center",
@@ -454,17 +459,17 @@ def create_text_page(
         for line in wrapped_lines[page_index : page_index + lines_per_page]:
             is_bold_line = line.strip() in bold_lines
             ax.text(
-                0.08,
+                _PAGE_MARGIN_IN / fig_size[0],
                 y,
                 line,
                 transform=ax.transAxes,
                 ha="left",
                 va="top",
-                fontsize=10,
+                fontsize=_TEXT_PAGE_FONT_SIZE,
                 fontfamily=BODY_FONT,
                 fontweight="bold" if is_bold_line else "normal",
             )
-            y -= _TEXT_PAGE_LINE_HEIGHT
+            y -= _LINE_HEIGHT
 
         pdf.savefig(fig)
         plt.close(fig)
@@ -505,12 +510,17 @@ def create_category_template_pages(
 
 
 def create_animal_intensity_page(pdf: PdfSink, intensity: pd.DataFrame) -> None:
+    display_df = _display_table(_format_animal_emissions_intensity_for_pdf(intensity))
+    font_size = 10.0
+    # Each column gets the width its text needs, and an equal share of what is left.
+    widths = _table_column_widths_in(display_df, font_size)
+    slack = (_table_width_in(LETTER_LANDSCAPE) - sum(widths)) / len(widths)
     _draw_table_page(
         pdf,
         "Animal Emissions Intensity",
-        _display_table(_format_animal_emissions_intensity_for_pdf(intensity)),
-        col_widths=None,
-        font_size=7.5,
+        display_df,
+        col_widths=[width + slack for width in widths],
+        font_size=font_size,
         row_scale=1.18,
     )
 
@@ -688,21 +698,6 @@ def create_decision_kpis_page(
     fig_size: tuple[float, float] = LETTER_PORTRAIT,
 ) -> None:
     """Render the animal emissions concentration as a narrative text page."""
-    fig, ax = _new_text_figure(fig_size)
-
-    ax.text(
-        0.5,
-        0.95,
-        "Decision KPIs",
-        transform=ax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=16,
-        fontweight="bold",
-        fontfamily=TITLE_FONT,
-        color=GBD_GREEN,
-    )
-
     products = concentration.top_products
     share_text = f"{concentration.share_pct:.1f}".removesuffix(".0")
     subject = (
@@ -710,46 +705,12 @@ def create_decision_kpis_page(
         if len(products) == 1
         else f"The {len(products)} animal products with the highest emissions"
     )
-    intro_lines = _wrap_text_lines(
-        [
-            f"{subject} accounted for {share_text}% of animal-product emissions "
-            f"({round(concentration.top_products_kg_co2e):,} kg CO₂e):"
-        ],
-        width=80,
+    intro = (
+        f"{subject} accounted for {share_text}% of animal-product emissions "
+        f"({round(concentration.top_products_kg_co2e):,} kg CO₂e):"
     )
-
-    y = 0.84
-    for line in intro_lines:
-        ax.text(
-            0.08,
-            y,
-            line,
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            fontsize=11,
-            fontfamily=BODY_FONT,
-        )
-        y -= 0.04
-
-    for idx, product in enumerate(products, start=1):
-        wrapped_product_lines = _wrap_text_lines([f"{idx}. {product}"], width=78)
-        for line in wrapped_product_lines:
-            ax.text(
-                0.1,
-                y,
-                line,
-                transform=ax.transAxes,
-                ha="left",
-                va="top",
-                fontsize=10.5,
-                fontfamily=BODY_FONT,
-            )
-            y -= 0.034
-        y -= 0.01
-
-    pdf.savefig(fig)
-    plt.close(fig)
+    numbered = [f"  {index}. {product}" for index, product in enumerate(products, start=1)]
+    create_text_page(pdf, "Decision KPIs", [intro, "", *numbered], fig_size)
 
 
 # ---------------------------------------------------------------------------
@@ -838,41 +799,26 @@ def _wrap_to_width(
     return [*lines, current] if current else lines
 
 
-def _wrap_text_lines(content_lines: list[str], width: int = _TEXT_PAGE_WRAP_CHARS) -> list[str]:
-    """Wrap text-page lines before rendering so spacing matches visible rows.
-
-    Preserves leading indentation and bullet prefixes.
-    """
+def _wrap_text_lines(content_lines: list[str], max_width_in: float, fontsize: float) -> list[str]:
+    """Wrap text-page lines to ``max_width_in`` before rendering, so spacing matches visible
+    rows. Keeps leading indentation, and hangs wrapped text under a bullet or list number."""
+    prop = FontProperties(family=BODY_FONT, size=fontsize)
     wrapped_lines: list[str] = []
-
     for line in content_lines:
         if not line.strip():
             wrapped_lines.append("")
             continue
-
-        leading_spaces = len(line) - len(line.lstrip(" "))
         stripped = line.lstrip(" ")
-        initial_indent = " " * leading_spaces
-        subsequent_indent = initial_indent
-
-        bullet_match = re.match(r"([•-])\s+", stripped)
-        if bullet_match:
-            bullet_prefix = bullet_match.group(0)
-            text = stripped[bullet_match.end() :]
-            initial_indent = (" " * leading_spaces) + bullet_prefix
-            subsequent_indent = " " * len(initial_indent)
-        else:
-            text = stripped
-
-        wrapper = textwrap.TextWrapper(
-            width=width,
-            initial_indent=initial_indent,
-            subsequent_indent=subsequent_indent,
-            break_long_words=False,
-            break_on_hyphens=False,
+        marker = re.match(r"(?:[•-]|\d+\.)\s+", stripped)
+        first_prefix = line[: len(line) - len(stripped)] + (marker.group(0) if marker else "")
+        hanging_prefix = " " * len(first_prefix)
+        # Spaces are narrower than a bullet, so the wider prefix bounds every line.
+        text_width_in = max_width_in - max(
+            _text_width_in(first_prefix, prop), _text_width_in(hanging_prefix, prop)
         )
-        wrapped_lines.extend(wrapper.wrap(text) or [line])
-
+        text = stripped[marker.end() :] if marker else stripped
+        body = _wrap_to_width(text, text_width_in, fontsize=fontsize, fontfamily=BODY_FONT)
+        wrapped_lines += [first_prefix + body[0], *(hanging_prefix + rest for rest in body[1:])]
     return wrapped_lines or [""]
 
 
@@ -880,34 +826,36 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
     """Introductory guide to reading the report, shown before the charts. `diner_or_meal` is
     `None` without headcounts."""
     comparing_months = (
-        [
-            "Every figure in this report is a total. Totals rise and fall with how many people",
-            "you serve, so compare months with that in mind.",
-        ]
+        "Every figure in this report is a total. Totals rise and fall with how many people you "
+        "serve, so compare months with that in mind."
         if diner_or_meal is None
-        else [
-            f"The 'per {diner_or_meal}' figures are the most useful for comparing across months,",
-            f"because they account for how many {diner_or_meal}s were served each month.",
-        ]
+        else f"The 'per {diner_or_meal}' figures are the most useful for comparing across "
+        f"months, because they account for how many {diner_or_meal}s were served each month."
     )
     return [
-        "The charts in this report show your catering operation's food purchasing patterns",
-        "and associated greenhouse gas footprint over the reporting period.",
+        (
+            "The charts in this report show your catering operation's food purchasing patterns "
+            "and associated greenhouse gas footprint over the reporting period."
+        ),
         "",
         "Key things to look for:",
         "  \u2022 Which food categories contribute most to your total greenhouse gas footprint.",
         "  \u2022 Which specific products are the biggest drivers within those categories.",
         "  \u2022 How purchasing volumes vary month to month.",
         "",
-        *comparing_months,
+        comparing_months,
         "",
-        "The plant vs. animal breakdown shows the proportion of food purchased from",
-        "plant-based vs. animal-based sources. Shifting this ratio is one of the most",
-        "effective ways to reduce your greenhouse gas footprint.",
+        (
+            "The plant vs. animal breakdown shows the proportion of food purchased from "
+            "plant-based vs. animal-based sources. Shifting this ratio is one of the most "
+            "effective ways to reduce your greenhouse gas footprint."
+        ),
         "",
-        "The top driver products are the ones you bought the most of by weight, which makes",
-        "them a good place to start when planning menu changes. They are not ranked by carbon:",
-        "a heavy, low-carbon item can outrank a lighter, high-carbon one.",
+        (
+            "The top driver products are the ones you bought the most of by weight, which makes "
+            "them a good place to start when planning menu changes. They are not ranked by "
+            "carbon: a heavy, low-carbon item can outrank a lighter, high-carbon one."
+        ),
     ]
 
 
@@ -915,12 +863,10 @@ def _about_pages(diner_or_meal: DinerOrMeal | None) -> tuple[list[str], list[str
     """The "About This Report" pages, split at a heading rather than wherever the first page
     fills. `diner_or_meal` is `None` without headcounts."""
     normalizing = (
-        []
+        ""
         if diner_or_meal is None
-        else [
-            f"  Per-{diner_or_meal} figures account for this by normalizing against the number "
-            f"of {diner_or_meal}s served."
-        ]
+        else f" Per-{diner_or_meal} figures account for this by normalizing against the number "
+        f"of {diner_or_meal}s served."
     )
     first = [
         (
@@ -929,23 +875,25 @@ def _about_pages(diner_or_meal: DinerOrMeal | None) -> tuple[list[str], list[str
         ),
         "",
         "What is procurement data?",
-        "  Procurement data records the food and ingredients your catering operation purchases.",
-        "  It captures what was ordered, not necessarily what was served or consumed by diners.",
+        (
+            "  Procurement data records the food and ingredients your catering operation "
+            "purchases. It captures what was ordered, not necessarily what was served or "
+            "consumed by diners."
+        ),
         "",
         "How are carbon figures calculated?",
-        "  Each food item is assigned to a high-level category (e.g. Poultry, Legumes, Dairy).",
-        "  A carbon emissions factor — measured in kg of CO₂e per kg of food — is then applied.",
         (
-            "  These factors are drawn from Poore & Nemecek (2018), a peer-reviewed "
-            "meta-analysis of life-cycle assessments."
+            "  Each food item is assigned to a high-level category (e.g. Poultry, Legumes, "
+            "Dairy). A carbon emissions factor — measured in kg of CO₂e per kg of food — is then "
+            "applied. These factors are drawn from Poore & Nemecek (2018), a peer-reviewed "
+            "meta-analysis of life-cycle assessments. They cover emissions from production up to "
+            "the farm gate, and do not include processing, transport, packaging, storage, or "
+            "cooking."
         ),
+        "",
         (
-            "  These factors cover emissions from production up to the farm gate. They do not "
-            "include processing, transport, packaging, storage, or cooking."
-        ),
-        "  Total carbon is the sum of (weight × emissions factor) across all items.",
-        (
-            "  This means two foods with the same weight can have very different greenhouse gas "
+            "  Total carbon is the sum of (weight × emissions factor) across all items. This "
+            "means two foods with the same weight can have very different greenhouse gas "
             "footprints depending on how they are produced."
         ),
     ]
@@ -954,8 +902,8 @@ def _about_pages(diner_or_meal: DinerOrMeal | None) -> tuple[list[str], list[str
         (
             "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with "
             "seasonal menus, catering events, term dates, and other operational factors."
+            + normalizing
         ),
-        *normalizing,
         "",
         "How should I use this report?",
         (
@@ -1002,7 +950,8 @@ def _format_category_template_for_pdf(template: pd.DataFrame) -> pd.DataFrame:
             return value
         return value.replace("_", " ").title()
 
-    display_df = template.copy()
+    # The row of totals is the only row label that is not a category name, which stays as is.
+    display_df = template.rename(index={"total": "Total"})
     display_df.columns = [_format_label(column) for column in display_df.columns]
     if display_df.index.name is not None:
         display_df.index = display_df.index.rename(_format_label(display_df.index.name))

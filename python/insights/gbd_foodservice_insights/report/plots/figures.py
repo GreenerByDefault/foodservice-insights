@@ -3,7 +3,6 @@
 from collections.abc import Mapping, Sequence
 
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import pandas as pd
 import seaborn as sns
 from matplotlib.container import BarContainer
@@ -17,6 +16,7 @@ from gbd_foodservice_insights.plotting_utils import (
     add_grid,
     create_horizontal_percentage_barplot,
     format_month_labels,
+    group_thousands,
     set_page_title_font,
     set_suptitle_font,
 )
@@ -56,6 +56,7 @@ def plot_diner_meal_numbers(
     # Padding is relative to each limit's value, not the range, so it assumes positive counts.
     ax.set_ylim(diner_meal_series.min() * 0.8, diner_meal_series.max() * 1.2)
     ax.set_ylabel(f"Number of {diner_or_meal.title()}s")
+    group_thousands(ax.yaxis)
     add_grid(ax)
 
     formatted_labels = format_month_labels(diner_meal_series.index)
@@ -146,6 +147,7 @@ def plot_category_totals(monthly_category_data: pd.DataFrame, metric: Metric) ->
     set_page_title_font(ax, f"{metric.label} by Category Across All Months")
     ax.set_xlabel(metric.label)
     ax.set_ylabel("")
+    group_thousands(ax.xaxis)
     _fit_page(fig)
     return fig
 
@@ -180,7 +182,7 @@ def plot_emissions_by_category(emissions_summary: pd.DataFrame) -> Figure:
     fig, ax = plt.subplots(figsize=LETTER_LANDSCAPE)
     bars = ax.barh(data["category"], data["total_kg_co2e"], color=GBD_GREEN)
     ax.set_xlabel("Total kg CO₂e")
-    ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:,.0f}"))
+    group_thousands(ax.xaxis)
     set_page_title_font(ax, "Carbon Emissions by Category")
     add_grid(ax, axis="x")
 

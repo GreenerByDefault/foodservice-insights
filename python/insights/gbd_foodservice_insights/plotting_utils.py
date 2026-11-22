@@ -18,7 +18,9 @@ import textwrap
 
 import matplotlib.font_manager as font_manager
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import seaborn as sns
+from matplotlib.axis import Axis
 from matplotlib.patches import Rectangle
 
 from gbd_foodservice_insights import PACKAGE_DIR
@@ -169,6 +171,11 @@ def add_grid(
 ) -> None:
     """Add a grid to the plot with consistent GBD styling."""
     ax.grid(True, axis=axis, linestyle=linestyle, alpha=alpha)
+
+
+def group_thousands(axis: Axis) -> None:
+    """Label ticks like 25,000, keeping any fraction: per-head values can be below 1."""
+    axis.set_major_formatter(mticker.FuncFormatter(lambda value, _: f"{value:,.10g}"))
 
 
 def wrap_labels(labels: list[str], max_width: int = 30, max_lines: int = 3) -> list[str]:
