@@ -1,7 +1,6 @@
 import {
   type DatabaseExecutor,
   isPermanentDatabaseError,
-  type OrganizationId,
   POSTGRES_CODE_UNIQUE_VIOLATION,
   RESERVED_ORGANIZATION_SLUGS,
   withTransaction,
@@ -21,6 +20,9 @@ import {
 } from '#lib/server/orgs/name.js';
 import { deriveOrganizationSlug } from '#lib/server/orgs/slug.js';
 import type { RequestHandler } from './$types';
+
+const ORGANIZATION_SLUG_UNIQUE = 'organization_slug_unique';
+const ORGANIZATION_NAME_UNIQUE = 'organization_name_unique_ci';
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   const auth = requireAuth(locals);
@@ -64,43 +66,46 @@ export async function _createOrganization(
   }
 
   const outcome = await withDbErrorHandling(
-    () =>
-      withTransaction(db, async (transaction) => {
-        let organizationId: OrganizationId;
-        try {
+    async () => {
+      try {
+        const organizationId = await withTransaction(db, async (transaction) => {
           const organization = await transaction
             .insertInto('organization')
             .values({ name, slug, createdByUserId: actor.userId })
             .returning('id')
             .executeTakeFirstOrThrow();
-          organizationId = organization.id;
-        } catch (cause) {
-          // The insert catches only its own two unique constraints; anything else propagates as
-          // a genuine database failure for withDbErrorHandling to classify.
-          if (isPermanentDatabaseError(cause) && cause.code === POSTGRES_CODE_UNIQUE_VIOLATION) {
-            return { ok: false as const, constraint: cause.constraint };
-          }
-          throw cause;
-        }
 
-        await transaction
-          .insertInto('organizationMember')
-          .values({ organizationId, userId: actor.userId, role: 'admin' })
-          .execute();
+          await transaction
+            .insertInto('organizationMember')
+            .values({ organizationId: organization.id, userId: actor.userId, role: 'admin' })
+            .execute();
 
-        await recordAuditEvent(transaction, {
-          action: 'organization.created',
-          actor,
-          target: { type: 'organization', id: organizationId },
+          await recordAuditEvent(transaction, {
+            action: 'organization.created',
+            actor,
+            target: { type: 'organization', id: organization.id },
+          });
+
+          return organization.id;
         });
-
         return { ok: true as const, organizationId };
-      }),
+      } catch (cause) {
+        if (
+          isPermanentDatabaseError(cause) &&
+          cause.code === POSTGRES_CODE_UNIQUE_VIOLATION &&
+          (cause.constraint === ORGANIZATION_SLUG_UNIQUE ||
+            cause.constraint === ORGANIZATION_NAME_UNIQUE)
+        ) {
+          return { ok: false as const, constraint: cause.constraint };
+        }
+        throw cause;
+      }
+    },
     { action: 'create an organization', context: { name, slug } },
   );
 
   if (!outcome.ok) {
-    return outcome.constraint === 'organization_slug_unique'
+    return outcome.constraint === ORGANIZATION_SLUG_UNIQUE
       ? slugTakenResponse(slug)
       : nameTakenResponse();
   }

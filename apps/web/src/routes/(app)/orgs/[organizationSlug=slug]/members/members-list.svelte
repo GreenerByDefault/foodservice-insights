@@ -20,9 +20,7 @@ const ROLE_LABEL = { admin: 'Admin', member: 'Member' } as const;
 
 <!-- No empty state: `organization_check_has_member` makes an empty list impossible. -->
 <ItemList items={members} key={(member) => member.userId} empty="">
-  {#snippet children(
-    member,
-  )}
+  {#snippet children(member)}
     <ItemListRow>
       <span class="flex min-w-0 flex-col">
         <span class="min-w-0 truncate font-medium">

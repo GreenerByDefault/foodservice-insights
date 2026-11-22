@@ -32,9 +32,7 @@ let { reports, newReportHref }: Props = $props();
 {/snippet}
 
 <ItemList items={reports} key={(report) => report.id} {empty}>
-  {#snippet children(
-    report,
-  )}
+  {#snippet children(report)}
     <ReportRow {report} />
   {/snippet}
 </ItemList>

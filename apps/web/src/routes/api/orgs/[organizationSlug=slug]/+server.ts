@@ -49,27 +49,28 @@ export async function _renameOrganization(
   const { name } = parsedName;
 
   const outcome = await withDbErrorHandling(
-    () =>
-      withTransaction(db, async (transaction) => {
-        try {
+    async () => {
+      try {
+        await withTransaction(db, async (transaction) => {
           await transaction
             .updateTable('organization')
             .set({ name })
             .where('id', '=', organizationId)
             .execute();
-        } catch (cause) {
-          if (isUniqueViolation(cause)) return { ok: false as const };
-          throw cause;
-        }
 
-        await recordAuditEvent(transaction, {
-          action: 'organization.renamed',
-          actor,
-          target: { type: 'organization', id: organizationId },
+          await recordAuditEvent(transaction, {
+            action: 'organization.renamed',
+            actor,
+            target: { type: 'organization', id: organizationId },
+          });
         });
+      } catch (cause) {
+        if (isUniqueViolation(cause)) return { ok: false as const };
+        throw cause;
+      }
 
-        return { ok: true as const };
-      }),
+      return { ok: true as const };
+    },
     { action: 'rename an organization', context: { organizationId, name } },
   );
 
