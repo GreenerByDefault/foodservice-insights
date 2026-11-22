@@ -295,7 +295,7 @@ def test_write_report_pdf_orders_the_procurement_pages(recording_pdf: _Recording
         "Decision KPIs",
         "Substitution Scenarios",
         "About This Report",
-        "References",
+        "About This Report (cont.)",
     ]
 
 
@@ -372,14 +372,15 @@ def test_write_report_pdf_leaves_the_callers_plots_open(tmp_path: Path) -> None:
 def test_about_page_bolds_every_heading(recording_pdf: _RecordingPdf) -> None:
     _write(_report())
 
-    (about,) = [
-        page for page in recording_pdf.pages if page and page[0].text == "About This Report"
+    about_pages = [
+        page for page in recording_pdf.pages if page and page[0].text.startswith("About This")
     ]
-    assert [t.text for t in about[1:] if t.bold] == [
+    assert [t.text for page in about_pages for t in page[1:] if t.bold] == [
         "What is procurement data?",
         "How are carbon figures calculated?",
         "How should I interpret the monthly figures?",
         "How should I use this report?",
+        "References",
     ]
 
 
@@ -388,7 +389,7 @@ def _how_to_read_and_about_text(pdf: _RecordingPdf) -> str:
     return " ".join(
         word
         for page in pdf.pages
-        if page and page[0].text in {"How to Read This Report", "About This Report"}
+        if page and page[0].text.startswith(("How to Read This Report", "About This Report"))
         for t in page
         for word in t.text.split()
     )

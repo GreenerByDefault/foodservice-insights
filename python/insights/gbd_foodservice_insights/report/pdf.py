@@ -808,18 +808,9 @@ def _how_to_read_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
     ]
 
 
-_REFERENCES = [
-    (
-        "Poore, J., & Nemecek, T. (2018). Reducing food's environmental impacts through "
-        "producers and consumers. Science, 360(6392), 987-992. "
-        "https://doi.org/10.1126/science.aaq0216"
-    ),
-]
-
-
-def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
-    """Methodology note for the final page of the PDF. `diner_or_meal` is `None` without
-    headcounts."""
+def _about_pages(diner_or_meal: DinerOrMeal | None) -> tuple[list[str], list[str]]:
+    """The "About This Report" pages, split at a heading rather than wherever the first page
+    fills. `diner_or_meal` is `None` without headcounts."""
     normalising = (
         []
         if diner_or_meal is None
@@ -828,7 +819,7 @@ def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
             f"of {diner_or_meal}s served."
         ]
     )
-    return [
+    first = [
         (
             "This report was produced by Greener By Default using procurement data provided by "
             "your organisation."
@@ -840,33 +831,50 @@ def _methodology_lines(diner_or_meal: DinerOrMeal | None) -> list[str]:
         "",
         "How are carbon figures calculated?",
         "  Each food item is assigned to a high-level category (e.g. Poultry, Legumes, Dairy).",
-        (
-            "  A carbon emissions factor — measured in kg of CO\u2082e per kg of food — "
-            "is then applied."
-        ),
+        "  A carbon emissions factor — measured in kg of CO₂e per kg of food — is then applied.",
         (
             "  These factors are drawn from Poore & Nemecek (2018), a peer-reviewed "
-            "meta-analysis of life-cycle assessments. These factors cover emissions from "
-            "production up to the farm gate. They do not include processing, transport, "
-            "packaging, storage, or cooking."
+            "meta-analysis of life-cycle assessments."
         ),
-        "  Total carbon is the sum of (weight \u00d7 emissions factor) across all items.",
-        "  This means two foods with the same weight can have very different greenhouse gas",
-        "  footprints depending on how they are produced.",
-        "",
+        (
+            "  These factors cover emissions from production up to the farm gate. They do not "
+            "include processing, transport, packaging, storage, or cooking."
+        ),
+        "  Total carbon is the sum of (weight × emissions factor) across all items.",
+        (
+            "  This means two foods with the same weight can have very different greenhouse gas "
+            "footprints depending on how they are produced."
+        ),
+    ]
+    second = [
         "How should I interpret the monthly figures?",
-        "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with",
-        "  seasonal menus, catering events, term dates, and other operational factors.",
+        (
+            "  Month-to-month variation is normal and expected. Purchasing volumes fluctuate with "
+            "seasonal menus, catering events, term dates, and other operational factors."
+        ),
         *normalising,
         "",
         "How should I use this report?",
-        "  The highest-carbon categories and products are the most impactful places to focus",
-        "  menu changes. Even modest reductions in high-carbon items can produce significant",
-        "  carbon savings at scale. Greener By Default can help you identify practical",
-        "  substitutions that maintain menu quality and diner satisfaction.",
+        (
+            "  The highest-carbon categories and products are the most impactful places to focus "
+            "menu changes. Even modest reductions in high-carbon items can produce significant "
+            "carbon savings at scale. Greener By Default can help you identify practical "
+            "substitutions that maintain menu quality and diner satisfaction."
+        ),
         "",
         "Figures in this report are relative to your own data. No external benchmark is applied.",
+        "",
+        _REFERENCES_HEADING,
+        (
+            "  Poore, J., & Nemecek, T. (2018). Reducing food's environmental impacts through "
+            "producers and consumers. Science, 360(6392), 987-992. "
+            "https://doi.org/10.1126/science.aaq0216"
+        ),
     ]
+    return first, second
+
+
+_REFERENCES_HEADING = "References"
 
 
 # ---------------------------------------------------------------------------
@@ -955,14 +963,19 @@ def write_report_pdf(
         if aggregation.substitution_scenarios is not None:
             create_substitution_scenarios_page(pdf, aggregation.substitution_scenarios)
 
-        methodology = _methodology_lines(diner_or_meal)
-        create_text_page(
-            pdf,
-            "About This Report",
-            methodology,
-            bold_lines={line for line in methodology if line.endswith("?")},
-        )
-        create_text_page(pdf, "References", _REFERENCES)
+        for title, lines in zip(
+            ("About This Report", "About This Report (cont.)"),
+            _about_pages(diner_or_meal),
+            strict=True,
+        ):
+            create_text_page(
+                pdf,
+                title,
+                lines,
+                bold_lines={
+                    line for line in lines if line.endswith("?") or line == _REFERENCES_HEADING
+                },
+            )
 
     logger.info("PDF report saved to %s", path)
 
