@@ -277,6 +277,7 @@ def _draw_share_bar_axis(
     primary_label: str,
     secondary_label: str,
     xlabel: str,
+    subtitle: str | None = None,
 ) -> None:
     """Draw a 100% stacked bar splitting plant from everything else."""
     ax.barh(
@@ -296,7 +297,21 @@ def _draw_share_bar_axis(
     ax.set_yticks([])
     ax.set_xlabel(xlabel)
     ax.legend(loc="lower right", fontsize=9)
-    set_title_font(ax, title)
+    if subtitle is None:
+        set_title_font(ax, title)
+    else:
+        # Raise the title to make room for the subtitle beneath it.
+        set_title_font(ax, title, pad=20)
+        ax.text(
+            0.5,
+            1.02,
+            subtitle,
+            transform=ax.transAxes,
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            color="#444444",
+        )
     ax.axvline(50, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
     add_grid(ax, axis="x")
 
@@ -336,6 +351,7 @@ def draw_plant_animal_split(
         primary_label="Plant-based",
         secondary_label="Animal-based",
         xlabel=f"% of total {metric.label.lower()} (plant + animal categories only)",
+        subtitle="Tracked categories only",
     )
 
 
