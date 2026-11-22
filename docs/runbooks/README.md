@@ -2,7 +2,8 @@
 
 Procedures that whoever runs the app at GBD does by hand in production, in a vendor's dashboard.
 A person runs each one; an AI agent may read or write them but never performs one. When an alert
-fires, its rule says what firing means; then follow the logs runbook.
+fires, its rule says what firing means; then
+[trace the problem through the logs](trace-a-problem-through-the-logs.md).
 
 ## Where things are
 
@@ -15,7 +16,7 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 | [DigitalOcean](https://cloud.digitalocean.com/apps) | GBD's team → Apps | `foodservice-insights-web` and `foodservice-insights-worker` |
 | [Supabase](https://supabase.com/dashboard/projects) | The production project | The database, Auth, Storage and Studio. Auth settings live only in this dashboard, and the write guard does not cover them ([`docs/architecture.md`](../architecture.md) § Supabase: database, auth, and blob store) |
 | [Grafana Cloud](https://grafana.com/auth/sign-in) | GBD's stack | The Foodservice Insights folder, which every web deploy overwrites |
-| [Better Stack](https://telemetry.betterstack.com) | Telemetry | The one source both apps forward their logs to |
+| [Better Stack](https://telemetry.betterstack.com) | [Telemetry](https://telemetry.betterstack.com) and [Incidents](https://incidents.betterstack.com), two products under one login | Telemetry: the one source both apps forward their logs to, its presets, and the error alert. Incidents: the monitor on `/health/ready` |
 | [Anthropic](https://platform.claude.com) | The production workspace, which has its own spend limit and prompt cache | The worker's API key |
 | [Postmark](https://account.postmarkapp.com) | The production server | Two message streams: `outbound` for our email, sent with `POSTMARK_SERVER_TOKEN`; and `auth` for Supabase Auth's codes, whose SMTP token lives only in Supabase's SMTP settings. When someone never got an email, search that stream's Activity for their address. One suppressed by a spam complaint stays suppressed until Postmark's support lifts it |
 | [Squarespace](https://account.squarespace.com/domains) | GBD's domain | DNS |
@@ -27,6 +28,8 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 - [Review cache suggestions](review-cache-suggestions.md) in Supabase Studio.
 - [Rotate a secret](rotate-a-secret.md) in the `production` Environment.
 - [Deploy the worker](deploy-the-worker.md), the one deploy done by hand.
+- [Trace a problem through the logs](trace-a-problem-through-the-logs.md), from a user's report,
+  an alert or a failed report to the lines that explain it.
 
 ## Writing one
 

@@ -65,7 +65,7 @@ under some pressure, and a file is what a person opens, links, and searches for 
 names say what the reader is trying to do, or what happened, in lowercase kebab.
 
 - **The README's vendor table lists only what exists.** A plan that adds a vendor resource adds
-  its row, as `better-stack.md` will for its views and monitor.
+  its row, as Better Stack's does for its presets and monitor.
 - **`.claude/rules/runbooks.md`** carries the two things an agent must know before it reads
   anything — it never performs a runbook, and the public-file rule — and points at the README for
   the rest, which is the `db.md` pattern.
@@ -149,9 +149,9 @@ Each credential then gets only what differs from those steps:
 | `offboard-a-person.md` | Crosses every vendor team and two rotations |
 | `restore-the-database.md` | Two sentences the vendor's docs cannot say |
 | `change-a-users-email.md` | Resolves the REQUIREMENTS TBD; why the dashboard and not SQL |
-| `trace-a-problem-through-the-logs.md` | Reserved: `better-stack.md` PR 1 writes it |
+| `trace-a-problem-through-the-logs.md` | Landed with Better Stack's setup |
 
-- `better-stack.md`'s entry already covers the path from a failed attempt's row to its log lines,
+- `trace-a-problem-through-the-logs.md` already covers the path from a failed attempt's row to its log lines,
   so there is no separate triage file. Nor is there one for an email that never arrived: the
   README's Postmark row says which stream to search, and that a spam complaint's suppression
   only Postmark's support lifts. `alerts.md` adds nothing: the README's one sentence, "an alert's own rule says what firing

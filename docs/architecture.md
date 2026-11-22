@@ -388,7 +388,7 @@ when another's inputs fail.
 | --- | --- | --- | --- |
 | Host | DigitalOcean | Each container's resources and restarts, and failed deploys | Each app's spec in [`.do/`](../.do/README.md) |
 | Data | Grafana Cloud | The queue and notifications, as the database's rows record them | **Open:** not built yet |
-| Outside | Better Stack | What a user sees, through DNS and the host's edge | **Open:** not built yet |
+| Outside | Better Stack | What a user sees, through DNS and the host's edge, and any `error` or `fatal` log line | Better Stack's UI: one uptime monitor on the public `/health/ready`, and one alert on `error` and `fatal` lines |
 
 *Rejected: one system evaluating everything.* Each consolidation copies data out of its home, and
 each copy is one more thing that can break silently.
@@ -397,12 +397,13 @@ each copy is one more thing that can break silently.
 
 Both processes write JSON lines to stdout ([`@gbd/core/log`](../packages/core/src/log.ts)), and they
 leave the host only through App Platform's log forwarding, set in each app's spec. Both apps
-forward to one Better Stack source, so an incident that crosses them reads in time order. The
-free plan keeps three days. A request is found by `requestId`, which the response returns as
-`X-Request-Id`, and an attempt by `attemptId`.
+forward to one Better Stack source, so an incident that crosses them reads in time order, and
+`syslog.appname` names the app that wrote each line. The free plan keeps three days. A request is
+found by `requestId`, which the response returns as `X-Request-Id`, and an attempt by `attemptId`.
+How to read them is [a runbook](runbooks/trace-a-problem-through-the-logs.md).
 
-*Rejected: shipping from inside the process* (`@logtail/pino`). A dying process takes its unshipped
-lines with it, and those are the lines that matter.
+The presets (saved Live tail filters), the dashboard of requests by status and duration by route,
+and both Better Stack alerts are made in its UI and kept only there.
 
 ### Metrics
 
