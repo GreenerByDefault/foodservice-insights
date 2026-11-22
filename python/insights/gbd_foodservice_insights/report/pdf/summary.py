@@ -8,10 +8,8 @@ from matplotlib.figure import Figure
 
 from gbd_foodservice_insights.plotting_utils import (
     BODY_FONT,
-    GBD_GREEN,
     GBD_MUTED,
     LETTER_PORTRAIT,
-    TITLE_FONT,
 )
 from gbd_foodservice_insights.report.food_report import (
     FoodReport,
@@ -24,8 +22,9 @@ from gbd_foodservice_insights.report.pdf.layout import (
     LINE_HEIGHT,
     PAGE_MARGIN_IN,
     PdfSink,
+    draw_heading,
+    draw_wrapped,
     new_page_figure,
-    wrap_to_width,
 )
 from gbd_foodservice_insights.report.schema import DinerOrMeal, QualityStatus
 
@@ -106,18 +105,7 @@ def _co2e_per_head(report: FoodReport) -> Co2ePerHead | None:
 def new_summary_figure(fig_size: tuple[float, float]) -> tuple[Figure, plt.Axes]:
     """A page headed "Executive Summary", whose axes coordinates are page coordinates."""
     fig, ax = new_page_figure(fig_size)
-    ax.text(
-        0.5,
-        0.82,
-        "Executive Summary",
-        transform=ax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=20,
-        fontweight="bold",
-        fontfamily=TITLE_FONT,
-        color=GBD_GREEN,
-    )
+    draw_heading(ax, 0.82, "Executive Summary", fontsize=20)
     return fig, ax
 
 
@@ -133,51 +121,35 @@ def create_executive_summary_page(
     text_width_in = fig_size[0] - 2 * PAGE_MARGIN_IN
     left_x = PAGE_MARGIN_IN / fig_size[0]
 
-    headline = _format_co2e(narrative.total_co2e_kg)
-    ax.text(
+    draw_heading(ax, 0.76, f"{_format_co2e(narrative.total_co2e_kg)} CO₂e", fontsize=34)
+    y = draw_wrapped(
+        ax,
         0.5,
-        0.76,
-        f"{headline} CO₂e",
-        transform=ax.transAxes,
+        0.70,
+        f"the greenhouse gas footprint of food purchased by {narrative.client}, {narrative.period}",
+        width_in=text_width_in,
+        line_height=LINE_HEIGHT,
+        fontsize=12,
+        fontfamily=BODY_FONT,
         ha="center",
         va="top",
-        fontsize=34,
-        fontweight="bold",
-        fontfamily=TITLE_FONT,
-        color=GBD_GREEN,
+        color=GBD_MUTED,
     )
-    subtitle = (
-        f"the greenhouse gas footprint of food purchased by {narrative.client}, {narrative.period}"
-    )
-    y = 0.70
-    for line in wrap_to_width(subtitle, text_width_in, fontsize=12, fontfamily=BODY_FONT):
-        ax.text(
-            0.5,
-            y,
-            line,
-            transform=ax.transAxes,
-            ha="center",
-            va="top",
-            fontsize=12,
-            fontfamily=BODY_FONT,
-            color=GBD_MUTED,
-        )
-        y -= LINE_HEIGHT
 
     y -= 0.035  # gap below the subtitle
     for paragraph in _narrative_paragraphs(narrative, page_refs):
-        for line in wrap_to_width(paragraph, text_width_in, fontsize=11.5, fontfamily=BODY_FONT):
-            ax.text(
-                left_x,
-                y,
-                line,
-                transform=ax.transAxes,
-                ha="left",
-                va="top",
-                fontsize=11.5,
-                fontfamily=BODY_FONT,
-            )
-            y -= LINE_HEIGHT
+        y = draw_wrapped(
+            ax,
+            left_x,
+            y,
+            paragraph,
+            width_in=text_width_in,
+            line_height=LINE_HEIGHT,
+            fontsize=11.5,
+            fontfamily=BODY_FONT,
+            ha="left",
+            va="top",
+        )
         y -= 0.017  # paragraph gap
 
     pdf.savefig(fig)

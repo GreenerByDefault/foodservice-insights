@@ -1,14 +1,14 @@
 """What every PDF page is drawn on: blank page figures, and text measured and wrapped to fit."""
 
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Literal, Protocol
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
 
-from gbd_foodservice_insights.plotting_utils import LETTER_PORTRAIT
+from gbd_foodservice_insights.plotting_utils import GBD_GREEN, LETTER_PORTRAIT, TITLE_FONT
 
 PAGE_MARGIN_IN = 1.0
 # A fraction of the page height.
@@ -60,3 +60,53 @@ def wrap_to_width(
         else:
             current = candidate
     return [*lines, current] if current else lines
+
+
+def draw_heading(
+    ax: plt.Axes, y: float, text: str, *, fontsize: float, va: Literal["top", "center"] = "top"
+) -> None:
+    """A centered heading in the house style, at ``y`` on the page."""
+    ax.text(
+        0.5,
+        y,
+        text,
+        transform=ax.transAxes,
+        ha="center",
+        va=va,
+        fontsize=fontsize,
+        fontweight="bold",
+        fontfamily=TITLE_FONT,
+        color=GBD_GREEN,
+    )
+
+
+def draw_wrapped(
+    ax: plt.Axes,
+    x: float,
+    y: float,
+    text: str,
+    *,
+    width_in: float,
+    line_height: float,
+    fontsize: float,
+    fontfamily: str | Sequence[str],
+    ha: Literal["left", "center"],
+    va: Literal["top", "center"],
+    color: str | None = None,
+) -> float:
+    """Draw ``text`` wrapped to ``width_in``, a line every ``line_height`` down from ``y``.
+    Returns the ``y`` below the last line."""
+    for line in wrap_to_width(text, width_in, fontsize=fontsize, fontfamily=fontfamily):
+        ax.text(
+            x,
+            y,
+            line,
+            transform=ax.transAxes,
+            ha=ha,
+            va=va,
+            fontsize=fontsize,
+            fontfamily=fontfamily,
+            color=color,
+        )
+        y -= line_height
+    return y

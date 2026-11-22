@@ -13,10 +13,10 @@ from gbd_foodservice_insights.plotting_utils import (
     GBD_GREEN,
     GBD_SAND,
     LETTER_LANDSCAPE,
-    TITLE_FONT,
 )
 from gbd_foodservice_insights.report.pdf.layout import (
     PdfSink,
+    draw_heading,
     new_text_figure,
     text_width_in,
     wrap_to_width,
@@ -217,19 +217,7 @@ def _draw_table_page(
     """Draw ``display_df`` on one page under ``heading``. Each row grows to fit the lines of
     its ``multiline_column`` cell, which is drawn larger."""
     fig, ax = new_text_figure(fig_size)
-
-    ax.text(
-        0.5,
-        0.97,
-        heading,
-        transform=ax.transAxes,
-        ha="center",
-        va="top",
-        fontsize=14,
-        fontweight="bold",
-        fontfamily=TITLE_FONT,
-        color=GBD_GREEN,
-    )
+    draw_heading(ax, 0.97, heading, fontsize=14)
 
     table = ax.table(
         cellText=display_df.values.tolist(),

@@ -19,6 +19,8 @@ from gbd_foodservice_insights.report.pdf.layout import (
     LINE_HEIGHT,
     PAGE_MARGIN_IN,
     PdfSink,
+    draw_heading,
+    draw_wrapped,
     new_page_figure,
     new_text_figure,
     text_width_in,
@@ -42,18 +44,7 @@ def create_title_page(
 ) -> None:
     """Render a branded title page in the PDF."""
     fig, ax = new_text_figure(fig_size)
-    ax.text(
-        0.5,
-        0.65,
-        "Food Report",
-        transform=ax.transAxes,
-        ha="center",
-        va="center",
-        fontsize=28,
-        fontweight="bold",
-        fontfamily=TITLE_FONT,
-        color=GBD_GREEN,
-    )
+    draw_heading(ax, 0.65, "Food Report", fontsize=28, va="center")
     # Decoration only: chartreuse is too faint on white to carry text.
     ax.plot(
         [0.44, 0.56],
@@ -64,25 +55,18 @@ def create_title_page(
         solid_capstyle="round",
     )
     # The client name is shown as typed: title-casing turns "McDonald's" into "Mcdonald'S".
-    client_lines = wrap_to_width(
+    y = draw_wrapped(
+        ax,
+        0.5,
+        0.55,
         client.replace("_", " "),
-        fig_size[0] - 2 * PAGE_MARGIN_IN,
+        width_in=fig_size[0] - 2 * PAGE_MARGIN_IN,
+        line_height=_TITLE_CLIENT_LINE_HEIGHT,
         fontsize=20,
         fontfamily=TITLE_FONT,
+        ha="center",
+        va="center",
     )
-    y = 0.55
-    for line in client_lines:
-        ax.text(
-            0.5,
-            y,
-            line,
-            transform=ax.transAxes,
-            ha="center",
-            va="center",
-            fontsize=20,
-            fontfamily=TITLE_FONT,
-        )
-        y -= _TITLE_CLIENT_LINE_HEIGHT
     subtitle_y = min(0.47, y - 0.02)
     ax.text(
         0.5,
@@ -142,19 +126,7 @@ def create_text_page(
     for page_index in range(0, len(wrapped_lines), lines_per_page):
         fig, ax = new_page_figure(fig_size)
         page_title = title if page_index == 0 else f"{title} (cont.)"
-
-        ax.text(
-            0.5,
-            _TEXT_PAGE_TITLE_Y,
-            page_title,
-            transform=ax.transAxes,
-            ha="center",
-            va="top",
-            fontsize=16,
-            fontweight="bold",
-            fontfamily=TITLE_FONT,
-            color=GBD_GREEN,
-        )
+        draw_heading(ax, _TEXT_PAGE_TITLE_Y, page_title, fontsize=16)
 
         y = _TEXT_PAGE_TOP_Y
         for line in wrapped_lines[page_index : page_index + lines_per_page]:
