@@ -258,13 +258,15 @@ def write_serving_pdf(
 ) -> None:
     quality_status = quality_status_from_findings(report.findings)
     with close_new_figures_on_error(), PdfPages(path) as pdf:
-        create_title_page(pdf, client_name, f"Serving | {date_range_label(report.rows)}")
+        create_title_page(
+            pdf, "Food Report", client_name, f"Serving | {date_range_label(report.rows)}"
+        )
         _create_summary_page(
             pdf, {**report.summary_stats, "Data Quality Status": quality_status.upper()}
         )
         for figure in charts.figures:
             pdf.savefig(figure)
-        create_category_template_pages(pdf, report.template)
+        create_category_template_pages(pdf, report.template, SERVINGS)
         create_text_page(
             pdf,
             "Data Completeness & Quality",

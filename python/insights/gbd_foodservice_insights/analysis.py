@@ -192,7 +192,9 @@ def analyze(
                 report,
                 charts,
                 pdf_path,
-                client_name=_title(request),
+                # A null name predates the upload form requiring one.
+                title=request.report_name or "Food Report",
+                client_name=_client(request),
                 show_quality_successes=False,
             )
 
@@ -237,7 +239,7 @@ def _summarize_input(df: pd.DataFrame, cache: CategorizationCache) -> InputSumma
     )
 
 
-def _title(request: AnalysisRequest) -> str:
+def _client(request: AnalysisRequest) -> str:
     if not request.site_name:
         return request.organization_name
     return f"{request.organization_name} — {request.site_name}"

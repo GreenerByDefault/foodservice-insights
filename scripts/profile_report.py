@@ -86,6 +86,7 @@ def build_deliverables(rows: pd.DataFrame, output_directory: Path) -> dict[str, 
                 report,
                 charts,
                 output_directory / "report.pdf",
+                title="Profile",
                 client_name="Profile",
                 show_quality_successes=False,
             )

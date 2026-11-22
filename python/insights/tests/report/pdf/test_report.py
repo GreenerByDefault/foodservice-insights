@@ -147,23 +147,38 @@ def _write(
         report,
         charts or ReportCharts(figures=[]),
         path,
+        title="Spring Menu Review",
         client_name="Acme",
         show_quality_successes=False,
     )
 
 
-def _title_page(client: str) -> list[_PageText]:
+def _title_page(client: str, title: str = "Spring Menu Review") -> list[_PageText]:
     pdf = _RecordingPdf()
-    create_title_page(pdf, client, "Procurement")
+    create_title_page(pdf, title, client, "Procurement")
     return pdf.pages[0]
 
 
 def test_title_page_shows_the_client_name_as_typed() -> None:
     assert [t.text for t in _title_page("McDonald's")][:3] == [
-        "Food Report",
+        "Spring Menu Review",
         "McDonald's",
         "Procurement",
     ]
+
+
+def test_title_page_wraps_a_long_title_upward_from_where_one_line_sits() -> None:
+    title = "Quarterly Procurement Review of the North Campus Dining Halls " * 3
+    wrapped = [t for t in _title_page("Acme", title) if t.bold]
+    prop = FontProperties(family=TITLE_FONT, size=28, weight="bold")
+
+    assert len(wrapped) > 1
+    assert " ".join(t.text for t in wrapped) == title.strip()
+    assert [t.y for t in wrapped] == sorted((t.y for t in wrapped), reverse=True)
+    assert wrapped[-1].y == pytest.approx(0.65)
+    for line in wrapped:
+        width_pt, _, _ = text_to_path.get_text_width_height_descent(line.text, prop, ismath=False)
+        assert width_pt / 72 <= 6.5
 
 
 def test_title_page_wraps_a_long_client_name_above_the_subtitle() -> None:
@@ -262,12 +277,12 @@ def test_write_report_pdf_orders_the_procurement_pages(recording_pdf: _Recording
     plt.close(fig)
 
     assert _page_titles(recording_pdf) == [
-        "Food Report",
+        "Spring Menu Review",
         "Executive Summary",
         "Data Completeness & Quality",
         "How to Read This Report",
         "",
-        "Category Template",
+        "Kilos by Category and Month",
         "Animal Emissions Intensity",
         "Decision KPIs",
         "Substitution Scenarios",
@@ -296,7 +311,7 @@ def test_write_report_pdf_includes_each_procurement_page_its_data_supports(
     _write(_report(animal_product))
 
     titles = _page_titles(recording_pdf)
-    assert titles[titles.index("Category Template") + 1 : -2] == procurement_pages
+    assert titles[titles.index("Kilos by Category and Month") + 1 : -2] == procurement_pages
 
 
 def test_write_report_pdf_continues_a_long_quality_section_onto_more_pages(

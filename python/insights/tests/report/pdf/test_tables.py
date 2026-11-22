@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.report.aggregation import category_names
+from gbd_foodservice_insights.report.metric import KILOS
 from gbd_foodservice_insights.report.pdf.tables import (
     _display_table,
     _format_animal_emissions_intensity_for_pdf,
@@ -62,7 +63,7 @@ def test_category_template_fits_every_cell_and_splits_months_across_pages(months
     )
 
     pdf = _RecordingTablePdf()
-    create_category_template_pages(pdf, template)
+    create_category_template_pages(pdf, template, KILOS)
 
     assert pdf.overflowing == []
     assert all(columns[0] == "Category" for columns in pdf.columns)
@@ -70,9 +71,9 @@ def test_category_template_fits_every_cell_and_splits_months_across_pages(months
     pages = len(pdf.headings)
     assert (pages > 1) == (months >= 12)
     assert pdf.headings == (
-        ["Category Template"]
+        ["Kilos by Category and Month"]
         if pages == 1
-        else [f"Category Template ({page} of {pages})" for page in range(1, pages + 1)]
+        else [f"Kilos by Category and Month ({page} of {pages})" for page in range(1, pages + 1)]
     )
 
 
@@ -101,6 +102,10 @@ def test_pack_columns_gives_an_overwide_column_its_own_page() -> None:
 
 def test_pack_columns_fills_a_page_exactly_before_starting_another() -> None:
     assert _pack_columns([1.0, 1.5, 1.0], 2.5) == [[0, 1], [2]]
+
+
+def test_pack_columns_balances_its_pages_rather_than_leaving_one_column_on_the_last() -> None:
+    assert _pack_columns([1.0] * 9, 8.0) == [[0, 1, 2, 3, 4], [5, 6, 7, 8]]
 
 
 # ----------------------------------------------------------------------
