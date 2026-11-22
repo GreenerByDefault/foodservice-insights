@@ -2,11 +2,23 @@ import { describe, expect, test } from 'vitest';
 import {
   ACTION_STYLE,
   BODY_STYLE,
+  CANVAS_STYLE,
   CARD_STYLE,
+  CONTENT_STYLE,
   type Document,
   escapeHtml,
+  FACT_LABEL_STYLE,
+  FACT_VALUE_STYLE,
+  FOOTER_HTML,
+  FOOTER_STYLE,
+  HEADING_STYLE,
+  LINK_STYLE,
+  MASTHEAD_STYLE,
+  PARAGRAPH_STYLE,
+  PREHEADER_STYLE,
   renderHtml,
   renderText,
+  WORDMARK,
 } from './layout.ts';
 import type { TrustedUrl } from './links.ts';
 
@@ -20,20 +32,74 @@ function asUrl(value: string): TrustedUrl {
   return value as TrustedUrl;
 }
 
-function expectedHtml(heading: string, blockHtml: string): string {
+/** The page around a document's blocks. `preheader` is the hidden inbox preview, which the renderer
+ * takes from the first paragraph. */
+function expectedHtml(heading: string, blockHtml: string, preheader?: string): string {
   return [
     '<!doctype html>',
     '<html lang="en">',
-    `<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${heading}</title></head>`,
+    '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">' +
+      `<title>${heading}</title></head>`,
     `<body style="${BODY_STYLE}">`,
-    `<div style="${CARD_STYLE}">`,
-    `<h1 style="margin:0 0 16px;font-size:20px;">${heading}</h1>`,
+    ...(preheader === undefined ? [] : [`<div style="${PREHEADER_STYLE}">${preheader}</div>`]),
+    `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#FDF9F1"><tr><td align="center" style="${CANVAS_STYLE}">`,
+    '<!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" width="560"><tr><td><![endif]-->',
+    `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="${CARD_STYLE}">`,
+    `<tr><td bgcolor="#016939" style="${MASTHEAD_STYLE}">${WORDMARK}</td></tr>`,
+    '<tr><td bgcolor="#D9E027" height="4" style="height:4px;font-size:0;line-height:0;">&nbsp;</td></tr>',
+    `<tr><td align="left" style="${CONTENT_STYLE}">`,
+    `<h1 style="${HEADING_STYLE}">${heading}</h1>`,
     ...(blockHtml === '' ? [] : [blockHtml]),
-    '<p style="margin:24px 0 0;color:#57534e;font-size:14px;">— PLATE (Greener by Default)</p>',
-    '</div>',
+    '</td></tr>',
+    '</table>',
+    `<p style="${FOOTER_STYLE}">${FOOTER_HTML}</p>`,
+    '<!--[if mso]></td></tr></table><![endif]-->',
+    '</td></tr></table>',
     '</body>',
     '</html>',
   ].join('\n');
+}
+
+function paragraphHtml(text: string): string {
+  return `<p style="${PARAGRAPH_STYLE}">${text}</p>`;
+}
+
+function actionHtml(href: string, label: string): string {
+  return (
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">' +
+    `<tr><td bgcolor="#016939" style="border-radius:999px;"><a href="${href}" style="${ACTION_STYLE}">${label}</a></td></tr>` +
+    '</table>'
+  );
+}
+
+function linksHtml(links: ReadonlyArray<readonly [href: string, label: string]>): string {
+  return (
+    '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 16px;border-top:1px solid #E6DDCC;">' +
+    links
+      .map(
+        ([href, label]) =>
+          '<tr><td style="padding:12px 0;border-bottom:1px solid #E6DDCC;">' +
+          `<a href="${href}" style="${LINK_STYLE}">${label}</a></td></tr>`,
+      )
+      .join('') +
+    '</table>'
+  );
+}
+
+function factsHtml(facts: ReadonlyArray<readonly [label: string, value: string]>): string {
+  return (
+    '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" bgcolor="#F4EEE2" style="margin:8px 0 16px;border-radius:12px;">' +
+    '<tr><td style="padding:16px 20px;"><table role="presentation" cellpadding="0" cellspacing="0">' +
+    facts
+      .map(
+        ([label, value]) =>
+          `<tr><th align="left" valign="top" style="${FACT_LABEL_STYLE}">${label}</th>` +
+          `<td style="${FACT_VALUE_STYLE}">${value}</td></tr>`,
+      )
+      .join('') +
+    '</table></td></tr></table>'
+  );
 }
 
 describe('escapeHtml', () => {
@@ -142,15 +208,39 @@ describe('renderHtml', () => {
     expect(renderHtml(document)).toBe(expectedHtml('Hi', ''));
   });
 
-  test('renders a paragraph as a <p>', () => {
+  test('renders a paragraph as a <p>, and previews it in the inbox', () => {
     const document: Document = {
       heading: 'Hi',
       blocks: [{ block: 'paragraph', text: 'Here is what changed.' }],
     };
-    expect(renderHtml(document)).toBe(expectedHtml('Hi', '<p>Here is what changed.</p>'));
+    expect(renderHtml(document)).toBe(
+      expectedHtml('Hi', paragraphHtml('Here is what changed.'), 'Here is what changed.'),
+    );
   });
 
-  test('renders an action as a styled link, since email clients discard <head>', () => {
+  test('previews only the first paragraph, wherever it falls', () => {
+    const document: Document = {
+      heading: 'Hi',
+      blocks: [
+        { block: 'facts', facts: [['Organization', 'Acme']] },
+        { block: 'paragraph', text: 'First.' },
+        { block: 'paragraph', text: 'Second.' },
+      ],
+    };
+    expect(renderHtml(document)).toBe(
+      expectedHtml(
+        'Hi',
+        [
+          factsHtml([['Organization', 'Acme']]),
+          paragraphHtml('First.'),
+          paragraphHtml('Second.'),
+        ].join('\n'),
+        'First.',
+      ),
+    );
+  });
+
+  test('renders an action as a button, since email clients discard <head>', () => {
     const document: Document = {
       heading: 'Hi',
       blocks: [
@@ -158,14 +248,11 @@ describe('renderHtml', () => {
       ],
     };
     expect(renderHtml(document)).toBe(
-      expectedHtml(
-        'Hi',
-        `<p><a href="https://example.test/r/1" style="${ACTION_STYLE}">View your report</a></p>`,
-      ),
+      expectedHtml('Hi', actionHtml('https://example.test/r/1', 'View your report')),
     );
   });
 
-  test('renders links as a bulleted list', () => {
+  test('renders links as rows', () => {
     const document: Document = {
       heading: 'Hi',
       blocks: [
@@ -181,10 +268,10 @@ describe('renderHtml', () => {
     expect(renderHtml(document)).toBe(
       expectedHtml(
         'Hi',
-        '<ul style="margin:0;padding:0 0 0 20px;">' +
-          '<li><a href="https://example.test/a">Download A</a></li>' +
-          '<li><a href="https://example.test/b">Download B</a></li>' +
-          '</ul>',
+        linksHtml([
+          ['https://example.test/a', 'Download A'],
+          ['https://example.test/b', 'Download B'],
+        ]),
       ),
     );
   });
@@ -205,29 +292,10 @@ describe('renderHtml', () => {
     expect(renderHtml(document)).toBe(
       expectedHtml(
         'Hi',
-        '<table role="presentation" cellpadding="0" cellspacing="0"><tbody>' +
-          '<tr><th align="left" style="padding:0 16px 4px 0;font-weight:600;">Organization</th>' +
-          '<td style="padding:0 0 4px 0;">Acme</td></tr>' +
-          '<tr><th align="left" style="padding:0 16px 4px 0;font-weight:600;">Report</th>' +
-          '<td style="padding:0 0 4px 0;">Q1</td></tr>' +
-          '</tbody></table>',
-      ),
-    );
-  });
-
-  test('renders multiple blocks in order, one after another', () => {
-    const document: Document = {
-      heading: 'Hi',
-      blocks: [
-        { block: 'paragraph', text: 'Here is what changed.' },
-        { block: 'action', label: 'View your report', url: asUrl('https://example.test/r/1') },
-      ],
-    };
-    expect(renderHtml(document)).toBe(
-      expectedHtml(
-        'Hi',
-        '<p>Here is what changed.</p>\n' +
-          `<p><a href="https://example.test/r/1" style="${ACTION_STYLE}">View your report</a></p>`,
+        factsHtml([
+          ['Organization', 'Acme'],
+          ['Report', 'Q1'],
+        ]),
       ),
     );
   });
@@ -235,21 +303,19 @@ describe('renderHtml', () => {
   test.each([
     ['a heading', { heading: HOSTILE, blocks: [] }, () => expectedHtml(HOSTILE_ESCAPED, '')],
     [
-      'a paragraph',
+      'a paragraph and its preview',
       { heading: 'Hi', blocks: [{ block: 'paragraph', text: HOSTILE }] },
-      () => expectedHtml('Hi', `<p>${HOSTILE_ESCAPED}</p>`),
+      () => expectedHtml('Hi', paragraphHtml(HOSTILE_ESCAPED), HOSTILE_ESCAPED),
     ],
     [
       'a fact label and value',
       { heading: 'Hi', blocks: [{ block: 'facts', facts: [[HOSTILE, HOSTILE]] }] },
-      () =>
-        expectedHtml(
-          'Hi',
-          '<table role="presentation" cellpadding="0" cellspacing="0"><tbody>' +
-            `<tr><th align="left" style="padding:0 16px 4px 0;font-weight:600;">${HOSTILE_ESCAPED}</th>` +
-            `<td style="padding:0 0 4px 0;">${HOSTILE_ESCAPED}</td></tr>` +
-            '</tbody></table>',
-        ),
+      () => expectedHtml('Hi', factsHtml([[HOSTILE_ESCAPED, HOSTILE_ESCAPED]])),
+    ],
+    [
+      'an action label',
+      { heading: 'Hi', blocks: [{ block: 'action', label: HOSTILE, url: asUrl('/x') }] },
+      () => expectedHtml('Hi', actionHtml('/x', HOSTILE_ESCAPED)),
     ],
     [
       'a link label',
@@ -257,11 +323,7 @@ describe('renderHtml', () => {
         heading: 'Hi',
         blocks: [{ block: 'links', links: [{ label: HOSTILE, url: asUrl('/x') }] }],
       },
-      () =>
-        expectedHtml(
-          'Hi',
-          `<ul style="margin:0;padding:0 0 0 20px;"><li><a href="/x">${HOSTILE_ESCAPED}</a></li></ul>`,
-        ),
+      () => expectedHtml('Hi', linksHtml([['/x', HOSTILE_ESCAPED]])),
     ],
   ] as ReadonlyArray<[string, Document, () => string]>)(
     'escapes user text in %s',
@@ -276,10 +338,7 @@ describe('renderHtml', () => {
       blocks: [{ block: 'action', label: 'Go', url: asUrl('https://example.test/?a=1&b=2') }],
     };
     expect(renderHtml(document)).toBe(
-      expectedHtml(
-        'Hi',
-        `<p><a href="https://example.test/?a=1&amp;b=2" style="${ACTION_STYLE}">Go</a></p>`,
-      ),
+      expectedHtml('Hi', actionHtml('https://example.test/?a=1&amp;b=2', 'Go')),
     );
   });
 
@@ -299,8 +358,7 @@ describe('renderHtml', () => {
     expect(renderHtml(document)).toBe(
       expectedHtml(
         'Hi',
-        `<p><a href="${breakoutEscaped}" style="${ACTION_STYLE}">Go</a></p>\n` +
-          `<ul style="margin:0;padding:0 0 0 20px;"><li><a href="${breakoutEscaped}">Go</a></li></ul>`,
+        `${actionHtml(breakoutEscaped, 'Go')}\n${linksHtml([[breakoutEscaped, 'Go']])}`,
       ),
     );
   });

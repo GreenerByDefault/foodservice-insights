@@ -5,11 +5,12 @@
 greenerbydefault.com relaunched with a new logo and visual identity, and GBD will send visual
 edits later. The web app, marketing page included, already wears the new look:
 `apps/web/src/routes/layout.css` holds every color, the font and the radius as tokens, so GBD's
-edits should only ever change tokens. What is left is the emails and the PDF, which share no
-tokens with the web app and copy the palette by hand. The scope is UI and styling, not UX: layouts and copy
-stay as they are.
+edits should only ever change tokens. The emails wear it too, copying the palette by hand into
+`packages/email/src/messages/layout.ts` and the Supabase auth templates. What is left is the PDF,
+which likewise shares no tokens with the web app. The scope is UI and styling, not UX: layouts and
+copy stay as they are.
 
-**The palette**, as the web app ships it. Emails and the PDF copy these hex values:
+**The palette**, as the web app ships it. The emails copy these hex values, and the PDF will:
 
 | Role | Hex | Web token |
 | --- | --- | --- |
@@ -39,35 +40,9 @@ emails and the PDF too; no screenshot pruning before the redesign.
 
 ## PR breakdown
 
-| PR | What | Screenshots |
-| --- | --- | --- |
-| 1 | Emails: `packages/email` + Supabase auth templates | none |
-| 2 | PDF report (Python) | none |
+One PR is left: the PDF report (Python), with no screenshots.
 
-The two are independent of each other.
-
-## PR 1: emails
-
-- In `packages/email/src/messages/layout.ts`, update the styles:
-
-  | Style | New values |
-  | --- | --- |
-  | `BODY_STYLE` | background `#FDF9F1`, color `#403428`; font stack `Poppins,-apple-system,…` (clients can't load webfonts reliably, so the stack falls back) |
-  | `CARD_STYLE` | stays white, `border-radius:12px` |
-  | `ACTION_STYLE` | `#016939` background, `#FDF9F1` text, `border-radius:999px`, sentence case like the app's buttons, weight 700. Replaces `#166534` |
-  | h1 | green, weight 700 |
-  | Footer | `#6E6052` |
-  | Links | `#016939` |
-
-- Update the footer color string asserted at `layout.test.ts:32`.
-- Copy the same inline values into the three templates in `supabase-dev/supabase/templates/`
-  (`sign-in-code`, `email-change`, `email-changed`). `supabase-test` reuses those files.
-- **Human step, called out in the PR description:** paste the three templates into the hosted
-  Supabase dashboard for production. Restart Kong locally to preview them.
-- No logo image. An image would need an absolute app-origin URL from `static/` (see the comment
-  in `layout.ts`), and that is not worth it now.
-
-## PR 2: PDF report (`python/insights/gbd_foodservice_insights/`)
+## PR 1: PDF report (`python/insights/gbd_foodservice_insights/`)
 
 **Palette** (`plotting_utils.py`)
 - Add named constants: `GBD_GREEN` `#016939`, `GBD_CHARTREUSE` `#D9E027`, `GBD_BROWN`
@@ -119,12 +94,6 @@ Render the PDF and check it.
 
 ## Verification
 
-**PR 1 (emails)**
-- `pnpm --filter @gbd/email preview` to view every app email.
-- `pnpm lint && pnpm check && pnpm test`.
-- Trigger a sign-in code locally and view it in the local Supabase mail catcher.
-
-**PR 2 (PDF)**
 - `just lint && just check && just test`.
 - Render a report PDF from the test fixtures that `test_pdf.py` uses, rasterize each page
   (`pdftoppm -png`), and inspect it for overflow, font fallback warnings and chart colors.
