@@ -36,8 +36,7 @@ Facts from the tree (2026-10-20) that shape the design:
   has moved on. Bad deploys are reverted, never rolled back (architecture § Bad deploys are fixed
   forward).
 - **No vendor console URL appears anywhere in the tree.** `apps/grafana/gcx-cloud.yaml:4` keeps
-  the Grafana stack hostname out "of the repo, which is public", and `alerts.md` keeps alert
-  addresses in an Environment variable for the same reason.
+  the Grafana stack hostname out "of the repo, which is public".
 - **Agents are denied the hosted CLIs**: `doctl`, `gcx`, `gh secret`, `gh workflow run`, hosted
   Supabase (`.claude/settings.json`). A runbook is run by a person in a vendor's dashboard, so
   nobody has to set up a CLI to follow one.
@@ -87,7 +86,7 @@ or Better Stack login page, and a browser bookmark gives the team the same click
 
 The README's § Writing one holds the conventions. What it leaves to the writer: `deploy.yml`'s
 step comments already say what a failed step means; `packages/db/README.md` § Writing a migration
-says a schema may run ahead of code; alert thresholds stay on the rules (`alerts.md`); hosted
+says a schema may run ahead of code; alert thresholds stay on the checks (`data-alerts.md`); hosted
 settings stay on `budget.ts`. **A procedure another plan owns is written by that plan's PR**,
 under the file name this plan reserves, so there is one owner per entry.
 
@@ -154,7 +153,7 @@ Each credential then gets only what differs from those steps:
 - `trace-a-problem-through-the-logs.md` already covers the path from a failed attempt's row to its log lines,
   so there is no separate triage file. Nor is there one for an email that never arrived: the
   README's Postmark row says which stream to search, and that a spam complaint's suppression
-  only Postmark's support lifts. `alerts.md` adds nothing: the README's one sentence, "an alert's own rule says what firing
+  only Postmark's support lifts. `data-alerts.md` adds nothing: the README's one sentence, "an alert's own rule says what firing
   means, then the logs runbook", is the whole of "when an alert fires".
 - *Left out:* generic vendor how-tos an agent or a search answers; the hosted project's settings,
   which stay on the code that depends on them; plan tiers, which `scripts/monthly_costs.py` holds;
