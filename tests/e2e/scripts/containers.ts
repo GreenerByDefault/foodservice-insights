@@ -337,7 +337,7 @@ export function startWorkerContainer(options: {
   return {
     stop: async () => {
       stopping = true;
-      // Stop the *container*, not the CLI: signalling the client would leave the container behind
+      // Stop the *container*, not the CLI: signaling the client would leave the container behind
       // if it were ever detached, and this way the grace period is Docker's to enforce.
       await execFileAsync('docker', [
         'stop',
@@ -366,7 +366,7 @@ export async function removeRunResources(runName: string): Promise<void> {
   }
 }
 
-async function labelled(subcommand: 'ps' | 'images', format: string): Promise<string[]> {
+async function labeled(subcommand: 'ps' | 'images', format: string): Promise<string[]> {
   const { stdout } = await execFileAsync('docker', [
     subcommand,
     ...(subcommand === 'ps' ? ['--all'] : []),
@@ -408,7 +408,7 @@ function ownerIsAlive(ownerPid: string): boolean {
  */
 export async function sweepStaleContainers(): Promise<number> {
   const staleContainers = (
-    await labelled('ps', `{{.Names}}\t{{.Label "${STARTED_LABEL}"}}\t{{.Label "${OWNER_LABEL}"}}`)
+    await labeled('ps', `{{.Names}}\t{{.Label "${STARTED_LABEL}"}}\t{{.Label "${OWNER_LABEL}"}}`)
   )
     .map((line) => line.split('\t'))
     .filter(([, startedAt, ownerPid]) => !ownerIsAlive(ownerPid ?? '') || isStale(startedAt ?? ''))
@@ -447,7 +447,7 @@ export async function sweepStaleContainers(): Promise<number> {
  * tagging the first of the two images still gets its leftover cleaned up.
  */
 async function staleImageTags(): Promise<string[]> {
-  const tags = await labelled('images', '{{.Repository}}:{{.Tag}}');
+  const tags = await labeled('images', '{{.Repository}}:{{.Tag}}');
   const stale: string[] = [];
   for (const tag of tags) {
     const { stdout } = await execFileAsync('docker', [

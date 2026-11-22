@@ -57,7 +57,7 @@ const SERVER_PORT = 3000;
  */
 export const BROWSER_ARGS = ['--disable-partial-raster'];
 
-/** `--unsafe` is what lets the server honour a client's `args` at all; without it they are
+/** `--unsafe` is what lets the server honor a client's `args` at all; without it they are
  * silently dropped, and `describeBrowser` is what would catch that. It also admits
  * `executablePath` and the like, which is fine for a loopback-only socket on a stateless
  * container. */

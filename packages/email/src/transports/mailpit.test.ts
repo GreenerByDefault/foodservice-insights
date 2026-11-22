@@ -44,7 +44,7 @@ describe('mailpitTransport', () => {
       to: [to],
       subject: 'Your report is ready: Q1 procurement',
     });
-    expect(delivered.text).toContain('We have finished analysing your procurement data.');
+    expect(delivered.text).toContain('We have finished analyzing your procurement data.');
     expect(delivered.html).toContain('<h1');
   });
 

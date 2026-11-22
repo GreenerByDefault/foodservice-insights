@@ -75,7 +75,7 @@ COMPLETED_PAGE_STATUSES = {"processed", "skipped_existing", NO_TABLE_STATUS}
 PARSER_MODES = {"auto", "markdown", "json_rows"}
 DEFAULT_OPENAI_PDF_MODEL = "gpt-4o"
 
-# We keep the profile catalogue explicit instead of scattering string literals
+# We keep the profile catalog explicit instead of scattering string literals
 # throughout the file. That makes routing decisions and repair manifests much
 # easier to review later.
 WHISPER_PROFILE_OPTIONS: dict[str, dict[str, Any]] = {
@@ -2163,7 +2163,7 @@ def check_missing_literal_values(
 def _write_qa_flags_artifact(
     data_location: Path, file_name: str, page_statuses: list[dict[str, Any]]
 ) -> None:
-    """Write the per-file QA-flags JSON artifact summarising failed pages."""
+    """Write the per-file QA-flags JSON artifact summarizing failed pages."""
     warnings = [
         {
             "page": status["page"],

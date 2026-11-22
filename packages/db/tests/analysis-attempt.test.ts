@@ -515,7 +515,7 @@ describe('analysis_attempt', () => {
     });
 
     test('refuses the second of two concurrent retries', async () => {
-      // docs/requirements.md allows one retry at a time per report. The trigger's report lock serialises
+      // docs/requirements.md allows one retry at a time per report. The trigger's report lock serializes
       // the two, so beta re-reads the latest attempt after alpha commits and rejects on the status
       // rule — the unique indexes behind it are backstops nothing now reaches.
       await withCommittedFixture(

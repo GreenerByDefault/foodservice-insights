@@ -150,7 +150,7 @@ def test_find_close_product_pairs_sorts_by_row_count_gap_descending():
 
 
 def test_find_close_product_pairs_includes_combined_metric_share_when_requested():
-    """Adds weighted materiality so likely name splits can be prioritised sensibly."""
+    """Adds weighted materiality so likely name splits can be prioritized sensibly."""
     df = pd.DataFrame(
         {
             "product": ["apple", "apple", "apply", "apricot"],

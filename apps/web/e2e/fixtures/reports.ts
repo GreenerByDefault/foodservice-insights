@@ -1,4 +1,4 @@
-/** The catalogue of report states the report page can show, and the rows that produce each one.
+/** The catalog of report states the report page can show, and the rows that produce each one.
  *
  * Every state commits inside one `withTransaction`: `report_has_an_input_file` and
  * `analysis_attempt_succeeded_has_result_files` are `DEFERRABLE INITIALLY DEFERRED`, so a report

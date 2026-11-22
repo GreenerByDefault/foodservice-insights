@@ -62,7 +62,7 @@ const GAVE_UP_CODES = [
   ['08006', 'connection_failure'],
   ['08003', 'connection_does_not_exist'],
   ['08P01', 'protocol_violation'],
-  [POSTGRES_CODE_QUERY_CANCELED, 'statement_timeout cancelled the query'],
+  [POSTGRES_CODE_QUERY_CANCELED, 'statement_timeout canceled the query'],
   ['57P01', 'admin_shutdown'],
   ['57P05', 'idle_session_timeout'],
   ['53300', 'too_many_connections'],

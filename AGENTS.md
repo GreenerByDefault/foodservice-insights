@@ -98,6 +98,8 @@ If not, write it. If so, the comment is a second copy of something that will dri
 
 ### Style
 
+- US English everywhere, including code, comments and docs: `categorized`, `organization`,
+  `canceled`, `metric tons` (not `tonnes`). Accept British spellings only as input aliases.
 - Prefer the standard library. When that is not possible, consider using third-party
   libraries, but usually prefer first-party code if it's simple to write because of supply
   chain security being such a pain.

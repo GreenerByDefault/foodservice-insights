@@ -70,8 +70,8 @@ describe('resolveHeader', () => {
       ['Weight (g)', 'grams'],
       ['Weight grams', 'grams'],
       ['Weight (tons)', 'tons'],
-      ['Weight (t)', 'tonnes'],
-      ['weight_tonnes', 'tonnes'],
+      ['Weight (t)', 'metric tons'],
+      ['weight_tonnes', 'metric tons'],
       ['Weight (grammes)', 'grams'],
     ] as const)('names "%s" as a weight in %s, rather than missing', ([header, unit]) => {
       expect(resolveHeader(['product', 'date', header])).toEqual({

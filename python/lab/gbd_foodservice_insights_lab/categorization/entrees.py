@@ -304,7 +304,7 @@ def classify_entrees_using_historical_classifications(
         unanimous_index(historical_subset, key_col="product", value_col="entree_classification"),
     )
 
-    # Third lookup: reuse labels for recognised cleaned names (mirrors the
+    # Third lookup: reuse labels for recognized cleaned names (mirrors the
     # category pipeline's cleaned-name reuse step). Only runs when the rows carry
     # cleaned names; unanimous matches only.
     n_cleaned_matched = 0
@@ -569,10 +569,10 @@ def filter_to_entrees(
 
 
 def new_entree_classifications(classified_products: pd.DataFrame) -> pd.DataFrame:
-    """The products Gemini labelled this run, in the entree cache's columns, as suggestions for
+    """The products Gemini labeled this run, in the entree cache's columns, as suggestions for
     it. Cleaned-name reuse hits are left out, as `new_categorizations` leaves them out."""
-    labelled = (
+    labeled = (
         ~classified_products["previously_entree_classified"]
         & classified_products["entree_classification"].notna()
     )
-    return classified_products.loc[labelled, list(ENTREE_CACHE_COLUMNS)].reset_index(drop=True)
+    return classified_products.loc[labeled, list(ENTREE_CACHE_COLUMNS)].reset_index(drop=True)

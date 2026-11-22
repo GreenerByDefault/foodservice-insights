@@ -2,7 +2,7 @@
  *
  * Deliberately unmocked. A fake S3 could only confirm that we call the SDK the way we call it,
  * whereas every failure this layer actually produces — a signature mismatch, virtual-host
- * addressing, a paging loop that stops early, a not-found name we do not recognise — is one a
+ * addressing, a paging loop that stops early, a not-found name we do not recognize — is one a
  * fake cannot produce.
  */
 
@@ -56,7 +56,7 @@ describe('objects', () => {
 
     // `GetObject` reports a missing key as NoSuchKey and `HeadObject` reports it as a bare NotFound.
     // Every read has to land as `undefined` rather than escaping as an error, so all of them are
-    // checked together here: recognising one name and not the other is a silent bug.
+    // checked together here: recognizing one name and not the other is a silent bug.
     test('treats a missing key as missing, under either name S3 reports', async () => {
       await withTemporaryPrefix(BLOB_STORE, async (prefix) => {
         const missing = `${prefix}not-there.png`;

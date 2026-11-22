@@ -510,7 +510,7 @@ def analyze_category_consumption(
     actual_pilot = per_diner_meal["pilot"] * pilot_diner_meals
     expected_pilot = baseline_per_diner_meal * pilot_diner_meals
     averted = expected_pilot - actual_pilot
-    averted_tonnes = averted / 1000
+    averted_metric_tons = averted / 1000
 
     # Calculate servings averted (4oz = 113.4 grams per serving)
     oz_to_kg = 0.0283495  # 1 oz = 0.0283495 kg
@@ -529,7 +529,8 @@ def analyze_category_consumption(
     )
     print(f"Actual {category_label.lower()} consumption during pilot: {actual_pilot:.1f} kg")
     print(
-        f"\nTotal {category_label.lower()} averted: {averted:.1f} kg,  {averted_tonnes:.2f} tonnes"
+        f"\nTotal {category_label.lower()} averted: {averted:.1f} kg, "
+        f"{averted_metric_tons:.2f} metric tons"
     )
     print(
         f"Servings of {category_label.lower()} averted (4oz per serving): "
@@ -543,14 +544,14 @@ def analyze_category_consumption(
                 f"Expected {category_label.lower()} consumption (kg)",
                 f"Actual {category_label.lower()} consumption (kg)",
                 f"{category_label} averted (kg)",
-                f"{category_label} averted (tonnes)",
+                f"{category_label} averted (metric tons)",
                 "Servings averted (4oz/serving)",
             ],
             "Value": [
                 f"{expected_pilot:.1f}",
                 f"{actual_pilot:.1f}",
                 f"{averted:.1f}",
-                f"{averted_tonnes:.2f}",
+                f"{averted_metric_tons:.2f}",
                 f"{servings_averted:,.0f}",
             ],
         }

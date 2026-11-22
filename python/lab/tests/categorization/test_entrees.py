@@ -399,7 +399,7 @@ def _merged_rows(products: list[str]) -> pd.DataFrame:
 
 
 def test_filter_to_entrees_drops_side_add_ons_and_counts_them():
-    # Real entrees, a side, and one product `filter_to_entrees` doesn't recognise at all
+    # Real entrees, a side, and one product `filter_to_entrees` doesn't recognize at all
     # (e.g. dropped upstream as uncategorized) — its classification is NA, not a label.
     df_final, n_rows_non_entree = filter_to_entrees(
         _merged_rows(["steak", "bread roll", "pot roast", "steak"]),

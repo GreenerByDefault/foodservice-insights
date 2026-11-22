@@ -51,7 +51,7 @@ const UNITS: ReadonlyMap<string, UnitSystem> = new Map([
 
 /** A unit food is weighed in that a report cannot be in. Naming it back to the user beats calling
  * their weight column missing. */
-export type UnsupportedUnit = 'ounces' | 'grams' | 'tons' | 'tonnes';
+export type UnsupportedUnit = 'ounces' | 'grams' | 'tons' | 'metric tons';
 
 const UNSUPPORTED_UNITS: ReadonlyMap<string, UnsupportedUnit> = new Map([
   ['oz', 'ounces'],
@@ -64,9 +64,9 @@ const UNSUPPORTED_UNITS: ReadonlyMap<string, UnsupportedUnit> = new Map([
   ['grammes', 'grams'],
   ['ton', 'tons'],
   ['tons', 'tons'],
-  ['t', 'tonnes'],
-  ['tonne', 'tonnes'],
-  ['tonnes', 'tonnes'],
+  ['t', 'metric tons'],
+  ['tonne', 'metric tons'],
+  ['tonnes', 'metric tons'],
 ]);
 
 export type ColumnIndexes = Record<RequiredColumn, number>;

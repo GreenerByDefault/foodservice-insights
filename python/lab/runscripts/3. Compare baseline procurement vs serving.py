@@ -406,7 +406,7 @@ else:
 #    not one-to-one totals.
 #
 # 3. It does not produce a single pass or fail score. This is a diagnostic
-#    review tool, so it is meant to support judgement rather than replace it.
+#    review tool, so it is meant to support judgment rather than replace it.
 #
 # 4. It does not compare final PDFs. The useful comparison target is the final
 #    Excel summary workbook, because that is where the structured outputs live.

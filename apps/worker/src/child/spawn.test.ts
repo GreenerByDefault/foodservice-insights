@@ -28,7 +28,7 @@ import { type RunningChild, type SpawnChildOptions, spawnChild } from './spawn.t
 
 const ATTEMPT_ID = '0199c0f0-1a2b-7c3d-8e4f-5a6b7c8d9e0f' as AnalysisAttemptId;
 
-/** Long enough that a child which honours SIGTERM always dies of it, so a test asserting SIGTERM
+/** Long enough that a child which honors SIGTERM always dies of it, so a test asserting SIGTERM
  * cannot pass because SIGKILL arrived first. */
 const GENEROUS_KILL_GRACE_MS = 10_000;
 
@@ -220,7 +220,7 @@ describe('how a child ends', () => {
 });
 
 describe('killing a child', () => {
-  test('a child that honours SIGTERM dies of SIGTERM', async () => {
+  test('a child that honors SIGTERM dies of SIGTERM', async () => {
     const steps: FakeChildStep[] = [{ step: 'progress', sequence: 1 }, { step: 'hang' }];
 
     await runScenario(steps, {}, async (child, runDirectory) => {

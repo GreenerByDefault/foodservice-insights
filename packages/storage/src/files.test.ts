@@ -216,7 +216,7 @@ describe('putResultFile', () => {
 });
 
 describe('putRejectedUpload', () => {
-  test('stores the bytes without labelling them CSV', async () => {
+  test('stores the bytes without labeling them CSV', async () => {
     await withTemporaryOrganization(BLOB_STORE, async (organizationId) => {
       const stored = await putRejectedUpload(
         BLOB_STORE,

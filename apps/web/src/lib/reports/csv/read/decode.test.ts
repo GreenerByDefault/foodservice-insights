@@ -66,9 +66,9 @@ describe('decodeCsv', () => {
 
   describe('rejects', () => {
     // Which bytes count as a spreadsheet signature is `spreadsheetSignature`'s own contract,
-    // covered in `signatures.test.ts`; this only checks that a recognised signature comes back as
+    // covered in `signatures.test.ts`; this only checks that a recognized signature comes back as
     // a `signature` fault naming the format.
-    test('a recognised spreadsheet signature, as a signature fault', () => {
+    test('a recognized spreadsheet signature, as a signature fault', () => {
       const bytes = Uint8Array.of(0x50, 0x4b, 0x03, 0x04, 0x14, 0x00);
 
       expect(decodeCsv(bytes)).toEqual({ ok: false, fault: { kind: 'signature', format: 'xlsx' } });

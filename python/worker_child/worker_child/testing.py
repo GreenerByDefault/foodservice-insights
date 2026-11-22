@@ -1,8 +1,8 @@
-"""The scenario catalogue a dev drives `pnpm dev` with, steered entirely by
+"""The scenario catalog a dev drives `pnpm dev` with, steered entirely by
 `AnalysisRequest.report_name`.
 
 Grammar: `!<scenario>` or `!<scenario>:<argument>`. A name not starting with `!` is the happy
-path. An unrecognised `!name` raises, so `failure.json` names the valid scenarios back at you.
+path. An unrecognized `!name` raises, so `failure.json` names the valid scenarios back at you.
 
 Ships in the wheel as `gbd_foodservice_insights/testing.py` does, so `worker_child`'s own
 product code is banned from importing it (`tool.ruff.lint.flake8-tidy-imports.banned-api` in

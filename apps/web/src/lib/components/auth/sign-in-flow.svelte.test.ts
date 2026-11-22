@@ -68,9 +68,9 @@ describe('SignInFlow', () => {
     await render(SignInFlow, { auth: fakeBrowserAuth(), onSignedIn: vi.fn() });
     await render(SignInFlow, { auth: fakeBrowserAuth(), onSignedIn: vi.fn() });
 
-    const labelled = [...document.querySelectorAll('label')].map((label) => label.control);
+    const labeled = [...document.querySelectorAll('label')].map((label) => label.control);
     const inputs = [...document.querySelectorAll('input[name="email"]')];
-    expect(labelled).toEqual(inputs);
+    expect(labeled).toEqual(inputs);
   });
 
   test('each step swapped in takes focus, which the swap itself would otherwise drop on the body', async () => {

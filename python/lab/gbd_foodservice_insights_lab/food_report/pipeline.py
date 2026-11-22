@@ -172,7 +172,7 @@ def run_food_report(
     file as ``client_excel_path``. The result also carries the quality payload used by the
     report and UI layers.
     """
-    region = validate_region(region)  # Fails immediately on unrecognised region
+    region = validate_region(region)  # Fails immediately on unrecognized region
     # Everything collected so far, for the failure manifest.
     quality_findings: list[Finding] = []
 

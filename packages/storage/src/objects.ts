@@ -23,7 +23,7 @@ export type ObjectBody = Uint8Array | string;
 /** What may be written alongside an object's bytes.
  *
  * Notably *not* here: the download filename. Supabase Storage silently discards a
- * `Content-Disposition` given to `PutObject` but does honour a `response-content-disposition`
+ * `Content-Disposition` given to `PutObject` but does honor a `response-content-disposition`
  * override on a read, so the filename goes on the signed URL instead — see `signedObjectUrl`.
  */
 export type PutObjectOptions = {

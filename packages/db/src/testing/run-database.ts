@@ -68,7 +68,7 @@ const SUPERUSER_PASSWORD = 'postgres';
 
 /** A fixed, arbitrary key for the advisory lock `ensureTemplateDatabase` holds while it checks
  * for and, if needed, builds the template. Fixed rather than derived from the template name: the
- * whole point is to serialise *before* the fingerprint decides which name is in play. Two callers
+ * whole point is to serialize *before* the fingerprint decides which name is in play. Two callers
  * computing different fingerprints from a schema change mid-flight should still not build at the
  * same time.
  */
@@ -160,7 +160,7 @@ async function databaseExists(client: Client, name: string): Promise<boolean> {
  * `connectionString` is the app's ordinary `DB_CONNECTION_STRING` — see the file header for why
  * every actual connection made here uses a different, superuser role instead.
  *
- * Safe to call concurrently: a Postgres advisory lock serialises the check-and-build, so a second
+ * Safe to call concurrently: a Postgres advisory lock serializes the check-and-build, so a second
  * caller that finds the template already built is a no-op, not a race.
  */
 export async function ensureTemplateDatabase(connectionString: string): Promise<string> {

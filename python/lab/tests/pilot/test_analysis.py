@@ -402,7 +402,7 @@ def test_analyze_meat_consumption_returns_expected_averted_values():
     assert metric_to_value["Expected meat consumption (kg)"] == "180.0"
     assert metric_to_value["Actual meat consumption (kg)"] == "100.0"
     assert metric_to_value["Meat averted (kg)"] == "80.0"
-    assert metric_to_value["Meat averted (tonnes)"] == "0.08"
+    assert metric_to_value["Meat averted (metric tons)"] == "0.08"
 
 
 def test_calculate_meat_averted_raises_migration_error():

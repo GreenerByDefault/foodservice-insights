@@ -171,7 +171,7 @@ def _food_and_drink_trends(
     per_diner_meal: bool,
     diner_meal_mapping: Mapping[pd.Period, float] | None = None,
 ) -> list[tuple[str, pd.DataFrame]]:
-    """Monthly trends of `metric` for food only and for food + drink, as labelled series."""
+    """Monthly trends of `metric` for food only and for food + drink, as labeled series."""
     if metric not in {"kilos_total", "servings total"}:
         raise ValueError("metric must be 'kilos_total' or 'servings total'")
 

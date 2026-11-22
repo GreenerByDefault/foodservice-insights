@@ -126,7 +126,7 @@ notice it is itself hung:
 
 *Rejected: writing the child's progress timestamp into the database.* It collapses the two axes
 onto one medium: a parent whose database is down stops being able to answer "should I kill this
-child?", and a parent whose clock is skewed poisons every other worker's liveness judgement.
+child?", and a parent whose clock is skewed poisons every other worker's liveness judgment.
 
 ## Testing
 

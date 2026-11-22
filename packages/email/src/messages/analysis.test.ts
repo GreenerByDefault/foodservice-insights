@@ -20,7 +20,7 @@ describe('renderAnalysisSucceeded', () => {
 
     expect(document.heading).toBe('Your report is ready: Q1 procurement');
     expect(document.blocks).toEqual([
-      { block: 'paragraph', text: 'We have finished analysing your procurement data.' },
+      { block: 'paragraph', text: 'We have finished analyzing your procurement data.' },
       { block: 'action', label: 'View your report', url: REPORT_URL },
       {
         block: 'links',

@@ -34,7 +34,7 @@ from gbd_foodservice_insights_lab.notebook_runscript_setup import (
 setup_pandas_display()
 
 SUB_CLIENT = (
-    False  # Did the client send data from multiple sites that that want to be analysed separately?
+    False  # Did the client send data from multiple sites that that want to be analyzed separately?
 )
 
 # Dynamically set the client, whether it's baseline or pilot, and whether it is procurement

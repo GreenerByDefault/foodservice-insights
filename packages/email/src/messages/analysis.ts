@@ -39,7 +39,7 @@ export function renderAnalysisSucceeded(
   return {
     heading: `Your report is ready: ${message.reportName}`,
     blocks: [
-      { block: 'paragraph', text: 'We have finished analysing your procurement data.' },
+      { block: 'paragraph', text: 'We have finished analyzing your procurement data.' },
       {
         block: 'action',
         label: 'View your report',

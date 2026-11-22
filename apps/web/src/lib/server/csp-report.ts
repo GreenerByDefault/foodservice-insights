@@ -48,7 +48,7 @@ const LegacyReport = v.pipe(
 );
 
 /** One report in the Reporting API's shape. Chromium sends these to `report-to`, batched into an
- * array; Safari sends one at a time to `report-uri`, still labelled `application/csp-report`. */
+ * array; Safari sends one at a time to `report-uri`, still labeled `application/csp-report`. */
 const ReportingApiReport = v.pipe(
   v.object({
     type: v.literal('csp-violation'),

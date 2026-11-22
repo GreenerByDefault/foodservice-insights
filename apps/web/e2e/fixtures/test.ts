@@ -16,7 +16,7 @@ import { insertReportFixture, type ReportState } from './reports.ts';
 
 export interface ReportFactory {
   /** Commit a report in `state` in this test's own `org`, and return its id. Goes when `org`
-   * does, so a behavioural spec is free to mutate what it created (cancel it, retry it) without
+   * does, so a behavioral spec is free to mutate what it created (cancel it, retry it) without
    * touching another test's rows. */
   create(state: ReportState): Promise<ReportId>;
 }

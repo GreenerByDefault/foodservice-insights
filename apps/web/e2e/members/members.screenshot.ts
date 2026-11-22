@@ -1,5 +1,5 @@
 /** Every person's email is fixed rather than the fixture's default random one: unlike a
- * behavioural spec, which only asserts a row exists, these are diffed pixel-for-pixel against
+ * behavioral spec, which only asserts a row exists, these are diffed pixel-for-pixel against
  * what's committed, so the text on screen has to be identical on every run. Every image here owns
  * a separate address prefix, so none depends on identities another is creating alongside it.
  */

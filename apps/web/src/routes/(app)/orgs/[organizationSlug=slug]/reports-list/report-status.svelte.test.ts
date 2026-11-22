@@ -3,7 +3,7 @@ import { render } from 'vitest-browser-svelte';
 import ReportStatus from './report-status.svelte';
 
 describe('ReportStatus', () => {
-  test('pending reads as Queued, in the muted colour, with no spinner', async () => {
+  test('pending reads as Queued, in the muted color, with no spinner', async () => {
     const screen = await render(ReportStatus, { status: 'pending' });
     const status = screen.getByText('Queued');
     await expect.element(status).toBeVisible();
@@ -18,14 +18,14 @@ describe('ReportStatus', () => {
     expect(status.element().querySelector('svg')).not.toBeNull();
   });
 
-  test('succeeded reads as Ready, in the primary colour', async () => {
+  test('succeeded reads as Ready, in the primary color', async () => {
     const screen = await render(ReportStatus, { status: 'succeeded' });
     const status = screen.getByText('Ready');
     await expect.element(status).toBeVisible();
     await expect.element(status).toHaveClass('text-primary');
   });
 
-  test('failed reads as "Couldn\'t finish", in the destructive colour', async () => {
+  test('failed reads as "Couldn\'t finish", in the destructive color', async () => {
     const screen = await render(ReportStatus, { status: 'failed' });
     const status = screen.getByText("Couldn't finish");
     await expect.element(status).toBeVisible();

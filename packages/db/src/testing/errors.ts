@@ -3,7 +3,7 @@ import { DatabaseError } from 'pg';
 import type { DatabaseExecutor } from '../schema.ts';
 
 /** A `pg.DatabaseError`, for tests that simulate Postgres *replying* with a failure without a real
- * connection — a violated constraint, a cancelled statement. Real Postgres errors carry a `code`
+ * connection — a violated constraint, a canceled statement. Real Postgres errors carry a `code`
  * (see `postgres-codes.ts`); pass one if the test branches on it.
  *
  * This is the wrong factory for an unreachable database. Postgres cannot reply when it is down, so

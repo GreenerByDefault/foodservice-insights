@@ -28,7 +28,7 @@ export default defineConfig({
     // a `*.screenshot.ts` picked up by `e2e` would be captured on the host browser.
     projects: [
       {
-        // Behaviour, on the host Chromium `playwright install` provides. Gains nothing from
+        // Behavior, on the host Chromium `playwright install` provides. Gains nothing from
         // pinned rasterization, and would only pay a container hop and lose native `--headed`
         // debugging.
         name: 'e2e',

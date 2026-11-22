@@ -1,7 +1,7 @@
 import { expect, test as setup } from '@playwright/test';
 import { BROWSER_IMAGE, describeBrowser, startBrowserServer } from './browser-container';
 
-// A dependency of the `screenshots` project, so the behavioural e2e suite never pays for Docker.
+// A dependency of the `screenshots` project, so the behavioral e2e suite never pays for Docker.
 setup('the pinned browser container is serving', async () => {
   // First run on a machine pulls the image, which is measured in gigabytes.
   setup.setTimeout(600_000);

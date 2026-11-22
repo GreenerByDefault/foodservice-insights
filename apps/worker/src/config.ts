@@ -1,4 +1,4 @@
-/** Everything the worker's behaviour is parameterised by, and the relations between those values.
+/** Everything the worker's behavior is parameterized by, and the relations between those values.
  *
  * **Open:** every duration below is a placeholder nobody has measured. `killAfterNoProgressMs` is
  * the one that matters most — it has to exceed the longest valid API call the analysis library
@@ -163,7 +163,7 @@ export class WorkerConfigError extends Error {
 /** Build a config over `WORKER_DEFAULTS`, refusing one that breaks any relation below.
  *
  * `platformShutdownGraceMs` (`PLATFORM_SHUTDOWN_GRACE_MS`) is a platform fact, not a worker
- * behaviour, so it stays out of `WorkerConfig` — see `drainGraceMs` for what it decides. */
+ * behavior, so it stays out of `WorkerConfig` — see `drainGraceMs` for what it decides. */
 export function createWorkerConfig(
   required: WorkerRequiredFields,
   overrides: WorkerDefaultableFields = {},

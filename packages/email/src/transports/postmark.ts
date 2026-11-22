@@ -9,7 +9,7 @@
  * 3. **Open and link tracking are off, explicitly**, so a dashboard toggle cannot turn them back
  *    on. A tracking pixel and rewritten links cost deliverability, and a report link rewritten
  *    through Postmark's domain looks like phishing.
- * 4. **An error carries Postmark's `ErrorCode` but never its `Message`, and is labelled with the
+ * 4. **An error carries Postmark's `ErrorCode` but never its `Message`, and is labeled with the
  *    kind rather than the recipient.** The message for a suppressed recipient (422, `ErrorCode`
  *    406) names the address, and server code logs ids, never emails. 406 is not special-cased:
  *    the notification sweep spends its remaining attempts on it, which is bounded.

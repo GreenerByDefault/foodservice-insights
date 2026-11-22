@@ -82,7 +82,7 @@ export const ReportMetadataSchema = v.pipe(
       v.object({
         countsBasis: v.picklist(COUNTS_BASES),
         // One JSON field rather than a form field per month: the column is `jsonb`, and the
-        // browser has to serialise the map somehow.
+        // browser has to serialize the map somehow.
         monthlyCounts: v.pipe(v.nullable(v.string()), parsedJson, MonthlyCountsSchema),
       }),
     ]),
