@@ -8,40 +8,31 @@ import numpy as np
 import pandas as pd
 import pytest
 from gbd_foodservice_insights.plotting_utils import BODY_FONT, TITLE_FONT
-from gbd_foodservice_insights.report import pdf as pdf_module
-from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration, category_names
+from gbd_foodservice_insights.report.aggregation import AnimalEmissionsConcentration
 from gbd_foodservice_insights.report.food_report import FoodReport, ReportCharts, build_food_report
-from gbd_foodservice_insights.report.pdf import (
+from gbd_foodservice_insights.report.pdf import report as report_module
+from gbd_foodservice_insights.report.pdf.report import write_report_pdf
+from gbd_foodservice_insights.report.pdf.summary import (
     CategoryShare,
     Co2ePerHead,
     ExecutiveNarrative,
     PageRefs,
-    _display_table,
-    _executive_narrative,
-    _format_animal_emissions_intensity_for_pdf,
-    _format_category_template_for_pdf,
     _format_co2e,
-    _format_substitution_scenarios_for_pdf,
     _narrative_paragraphs,
-    _pack_columns,
-    _wrap_text_lines,
-    _wrap_to_width,
-    create_animal_intensity_page,
-    create_category_template_pages,
-    create_decision_kpis_page,
     create_executive_summary_page,
-    create_substitution_scenarios_page,
+    executive_narrative,
+)
+from gbd_foodservice_insights.report.pdf.text_pages import (
+    _wrap_text_lines,
+    create_decision_kpis_page,
     create_text_page,
     create_title_page,
-    quality_lines,
-    write_report_pdf,
 )
 from gbd_foodservice_insights.report.quality import Finding, make_finding
 from gbd_foodservice_insights.report.schema import DiagnosticStatus, DinerOrMeal, Headcounts
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
 from matplotlib.textpath import text_to_path
-from matplotlib.transforms import Bbox
 from pypdf import PdfReader
 
 JAN, FEB = pd.period_range("2024-01", periods=2, freq="M")
@@ -75,31 +66,6 @@ def test_wrap_text_lines_keeps_indentation_and_collapses_blank_lines() -> None:
         "x",
     ]
     assert _wrap_text_lines([], 6.5, 11) == [""]
-
-
-def test_wrap_to_width_fits_measured_width_without_losing_words() -> None:
-    text = "Producing that food released an estimated 1,931 kg of carbon dioxide equivalent " * 3
-
-    lines = _wrap_to_width(text, max_width_in=3.0, fontsize=11.5, fontfamily=BODY_FONT)
-
-    assert len(lines) > 1
-    assert " ".join(lines) == " ".join(text.split())
-    assert all(
-        text_to_path.get_text_width_height_descent(
-            line, FontProperties(family=BODY_FONT, size=11.5), ismath=False
-        )[0]
-        <= 3.0 * 72
-        for line in lines
-    )
-
-
-def test_wrap_to_width_keeps_an_overlong_word_on_its_own_line() -> None:
-    assert _wrap_to_width("a " + "x" * 200 + " b", 1.0, fontsize=12, fontfamily=BODY_FONT) == [
-        "a",
-        "x" * 200,
-        "b",
-    ]
-    assert _wrap_to_width("   ", 1.0, fontsize=12, fontfamily=BODY_FONT) == []
 
 
 def _finding(
@@ -142,7 +108,7 @@ class _RecordingPdf:
 @pytest.fixture
 def recording_pdf(monkeypatch: pytest.MonkeyPatch) -> _RecordingPdf:
     pdf = _RecordingPdf()
-    monkeypatch.setattr(pdf_module, "PdfPages", lambda _path: nullcontext(pdf))
+    monkeypatch.setattr(report_module, "PdfPages", lambda _path: nullcontext(pdf))
     return pdf
 
 
@@ -361,7 +327,7 @@ def test_write_report_pdf_closes_its_own_figures_when_a_page_raises(
         plt.figure()
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(pdf_module, "create_executive_summary_page", _boom)
+    monkeypatch.setattr(report_module, "create_executive_summary_page", _boom)
 
     with pytest.raises(RuntimeError, match="boom"):
         _write(_report(), tmp_path / "report.pdf", ReportCharts(figures=[fig]))
@@ -478,182 +444,6 @@ def test_write_report_pdf_caveats_only_a_warning(
     assert ("Allautomateddatacheckspassed" in pages[2]) is not caveat_shown
 
 
-def test_quality_lines_explain_an_invalid_status() -> None:
-    assert quality_lines(
-        [
-            _finding("success", "All required columns present."),
-            _finding("error", "Found 2 negative values in 'kilos_total'."),
-        ],
-        show_successes=True,
-    ) == [
-        "This section summarizes the automated checks run on your data before this report "
-        "was produced.",
-        "",
-        "One or more data issues were found that may affect the accuracy of these results. "
-        "Please review the notes below before sharing this report.",
-        "  1 passed  ·  1 issue",
-        "",
-        "Check details:",
-        "  • Passed:  All required columns present.",
-        "  • Issue:  Found 2 negative values in 'kilos_total'.",
-    ]
-
-
-def test_quality_lines_for_the_customer_list_only_warnings_and_issues() -> None:
-    assert quality_lines(
-        [
-            _finding("success", "All required columns present."),
-            _finding("info", "GBD categories absent from data: ['Butter']"),
-            _finding("warning", "Found 1 month with a large swing."),
-        ],
-        show_successes=False,
-    ) == [
-        "This section summarizes the automated checks run on your data before this report "
-        "was produced.",
-        "",
-        "Your data passed most checks, but a few things are worth noting. See the details below.",
-        "  1 passed  ·  1 warning",
-        "",
-        "Check details:",
-        "  • Warning:  Found 1 month with a large swing.",
-    ]
-
-
-def test_quality_lines_for_the_customer_say_so_when_every_check_passed() -> None:
-    assert quality_lines(
-        [_finding("success", "All required columns present."), _finding("info", "A note.")],
-        show_successes=False,
-    ) == [
-        "This section summarizes the automated checks run on your data before this report "
-        "was produced.",
-        "",
-        "All automated data checks passed — your data looks complete and consistent.",
-        "  1 passed",
-        "",
-        "No issues were detected.",
-    ]
-
-
-def test_quality_lines_list_at_most_20_findings_with_5_samples_each() -> None:
-    findings = [
-        _finding("warning", f"Warning {i}", sample_values=[f"sample {j}" for j in range(7)])
-        for i in range(25)
-    ]
-
-    lines = quality_lines(findings, show_successes=True)
-
-    assert lines[3] == "  25 warnings"
-    details = lines[lines.index("Check details:") + 1 :]
-    assert details[:6] == [
-        "  • Warning:  Warning 0",
-        *(f"      - sample {j}" for j in range(5)),
-    ]
-    assert len(details) == 20 * 6
-
-
-def test_quality_lines_count_notes_for_the_data_scientist_with_singular_and_plural() -> None:
-    def counts(*findings: Finding) -> str:
-        return quality_lines(list(findings), show_successes=True)[3]
-
-    assert counts(_finding("info", "a")) == "  1 note"
-    assert counts(_finding("info", "a"), _finding("info", "b")) == "  2 notes"
-
-
-def test_quality_lines_with_no_findings_say_nothing_was_detected() -> None:
-    assert quality_lines([], show_successes=True)[2:] == [
-        "All automated data checks passed — your data looks complete and consistent.",
-        "",
-        "No issues were detected.",
-    ]
-
-
-class _RecordingTablePdf:
-    """Stands in for ``PdfPages``, keeping each table page's heading, column labels, and the
-    cells whose text runs past the cell's right, top or bottom edge."""
-
-    def __init__(self) -> None:
-        self.headings: list[str] = []
-        self.columns: list[list[str]] = []
-        self.overflowing: list[str] = []
-        self.scenario_cells: list[str] = []
-
-    def savefig(self, fig: Figure) -> None:
-        fig.canvas.draw()  # lays the table out
-        renderer = fig.canvas.get_renderer()  # ty: ignore[missing-attribute]
-        (ax,) = fig.axes
-        (table,) = ax.tables
-        cells = table.get_celld()
-        self.headings.append(ax.texts[0].get_text())
-        self.columns.append(
-            [cells[0, col].get_text().get_text() for col in range(max(c for _, c in cells) + 1)]
-        )
-        self.scenario_cells += [
-            cells[row, 0].get_text().get_text() for row in range(1, max(r for r, _ in cells) + 1)
-        ]
-        self.overflowing += [
-            cell.get_text().get_text()
-            for cell in cells.values()
-            if _overflows(
-                cell.get_text().get_window_extent(renderer), cell.get_window_extent(renderer)
-            )
-        ]
-
-
-def _overflows(text: Bbox, cell: Bbox) -> bool:
-    return text.x1 > cell.x1 or text.y1 > cell.y1 or text.y0 < cell.y0
-
-
-@pytest.mark.parametrize("months", [3, 6, 12, 24])
-def test_category_template_fits_every_cell_and_splits_months_across_pages(months: int) -> None:
-    month_labels = [str(month) for month in pd.period_range("2024-01", periods=months, freq="M")]
-    template = pd.DataFrame(
-        123_456.78,
-        index=pd.Index([*category_names(), "total"], name="category"),
-        columns=[*month_labels, "total"],
-    )
-
-    pdf = _RecordingTablePdf()
-    create_category_template_pages(pdf, template)
-
-    assert pdf.overflowing == []
-    assert all(columns[0] == "Category" for columns in pdf.columns)
-    assert [label for columns in pdf.columns for label in columns[1:]] == [*month_labels, "Total"]
-    pages = len(pdf.headings)
-    assert (pages > 1) == (months >= 12)
-    assert pdf.headings == (
-        ["Category Template"]
-        if pages == 1
-        else [f"Category Template ({page} of {pages})" for page in range(1, pages + 1)]
-    )
-
-
-def test_animal_intensity_page_fits_every_category_name() -> None:
-    categories = category_names()
-    intensity = pd.DataFrame(
-        {
-            "category": categories,
-            "kilos_total": [123_456.0] * len(categories),
-            "kg_co2e_per_kg_food": [41.35] * len(categories),
-            "total_kg_co2e": [1_234_567.0] * len(categories),
-        }
-    )
-    pdf = _RecordingTablePdf()
-
-    create_animal_intensity_page(pdf, intensity)
-
-    assert pdf.headings == ["Animal Emissions Intensity"]
-    assert pdf.overflowing == []
-
-
-def test_pack_columns_gives_an_overwide_column_its_own_page() -> None:
-    assert _pack_columns([1.0, 1.0, 3.0, 1.0], 2.5) == [[0, 1], [2], [3]]
-    assert _pack_columns([], 2.5) == [[]]
-
-
-def test_pack_columns_fills_a_page_exactly_before_starting_another() -> None:
-    assert _pack_columns([1.0, 1.5, 1.0], 2.5) == [[0, 1], [2]]
-
-
 def _decision_kpis_page(concentration: AnimalEmissionsConcentration) -> list[str]:
     pdf = _RecordingPdf()
     create_decision_kpis_page(pdf, concentration)
@@ -704,141 +494,12 @@ def test_decision_kpis_page_wraps_a_long_product_name_without_losing_words() -> 
 
 
 # ----------------------------------------------------------------------
-# Tests for the PDF table formatters
-# ----------------------------------------------------------------------
-
-
-def test_format_animal_emissions_intensity_renames_orders_and_rounds() -> None:
-    table = pd.DataFrame(
-        {
-            "category": ["Beef and Buffalo Meat"],
-            "kilos_total": [22.4],
-            "total_kg_co2e": [909.7],
-            "kg_co2e_per_kg_food": [41.3549],
-        }
-    )
-
-    pd.testing.assert_frame_equal(
-        _format_animal_emissions_intensity_for_pdf(table),
-        pd.DataFrame(
-            {
-                "Category": ["Beef and Buffalo Meat"],
-                "Kilos of Food": pd.array([22], dtype="Int64"),
-                "CO₂e Per Kg Food": [41.35],
-                "Kg CO₂e": pd.array([910], dtype="Int64"),
-            }
-        ),
-    )
-
-
-def test_format_category_template_titles_string_labels_only() -> None:
-    table = pd.DataFrame(
-        {"2024-01": [10.0], "grand_total": [10.0], 7: [1.0]},
-        index=pd.Index(["Beef and Buffalo Meat"], name="category"),
-    )
-
-    pd.testing.assert_frame_equal(
-        _format_category_template_for_pdf(table),
-        pd.DataFrame(
-            {"2024-01": [10.0], "Grand Total": [10.0], 7: [1.0]},
-            index=pd.Index(["Beef and Buffalo Meat"], name="Category"),
-        ),
-    )
-
-
-def test_format_category_template_capitalizes_the_total_row_only() -> None:
-    table = pd.DataFrame(
-        {"2024-01": [10.0, 10.0]},
-        index=pd.Index(["Lamb/mutton & goat meat", "total"], name="category"),
-    )
-
-    assert _format_category_template_for_pdf(table).index.tolist() == [
-        "Lamb/mutton & goat meat",
-        "Total",
-    ]
-
-
-def test_format_category_template_leaves_an_unnamed_index_unnamed() -> None:
-    table = pd.DataFrame({"total": [10.0]}, index=["Legumes"])
-
-    pd.testing.assert_frame_equal(
-        _format_category_template_for_pdf(table),
-        pd.DataFrame({"Total": [10.0]}, index=["Legumes"]),
-    )
-
-
-def test_format_substitution_scenarios_drops_internal_columns_and_rounds() -> None:
-    table = pd.DataFrame(
-        {
-            "scenario": ["10% ruminant-to-legume swap"],
-            "substitution_pct": [10.0],
-            "replaced_weight_kg": [2.2],
-            "projected_emissions_kg_co2e": [822.25],
-            "avoidable_kg_co2e": [87.45],
-            "institution_emissions_avoided_pct": [9.0149],
-        }
-    )
-
-    pd.testing.assert_frame_equal(
-        _format_substitution_scenarios_for_pdf(table),
-        pd.DataFrame(
-            {
-                "Scenario": ["10% ruminant-to-legume swap"],
-                "Weight Replaced (kg)": pd.array([2], dtype="Int64"),
-                "Projected Kg CO₂e": pd.array([822], dtype="Int64"),
-                "Avoidable Kg CO₂e": pd.array([87], dtype="Int64"),
-                "Institution Emissions Averted (%)": [9.01],
-            }
-        ),
-    )
-
-
-def test_display_table_formats_cells_as_text_and_surfaces_a_named_index() -> None:
-    table = pd.DataFrame(
-        {"n": [1234567.0, 2.5, 0.126, np.nan], "s": ["a", "b", "c", "d"], "flag": [True] * 4},
-        index=pd.Index(["w", "x", "y", "z"], name="Category"),
-    )
-
-    assert _display_table(table).values.tolist() == [
-        ["w", "1,234,567", "a", True],
-        ["x", "2.5", "b", True],
-        ["y", "0.13", "c", True],
-        ["z", "", "d", True],
-    ]
-
-
-def test_substitution_scenarios_page_wraps_long_scenarios_and_headers_inside_their_cells() -> None:
-    # Six rows, as the report has: fewer leave the table room to hide a row's overflow.
-    long_scenario = "100% cow's-milk-to-oat-milk swap with a long name"
-    scenarios = pd.DataFrame(
-        {
-            "scenario": [long_scenario] * 5 + ["10% swap"],
-            "replaced_weight_kg": [10.0] * 6,
-            "projected_emissions_kg_co2e": [800.0] * 6,
-            "avoidable_kg_co2e": [100.0] * 6,
-            "institution_emissions_avoided_pct": [11.1] * 6,
-        }
-    )
-    pdf = _RecordingTablePdf()
-
-    create_substitution_scenarios_page(pdf, scenarios)
-
-    assert pdf.headings == ["Substitution Scenarios"]
-    assert pdf.overflowing == []
-    wrapped, *_, short = pdf.scenario_cells
-    assert "\n" in wrapped
-    assert wrapped.replace("\n", " ") == long_scenario
-    assert short == "10% swap"
-    assert "\n" in pdf.columns[0][-1]
-
-
-# ----------------------------------------------------------------------
 # Tests for _executive_narrative
 # ----------------------------------------------------------------------
 
 
 def test_executive_narrative_summarises_the_report() -> None:
-    narrative = _executive_narrative(_report(), "Acme", "pass")
+    narrative = executive_narrative(_report(), "Acme", "pass")
 
     assert asdict(narrative) == {
         "client": "Acme",
@@ -858,7 +519,7 @@ def test_executive_narrative_summarises_the_report() -> None:
 
 
 def test_executive_narrative_without_headcounts_has_no_co2e_per_head() -> None:
-    assert _executive_narrative(_report(headcounts=None), "Acme", "pass").co2e_per_head is None
+    assert executive_narrative(_report(headcounts=None), "Acme", "pass").co2e_per_head is None
 
 
 def test_executive_narrative_lists_only_the_top_three_categories() -> None:
@@ -869,7 +530,7 @@ def test_executive_narrative_lists_only_the_top_three_categories() -> None:
         ),
     )
 
-    narrative = _executive_narrative(report, "Acme", "pass")
+    narrative = executive_narrative(report, "Acme", "pass")
 
     assert narrative.total_co2e_kg == 10.0
     assert narrative.top_categories == (("b", 40.0), ("d", 30.0), ("e", 20.0))
@@ -883,7 +544,7 @@ def test_executive_narrative_omits_categories_without_emissions() -> None:
         ),
     )
 
-    narrative = _executive_narrative(report, "Acme", "pass")
+    narrative = executive_narrative(report, "Acme", "pass")
 
     assert narrative.top_categories == (("a", 75.0), ("b", 25.0))
 
@@ -1003,7 +664,7 @@ def test_executive_narrative_rejects_a_count_of_top_categories_it_cannot_word(co
 
 
 def test_narrative_paragraphs_skip_the_animal_sentence_on_plant_only_food() -> None:
-    narrative = _executive_narrative(_report(animal_product=None), "Acme", "pass")
+    narrative = executive_narrative(_report(animal_product=None), "Acme", "pass")
 
     assert _narrative_paragraphs(narrative, _PAGE_REFS)[1:] == [
         "The biggest contributors were Legumes (100%).",

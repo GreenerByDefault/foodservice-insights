@@ -31,7 +31,7 @@ import pandas as pd
 from gbd_foodservice_insights.categories import category_names
 from gbd_foodservice_insights.report.excel import write_client_workbook
 from gbd_foodservice_insights.report.food_report import build_food_report, build_report_charts
-from gbd_foodservice_insights.report.pdf import write_report_pdf
+from gbd_foodservice_insights.report.pdf.report import write_report_pdf
 from gbd_foodservice_insights.report.schema import Headcounts
 
 MAX_DATA_ROWS = 500_000

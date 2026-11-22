@@ -66,7 +66,7 @@ from gbd_foodservice_insights.report.food_report import (
     build_report_charts,
     summarize_report,
 )
-from gbd_foodservice_insights.report.pdf import write_report_pdf
+from gbd_foodservice_insights.report.pdf.report import write_report_pdf
 from gbd_foodservice_insights.report.quality import ListedFinding as ListedFinding
 from gbd_foodservice_insights.report.quality import listed_findings
 from gbd_foodservice_insights.report.schema import DinerOrMeal, Headcounts
