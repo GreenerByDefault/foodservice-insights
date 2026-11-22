@@ -8,8 +8,8 @@
 Stack runs logs and uptime monitoring. The comparison behind those choices is in
 [the decision plan, as of the commit that recorded them](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md).
 This plan connects each promised alert to the system that already holds its data, and decides
-where alerts are delivered. Better Stack's monitor and log alert are
-[`better-stack.md`](better-stack.md).
+where alerts are delivered. Better Stack's monitor and log alert are live, made in its UI and
+named in `docs/architecture.md` § Alerts.
 
 Facts from the tree and the vendors' docs (2026-10-14) that shape the design:
 
@@ -56,7 +56,7 @@ two layers left to build:
 | Layer | Evaluated by | Rules | Defined in |
 | --- | --- | --- | --- |
 | Data | Grafana Cloud | `count(*)` over `metrics` views: queue wait, failures, attempts left `processing`, notifications gave up or stuck, database connections | Rule files in `apps/grafana/`, pushed by `deploy-web` |
-| Outside | Better Stack | The public `/health/ready`; any `error` log line | Its UI, per [`better-stack.md`](better-stack.md) |
+| Outside | Better Stack | The public `/health/ready`; any `error` log line | Its UI (live) |
 
 The data alerts fire when the host is healthy but the queue is not. The monitor is the one alert
 that sees what a user sees, so it fires when the host's edge, DNS or TLS is what broke.

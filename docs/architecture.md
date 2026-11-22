@@ -402,6 +402,13 @@ forward to one Better Stack source, so an incident that crosses them reads in ti
 found by `requestId`, which the response returns as `X-Request-Id`, and an attempt by `attemptId`.
 How to read them is [a runbook](runbooks/trace-a-problem-through-the-logs.md).
 
+The presets (saved Live tail filters), the dashboard of requests by status and duration by route,
+and both Better Stack alerts are made in its UI and kept only there.
+*Rejected: Better Stack's Terraform provider*, state to keep for a few settings made once.
+*Rejected: an error tracker such as Sentry*, an SDK in both processes for grouping, which matters
+only once errors are too many to read one by one; until then the `error`-line alert is the same
+signal.
+
 *Rejected: shipping from inside the process* (`@logtail/pino`). A dying process takes its unshipped
 lines with it, and those are the lines that matter.
 

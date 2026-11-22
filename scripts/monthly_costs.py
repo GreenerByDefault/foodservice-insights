@@ -300,7 +300,8 @@ def openai(scenario: Scenario) -> Bill:
 
 # https://betterstack.com/pricing. Free keeps 3 GB of logs a month for 3 days, which is enough:
 # the database keeps why each report failed for good, and logs add the detail. We send tens of MB
-# a month. Its uptime monitors check every 3 minutes; 30-second checks need a paid plan.
+# a month. Buy Nano (30 days) the first time someone needs a line older than three days. Its uptime
+# monitors check every 3 minutes; 30-second checks need a paid plan.
 def better_stack(_: Scenario) -> Bill:
     return (LineItem("Free (3 days of logs, 10 monitors)", 0.0),)
 

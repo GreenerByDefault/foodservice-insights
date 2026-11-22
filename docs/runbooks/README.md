@@ -16,7 +16,7 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 | [DigitalOcean](https://cloud.digitalocean.com/apps) | GBD's team → Apps | `foodservice-insights-web` and `foodservice-insights-worker` |
 | [Supabase](https://supabase.com/dashboard/projects) | The production project | The database, Auth, Storage and Studio. Auth settings live only in this dashboard, and the write guard does not cover them ([`docs/architecture.md`](../architecture.md) § Supabase: database, auth, and blob store) |
 | [Grafana Cloud](https://grafana.com/auth/sign-in) | GBD's stack | The Foodservice Insights folder, which every web deploy overwrites |
-| [Better Stack](https://telemetry.betterstack.com) | Telemetry | The one source both apps forward their logs to |
+| [Better Stack](https://telemetry.betterstack.com) | [Telemetry](https://telemetry.betterstack.com) and [Incidents](https://incidents.betterstack.com), two products under one login | Telemetry: the one source both apps forward their logs to, its presets, and the error alert. Incidents: the monitor on `/health/ready` |
 | [Anthropic](https://platform.claude.com) | The production workspace, which has its own spend limit and prompt cache | The worker's API key |
 | [Postmark](https://account.postmarkapp.com) | The production server | Two message streams: `outbound` for our email, sent with `POSTMARK_SERVER_TOKEN`; and `auth` for Supabase Auth's codes, whose SMTP token lives only in Supabase's SMTP settings. When someone never got an email, search that stream's Activity for their address. One suppressed by a spam complaint stays suppressed until Postmark's support lifts it |
 | [Squarespace](https://account.squarespace.com/domains) | GBD's domain | DNS |
