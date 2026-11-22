@@ -707,8 +707,8 @@ def check_missing_internal_months(
             message=(
                 f"Found {len(missing_months)} missing internal "
                 f"month{'' if len(missing_months) == 1 else 's'} between "
-                f"{_format_month_label(full_month_range.min())} and "
-                f"{_format_month_label(full_month_range.max())}: "
+                f"{_format_month_label(full_month_range[0])} and "
+                f"{_format_month_label(full_month_range[-1])}: "
                 f"{', '.join(missing_month_labels)}.{share_message}"
             ),
             count=len(missing_months),

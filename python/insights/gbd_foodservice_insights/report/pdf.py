@@ -553,7 +553,7 @@ def _draw_table_page(
         cell.set_linewidth(0.6)
 
     if multiline_column is not None:
-        multiline_col_idx = display_df.columns.get_loc(multiline_column)
+        multiline_col_idx = list(display_df.columns).index(multiline_column)
         line_counts = [value.count("\n") + 1 for value in display_df[multiline_column]]
         for row_idx, line_count in enumerate(line_counts, start=1):
             row_height = table[row_idx, 0].get_height() * max(1.15, 1 + 0.9 * (line_count - 1))

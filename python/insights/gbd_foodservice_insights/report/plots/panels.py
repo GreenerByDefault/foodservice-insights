@@ -46,7 +46,7 @@ def prepare_monthly_trend_data(
 
 def _per_diner(monthly: pd.Series, diner_meal_mapping: Mapping[pd.Period, float]) -> pd.Series:
     # A month without a count comes out NaN; `build_food_report` refuses one before any chart.
-    return monthly / monthly.index.map(diner_meal_mapping)
+    return monthly / monthly.index.map(dict(diner_meal_mapping))
 
 
 def filter_monthly_categories_by_type(
