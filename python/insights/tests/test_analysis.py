@@ -641,6 +641,28 @@ def test_a_cached_product_skips_the_llm(tmp_path: Path, fake_report: FakeReport)
     assert fake_report.rows["category"].tolist() == ["Cheese", "Pork (pig meat)"]
 
 
+def test_the_report_shows_an_approved_rename_and_the_cache_the_customers_spelling(
+    tmp_path: Path, fake_report: FakeReport
+) -> None:
+    request = a_request(tmp_path)
+    request.input_csv.write_text(
+        input_csv_text(
+            [
+                ("Plant Base Yogurt", "2025-01-15", 1.0),
+                ("PLANT BASE YOGURT", "2025-01-15", 1.0),
+                ("Plant Base Yogurt", "2025-01-15", 1.0),
+            ]
+        )
+    )
+
+    outcome = analyze(request, llm=KeywordLlmClient())
+
+    assert fake_report.rows["product"].tolist() == ["Plant-based Yogurt"] * 3
+    assert outcome.new_categorizations == (
+        NewCategorization("Plant Base Yogurt", "plant base yogurt", "Yogurt"),
+    )
+
+
 def test_hands_back_exactly_the_products_the_llm_categorized(
     tmp_path: Path, fake_report: FakeReport
 ) -> None:

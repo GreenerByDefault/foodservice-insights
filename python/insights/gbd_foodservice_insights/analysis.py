@@ -57,6 +57,7 @@ from gbd_foodservice_insights.errors import InvalidInputError as InvalidInputErr
 from gbd_foodservice_insights.errors import UnusableDataError as UnusableDataError
 from gbd_foodservice_insights.errors import UpstreamApiError as UpstreamApiError
 from gbd_foodservice_insights.input_csv import read_input_csv
+from gbd_foodservice_insights.report.display_names import display_product_names
 from gbd_foodservice_insights.report.excel import write_client_workbook
 from gbd_foodservice_insights.report.food_report import FindingCount as FindingCount
 from gbd_foodservice_insights.report.food_report import ReportSummary as ReportSummary
@@ -166,9 +167,13 @@ def analyze(
 
     with _stage("report", report_telemetry):
         df_final = merge_categorizations(categorized.cleaned_df, categorized.unique_products_df)
-        rows = df_final.rename(columns={"weight": "kilos_total"})[
-            ["date", "product", "category", "kilos_total"]
-        ].reset_index(drop=True)
+        rows = (
+            df_final.rename(columns={"weight": "kilos_total"})[
+                ["date", "product", "category", "kilos_total"]
+            ]
+            .assign(product=lambda rows: display_product_names(rows["product"]))
+            .reset_index(drop=True)
+        )
         report = build_food_report(
             rows,
             headcounts=None if request.counts is None else _headcounts(request.counts),
