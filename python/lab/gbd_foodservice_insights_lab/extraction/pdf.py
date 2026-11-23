@@ -44,11 +44,12 @@ from pypdf import PdfReader
 from thefuzz import fuzz
 
 from gbd_foodservice_insights_lab.extraction.llm import (
+    DEFAULT_PDF_MODEL,
     LLMWhispererClientException,
     call_gemini_pdf_upload_with_metadata,
 )
 from gbd_foodservice_insights_lab.extraction.llm import (
-    call_openai_prompt_with_metadata as shared_call_openai_prompt_with_metadata,
+    call_claude_prompt_with_metadata as shared_call_claude_prompt_with_metadata,
 )
 from gbd_foodservice_insights_lab.extraction.llm import (
     extract_pdf_text_whisper_with_metadata as shared_extract_pdf_text_whisper_with_metadata,
@@ -73,7 +74,6 @@ NO_TABLE_STATUS = "no_table_detected"
 AUDIT_FAILED_STATUS = "audit_failed"
 COMPLETED_PAGE_STATUSES = {"processed", "skipped_existing", NO_TABLE_STATUS}
 PARSER_MODES = {"auto", "markdown", "json_rows"}
-DEFAULT_OPENAI_PDF_MODEL = "gpt-4o"
 
 # We keep the profile catalog explicit instead of scattering string literals
 # throughout the file. That makes routing decisions and repair manifests much
@@ -616,17 +616,17 @@ def _build_combined_file_output(
     return output_path
 
 
-def _call_openai_prompt_with_metadata(
-    OpenAI_client: Any,
+def _call_claude_prompt_with_metadata(
+    anthropic_client: Any,
     prompt: str,
     user_content: str | LLMWhispererClientException,
     *,
-    model: str = DEFAULT_OPENAI_PDF_MODEL,
+    model: str = DEFAULT_PDF_MODEL,
     max_retries: int = DEFAULT_API_MAX_RETRIES,
 ) -> dict[str, Any]:
-    """Centralize OpenAI retries so markdown and JSON parsing behave consistently."""
-    return shared_call_openai_prompt_with_metadata(
-        openai_client=OpenAI_client,
+    """Centralize Claude retries so markdown and JSON parsing behave consistently."""
+    return shared_call_claude_prompt_with_metadata(
+        anthropic_client=anthropic_client,
         prompt=prompt,
         user_content=user_content,
         model=model,
@@ -1359,7 +1359,7 @@ def _parse_json_rows_response(
 def _build_pipeline_context(
     *,
     whisper_client: Any,
-    OpenAI_client: Any,
+    anthropic_client: Any,
     data_location: Path,
     file_name: str,
     product_name_column: str,
@@ -1397,7 +1397,7 @@ def _build_pipeline_context(
     )
     return {
         "whisper_client": whisper_client,
-        "OpenAI_client": OpenAI_client,
+        "anthropic_client": anthropic_client,
         "gemini_client": gemini_client,
         "data_location": data_location,
         "file_name": file_name,
@@ -1534,14 +1534,14 @@ def _run_parser_candidate(
             strict=candidate_name != "initial_markdown",
             CBORD=context["CBORD"],
         )
-        llm_result = _call_openai_prompt_with_metadata(
-            OpenAI_client=context["OpenAI_client"],
+        llm_result = _call_claude_prompt_with_metadata(
+            anthropic_client=context["anthropic_client"],
             prompt=prompt,
             user_content=extracted_text,
         )
     else:
-        llm_result = _call_openai_prompt_with_metadata(
-            OpenAI_client=context["OpenAI_client"],
+        llm_result = _call_claude_prompt_with_metadata(
+            anthropic_client=context["anthropic_client"],
             prompt=context["parse_extracted_pdf_prompt"],
             user_content=extracted_text,
         )
@@ -1586,7 +1586,7 @@ def _run_parser_candidate(
                 "failure_reasons": [llm_result["error"] or "empty parser result"],
             },
             "whisper_result": whisper_result,
-            "model": llm_result.get("model", DEFAULT_OPENAI_PDF_MODEL),
+            "model": llm_result.get("model", DEFAULT_PDF_MODEL),
         }
 
     try:
@@ -1632,7 +1632,7 @@ def _run_parser_candidate(
             CBORD=context["CBORD"],
             audit_threshold=context["audit_threshold"],
             visual_audit_threshold=context["visual_audit_threshold"],
-            candidate_source="gemini" if candidate_name.startswith("gemini") else "openai",
+            candidate_source="gemini" if candidate_name.startswith("gemini") else "claude",
         )
 
         saved_df = page_df.copy()
@@ -1658,7 +1658,7 @@ def _run_parser_candidate(
             "row_provenance": row_provenance,
             "audit": audit,
             "whisper_result": whisper_result,
-            "model": llm_result.get("model", DEFAULT_OPENAI_PDF_MODEL),
+            "model": llm_result.get("model", DEFAULT_PDF_MODEL),
             "whisper_hash": whisper_result.get("whisper_hash", ""),
             "confidence_metadata": whisper_result.get("confidence_metadata", {}),
         }
@@ -1681,7 +1681,7 @@ def _run_parser_candidate(
             "row_provenance": [],
             "audit": {"score": 0.0, "passed": False, "failure_reasons": [str(exception)]},
             "whisper_result": whisper_result,
-            "model": llm_result.get("model", DEFAULT_OPENAI_PDF_MODEL),
+            "model": llm_result.get("model", DEFAULT_PDF_MODEL),
         }
 
 
@@ -1852,7 +1852,7 @@ def _persist_page_artifacts(
         "settings_signature": context["settings_signature"],
         "chosen_columns": context["desired_columns"],
         "numeric_columns": context["numeric_columns"],
-        "model": winner.get("model", DEFAULT_OPENAI_PDF_MODEL),
+        "model": winner.get("model", DEFAULT_PDF_MODEL),
         "whisper_hash": winner.get("whisper_hash", ""),
         "audit": winner.get("audit", {}),
         "row_provenance": winner.get("row_provenance", []),
@@ -2187,7 +2187,7 @@ def _write_qa_flags_artifact(
 def run_pdf_preflight_sample(
     pdf_files: list[str],
     whisper_client: Any,
-    OpenAI_client: Any,
+    anthropic_client: Any,
     data_location: str | Path,
     product_name_column: str,
     desired_columns: list[str],
@@ -2231,7 +2231,7 @@ def run_pdf_preflight_sample(
     for sample in sample_pages:
         context = _build_pipeline_context(
             whisper_client=whisper_client,
-            OpenAI_client=OpenAI_client,
+            anthropic_client=anthropic_client,
             data_location=data_location,
             file_name=sample["file_name"],
             product_name_column=product_name_column.strip().lower(),
@@ -2280,7 +2280,7 @@ def run_pdf_preflight_sample(
 def run_pdf_extraction_pipeline_multiple_files(
     pdf_files: list[str],
     whisper_client: Any,
-    OpenAI_client: Any,
+    anthropic_client: Any,
     data_location: str | Path,
     product_name_column: str,
     desired_columns: list[str],
@@ -2343,7 +2343,7 @@ def run_pdf_extraction_pipeline_multiple_files(
             executor.submit(
                 run_pdf_extraction_pipeline,
                 whisper_client=whisper_client,
-                OpenAI_client=OpenAI_client,
+                anthropic_client=anthropic_client,
                 file_name=file_name,
                 data_location=data_location,
                 product_name_column=product_name_column,
@@ -2407,7 +2407,7 @@ def run_pdf_extraction_pipeline_multiple_files(
 
 def run_pdf_extraction_pipeline(
     whisper_client: Any,
-    OpenAI_client: Any,
+    anthropic_client: Any,
     pages: list[int] | None = None,
     product_name_column: str = "Product name",
     file_name: str | None = None,
@@ -2467,7 +2467,7 @@ def run_pdf_extraction_pipeline(
 
     context = _build_pipeline_context(
         whisper_client=whisper_client,
-        OpenAI_client=OpenAI_client,
+        anthropic_client=anthropic_client,
         data_location=data_location,
         file_name=file_name,
         product_name_column=product_name_column,
@@ -2644,11 +2644,11 @@ def markdown_to_df(
 
 
 def LLM_process_extracted_pdf_text(
-    OpenAI_client: Any,
+    anthropic_client: Any,
     extracted_text: str | LLMWhispererClientException,
     prompt: str | None = None,
 ) -> str:
-    """Convert one PDF page's raw text into a Markdown table with the shared OpenAI parser model.
+    """Convert one PDF page's raw text into a Markdown table with the shared Claude parser model.
 
     Without a custom `prompt`, a built-in single-page prompt asks for only a Markdown table or
     the exact message "No table found on this page." Returns "" if `extracted_text` is an
@@ -2658,8 +2658,8 @@ def LLM_process_extracted_pdf_text(
 
     if prompt is None:
         prompt = load_prompt("extract_pdf_prompt.md")
-    result = _call_openai_prompt_with_metadata(
-        OpenAI_client=OpenAI_client,
+    result = _call_claude_prompt_with_metadata(
+        anthropic_client=anthropic_client,
         prompt=prompt,
         user_content=extracted_text,
     )

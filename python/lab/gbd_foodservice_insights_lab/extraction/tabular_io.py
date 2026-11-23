@@ -9,7 +9,10 @@ import chardet
 import openpyxl
 import pandas as pd
 
-from gbd_foodservice_insights_lab.extraction.llm import experimental_csv_extraction_to_markdown
+from gbd_foodservice_insights_lab.extraction.llm import (
+    DEFAULT_PDF_MODEL,
+    experimental_csv_extraction_to_markdown,
+)
 
 __all__ = [
     "clean_column_names",
@@ -428,15 +431,15 @@ def extract_dates_from_sheet_filenames(
 
 def experimental_excel_extraction_code(
     csv_filename: str | Path,
-    OpenAI_client: Any,
-    model: str = "gpt-4.1",
+    anthropic_client: Any,
+    model: str = DEFAULT_PDF_MODEL,
     desired_columns: list[str] | None = None,
     numeric_columns: list[str] | None = None,
     product_name_column: str = "Product name",
 ) -> pd.DataFrame:
     """Extract structured data from a CSV file using a large language model.
 
-    ``OpenAI_client`` is an initialized OpenAI client. The DataFrame is parsed from the
+    ``anthropic_client`` is an initialized Anthropic client. The DataFrame is parsed from the
     LLM-generated markdown table. ``desired_columns``, ``numeric_columns``, and
     ``product_name_column`` are reserved for future use; currently ignored.
     """
@@ -447,7 +450,7 @@ def experimental_excel_extraction_code(
 
     markdown = experimental_csv_extraction_to_markdown(
         csv_data=csv_data,
-        openai_client=OpenAI_client,
+        anthropic_client=anthropic_client,
         model=model,
     )
 

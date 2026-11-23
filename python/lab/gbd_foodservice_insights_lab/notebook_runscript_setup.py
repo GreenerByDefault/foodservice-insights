@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import pandas as pd
+from anthropic import Anthropic
 from google import genai
-from openai import OpenAI
 from unstract.llmwhisperer import LLMWhispererClientV2
 
 from gbd_foodservice_insights_lab import PACKAGE_DIR
@@ -466,22 +466,23 @@ def load_client_metadata(
 
 
 def setup_api_clients(
-    openai: bool = False, whisper: bool = False, gemini: bool = False
+    anthropic: bool = False, whisper: bool = False, gemini: bool = False
 ) -> dict[str, Any]:
     """Initialize the requested API clients.
 
-    The result holds only the requested clients, keyed ``openai_client``, ``whisper_client``,
+    The result holds only the requested clients, keyed ``anthropic_client``, ``whisper_client``,
     or ``gemini_client``.
 
     Raises ``ValueError`` if a requested service's API key is not set in the environment.
     """
     clients: dict[str, Any] = {}
 
-    if openai:
-        api_key = os.getenv("OPENAI_API_KEY")
+    if anthropic:
+        api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY must be set in environment variables")
-        clients["openai_client"] = OpenAI(api_key=api_key)
+            raise ValueError("ANTHROPIC_API_KEY must be set in environment variables")
+        # `extraction.llm` retries on its own schedule and records the attempts it made.
+        clients["anthropic_client"] = Anthropic(api_key=api_key, max_retries=0)
 
     if whisper:
         api_key = os.getenv("LLM_WHISPERER_API_KEY")
@@ -506,9 +507,9 @@ def setup_cli_environment(env_path: str | Path | None = None) -> dict[str, Any]:
         env_path = find_dotenv(usecwd=True)
     load_dotenv(dotenv_path=env_path)
 
-    clients = setup_api_clients(openai=True, gemini=True)
+    clients = setup_api_clients(anthropic=True, gemini=True)
     return {
-        "openai_client": clients["openai_client"],
+        "anthropic_client": clients["anthropic_client"],
         "gemini_client": clients["gemini_client"],
     }
 

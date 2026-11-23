@@ -20,9 +20,7 @@ setup_pandas_display()
 config, ENV_PATH, PDF_EXTRACTED = load_client_metadata(step="clean_units")
 load_dotenv(dotenv_path=ENV_PATH)
 
-clients = setup_api_clients(openai=True, gemini=True)
-OpenAI_client = clients["openai_client"]
-gemini_client = clients["gemini_client"]
+gemini_client = setup_api_clients(gemini=True)["gemini_client"]
 
 client = config["client"]
 procurement_serving = config["procurement_serving"]

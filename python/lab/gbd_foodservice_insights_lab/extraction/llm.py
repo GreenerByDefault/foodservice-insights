@@ -11,17 +11,22 @@ import time
 from pathlib import Path
 from typing import Any
 
-from openai import OpenAI
+import anthropic
+from anthropic.types import Message
 from requests.exceptions import ConnectionError, ReadTimeout, Timeout
 from unstract.llmwhisperer.client_v2 import LLMWhispererClientException
 
 from gbd_foodservice_insights_lab.gemini import call_gemini_api, get_gemini_model
 from gbd_foodservice_insights_lab.llm_prompts import load_prompt
 
-RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+# 529 is Anthropic's "overloaded".
+RETRYABLE_STATUS_CODES = {408, 409, 425, 429, 500, 502, 503, 504, 529}
 
 DEFAULT_WEIGHT_EXTRACTION_MODEL = get_gemini_model("clean_product_weights.weight_extraction")
-DEFAULT_PDF_MODEL = "gpt-4o"
+DEFAULT_PDF_MODEL = "claude-sonnet-5-5"
+# A page's table can run to thousands of tokens, and adaptive thinking counts toward the cap too.
+# Much higher and the SDK refuses a request that is not streamed.
+MAX_OUTPUT_TOKENS = 16_000
 
 
 def _looks_retryable_message(message: str) -> bool:
@@ -45,7 +50,8 @@ def _looks_retryable_message(message: str) -> bool:
 
 def _is_retryable_exception(exception: Exception) -> bool:
     """Best-effort detection of temporary network or upstream service failures."""
-    if isinstance(exception, (ReadTimeout, ConnectionError, Timeout)):
+    # `anthropic.APITimeoutError` is a subclass of `APIConnectionError`.
+    if isinstance(exception, (ReadTimeout, ConnectionError, Timeout, anthropic.APIConnectionError)):
         return True
     status_code = getattr(exception, "status_code", None)
     if status_code in RETRYABLE_STATUS_CODES:
@@ -60,16 +66,27 @@ def _retry_wait_seconds(attempt: int) -> float:
     return base_wait + jitter
 
 
-def call_openai_prompt_with_metadata(
-    openai_client: Any,
+def _response_text(response: Message) -> tuple[str, str]:
+    """The reply's text, or an error explaining why there is none. Neither is worth a retry."""
+    if response.stop_reason == "refusal":
+        category = response.stop_details.category if response.stop_details else None
+        return "", f"Claude refused to answer (category: {category})."
+    if response.stop_reason == "max_tokens":
+        return "", f"Claude's reply hit max_tokens ({MAX_OUTPUT_TOKENS}) and was cut off."
+    # A response can open with a thinking block, so find the text by type, not position.
+    text = "".join(block.text for block in response.content if block.type == "text")
+    return (text, "") if text.strip() else ("", "Claude returned empty content.")
+
+
+def call_claude_prompt_with_metadata(
+    anthropic_client: anthropic.Anthropic,
     prompt: str,
     user_content: str | LLMWhispererClientException,
     *,
     model: str = DEFAULT_PDF_MODEL,
     max_retries: int = 3,
-    temperature: float = 0.0,
 ) -> dict[str, Any]:
-    """Call an OpenAI chat model and return text plus retry metadata."""
+    """Call a Claude model and return text plus retry metadata."""
     if isinstance(user_content, LLMWhispererClientException):
         return {
             "processed_text": "",
@@ -90,26 +107,18 @@ def call_openai_prompt_with_metadata(
     last_exception: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
-            response = openai_client.chat.completions.create(
+            response = anthropic_client.messages.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                temperature=temperature,
+                # The prompt is the same for every page of a run, so it is cached.
+                system=[{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": user_content}],
+                max_tokens=MAX_OUTPUT_TOKENS,
+                output_config={"effort": "low"},
             )
-            processed_content = response.choices[0].message.content
-            if processed_content:
-                return {
-                    "processed_text": processed_content,
-                    "error": "",
-                    "retryable": False,
-                    "attempts": attempt,
-                    "model": model,
-                }
+            processed_text, error = _response_text(response)
             return {
-                "processed_text": "",
-                "error": "OpenAI returned empty content.",
+                "processed_text": processed_text,
+                "error": error,
                 "retryable": False,
                 "attempts": attempt,
                 "model": model,
@@ -326,39 +335,13 @@ def extract_weight_llm(
     )
 
 
-def LLM_process_extracted_pdf_text_experimental(
-    OpenAI_client: OpenAI,
-    extracted_text: str | LLMWhispererClientException,
-    prompt: str | None = None,
-) -> str:
-    """
-    Process extracted PDF text using the experimental OpenAI responses endpoint.
-    """
-    if prompt is None:
-        raise ValueError("Prompt must be provided")
-
-    response = OpenAI_client.responses.create(
-        model="gpt-4.1",
-        instructions=prompt,
-        input=(
-            "extract this text following your prompt. Please extract every page of the text "
-            f"I give you and do not truncate the output {extracted_text}. Please every page. "
-            "do NOT stop until you have extracted every page of the table. Do not ask for the "
-            "users permission to continue."
-        ),
-        temperature=0.0,
-        tool_choice="none",
-    )
-    return response.output_text
-
-
 def LLM_process_extracted_pdf_text(
-    OpenAI_client: OpenAI,
+    anthropic_client: anthropic.Anthropic,
     extracted_text: str | LLMWhispererClientException,
     prompt: str | None = None,
 ) -> str:
     """
-    Process single-page extracted PDF text into markdown table using OpenAI.
+    Process single-page extracted PDF text into markdown table using Claude.
     """
     if isinstance(extracted_text, LLMWhispererClientException):
         print(f"LLMWhispererClientException occurred: {extracted_text}")
@@ -370,8 +353,8 @@ def LLM_process_extracted_pdf_text(
     if prompt is None:
         prompt = load_prompt("extract_pdf_prompt.md")
 
-    result = call_openai_prompt_with_metadata(
-        openai_client=OpenAI_client,
+    result = call_claude_prompt_with_metadata(
+        anthropic_client=anthropic_client,
         prompt=prompt,
         user_content=extracted_text,
         model=DEFAULT_PDF_MODEL,
@@ -383,10 +366,10 @@ def LLM_process_extracted_pdf_text(
 
 def experimental_csv_extraction_to_markdown(
     csv_data: str,
-    openai_client: Any,
-    model: str = "gpt-4.1",
+    anthropic_client: anthropic.Anthropic,
+    model: str = DEFAULT_PDF_MODEL,
 ) -> str:
-    """Convert noisy CSV text to markdown table via OpenAI."""
+    """Convert noisy CSV text to markdown table via Claude."""
     prompt = (
         "\n"
         "This text is from a CSV file that I have read into Python using f.read.\n"
@@ -405,15 +388,12 @@ def experimental_csv_extraction_to_markdown(
         "The first few rows may not contain useful information. They may contain metadata.\n"
     )
 
-    response = openai_client.chat.completions.create(
+    result = call_claude_prompt_with_metadata(
+        anthropic_client=anthropic_client,
+        prompt=prompt,
+        user_content=f"extract this text following your prompt: {csv_data}",
         model=model,
-        messages=[
-            {"role": "system", "content": prompt},
-            {
-                "role": "user",
-                "content": f"extract this text following your prompt: {csv_data}",
-            },
-        ],
-        temperature=0.0,
     )
-    return response.choices[0].message.content
+    if result["error"]:
+        raise ValueError(result["error"])
+    return result["processed_text"]
