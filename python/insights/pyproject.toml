@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pypdf>=6.21.4,<7"]
+dev = ["pypdf>=7.1.1,<8"]
 
 [build-system]
 requires = ["hatchling"]
