@@ -13,12 +13,13 @@ import { applySecurityHeaders } from '#lib/server/security-headers.js';
 import { closeBlobStore } from '#lib/server/storage.js';
 import type { RouteId } from '$app/types';
 
-/** Paths no caller identifies itself on. Identifying a caller needs Supabase, which the readiness
- * probe reports on and the liveness probe must not depend on; a violation report would otherwise
- * cost a Supabase round trip to learn a user nothing logs. */
-const ANONYMOUS_PATHS: ReadonlySet<string> = new Set([
+/** Routes no caller identifies itself on. Identifying a caller needs Supabase, which the readiness
+ * probe reports on and the liveness probe must not depend on; a violation report or a data check's
+ * poll would otherwise cost a Supabase round trip to learn a user nothing logs. */
+const ANONYMOUS_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
   '/health/live',
   '/health/ready',
+  '/health/data/[check]',
   '/csp-report',
 ]);
 
@@ -28,6 +29,7 @@ const ANONYMOUS_PATHS: ReadonlySet<string> = new Set([
 const UNATTENDED_ROUTES: ReadonlySet<RouteId | null> = new Set<RouteId | null>([
   '/health/live',
   '/health/ready',
+  '/health/data/[check]',
   '/csp-report',
   '/(app)/orgs/[organizationSlug=slug]/poll',
   '/(app)/orgs/[organizationSlug=slug]/reports/[reportId=uuid]/poll',
@@ -67,7 +69,7 @@ function logAccess(event: RequestEvent, status: number, startedAt: number): void
 
 /** Identify the caller, then look up what they may do, once per request. */
 async function resolveAuth(event: RequestEvent): Promise<AuthContext | null> {
-  if (ANONYMOUS_PATHS.has(event.url.pathname)) return null;
+  if (ANONYMOUS_ROUTES.has(event.route.id)) return null;
   if (isLinkPreview(event.request.headers.get('user-agent'))) return null;
 
   const userId = await identifyUser(event);

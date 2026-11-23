@@ -10,6 +10,7 @@
 
 import { sql, type Transaction } from 'kysely';
 import { describe, expect, test } from 'vitest';
+import { MAX_NOTIFICATION_ATTEMPTS } from '../src/attempt-lifecycle.ts';
 import { MAX_ANALYSIS_ATTEMPTS } from '../src/constraints.ts';
 import { DATABASE } from '../src/env.ts';
 import type { AnalysisAttempt } from '../src/generated/public/AnalysisAttempt.ts';
@@ -216,6 +217,16 @@ describe('analysis_attempt', () => {
   });
 
   describe('notification columns', () => {
+    test('the pending-notification index stops at MAX_NOTIFICATION_ATTEMPTS', async () => {
+      const { rows } = await sql<{ indexdef: string }>`
+        SELECT indexdef FROM pg_indexes WHERE indexname = 'analysis_attempt_notification_pending'
+      `.execute(DATABASE);
+
+      expect(rows.map((row) => row.indexdef)).toEqual([
+        expect.stringContaining(`notification_attempts < ${MAX_NOTIFICATION_ATTEMPTS}`),
+      ]);
+    });
+
     test('rejects an email recorded against an unfinished attempt', async () => {
       const update = withRollback(DATABASE, async (transaction) => {
         const attempt = await insertAnalysisAttempt(transaction, { status: 'processing' });

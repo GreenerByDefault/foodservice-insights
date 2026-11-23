@@ -34,7 +34,7 @@ keep settled decisions settled — read them before proposing a change.
 | Hosting | DigitalOcean App Platform — [§ Hosting](#hosting) |
 | Email | Postmark, using HTTP and generated emails — [§ Email](#email) |
 | Logs and uptime monitoring | Better Stack ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#22-where-they-go)) |
-| Dashboards and data alerts | Grafana Cloud, with Grafana OSS locally ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#31-why-grafana-cloud)) |
+| Dashboards | Grafana Cloud, with Grafana OSS locally ([why](https://github.com/GreenerByDefault/foodservice-insights/blob/d7be6c7f32cf74b1310f98a608cf0f83df25c255/.claude/plans/observability-vendors.md#31-why-grafana-cloud)) |
 
 ## Components
 
@@ -387,7 +387,7 @@ when another's inputs fail.
 | Layer | Evaluated by | Sees | Rules live in |
 | --- | --- | --- | --- |
 | Host | DigitalOcean | Each container's resources and restarts, and failed deploys | Each app's spec in [`.do/`](../.do/README.md) |
-| Data | Grafana Cloud | The queue and notifications, as the database's rows record them | **Open:** not built yet |
+| Data | The web app, polled by Better Stack | The queue, notifications and connections, as the database's `metrics` views record them | [`apps/web/src/routes/health/data/[check]/checks.ts`](../apps/web/src/routes/health/data/%5Bcheck%5D/checks.ts), with one Better Stack monitor per check on the public `/health/data/<check>` |
 | Outside | Better Stack | What a user sees, through DNS and the host's edge, and any `error` or `fatal` log line | Better Stack's UI: one uptime monitor on the public `/health/ready`, and one alert on `error` and `fatal` lines |
 
 *Rejected: one system evaluating everything.* Each consolidation copies data out of its home, and
@@ -403,7 +403,7 @@ found by `requestId`, which the response returns as `X-Request-Id`, and an attem
 How to read them is [a runbook](runbooks/trace-a-problem-through-the-logs.md).
 
 The presets (saved Live tail filters), the dashboard of requests by status and duration by route,
-and both Better Stack alerts are made in its UI and kept only there.
+and every Better Stack monitor and alert are made in its UI and kept only there.
 
 ### Metrics
 
@@ -432,17 +432,11 @@ handling.
 | Worker child process crashes | The parent detects the termination and marks the attempt failed |
 | Worker child process hangs | The child stops updating its progress file, which triggers both parent-side and other-worker defenses — see [`apps/worker/README.md`](../apps/worker/README.md#design) |
 | A third-party API rate limits us, e.g. Anthropic | The child retries with backoff, then fails as `upstream_api`; the parent marks the attempt failed. We stay conservative with concurrency to limit the risk. Reasoning in `AnthropicLlmClient` (`python/insights/gbd_foodservice_insights/categorization/llm.py`) |
-| Workers cannot keep up with demand | **Open:** an alert on attempts waiting too long to be claimed |
-| Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. **Open:** alerts when failing attempts exceed a threshold, and when attempts are not cleaned up within the expected window |
-| Email is slow or down | The notification sweep retries a bounded number of times with exponential backoff (§ Result notifications), then gives up; delivery is best effort either way. Auth's own OTP email is a separate system this doesn't cover, and has no alert: build one from Postmark's bounce webhook the first time the `auth` stream shows a Blocked bounce |
+| Workers cannot keep up with demand | The `queue-wait` data alert (§ Alerts) |
+| Workers fail unexpectedly, e.g. a container dies | The reaper marks the orphaned row `failed('abandoned')`. The `failed-attempts` and `unreaped-attempts` data alerts (§ Alerts) |
+| Email is slow or down | The notification sweep retries a bounded number of times with exponential backoff (§ Result notifications), then gives up; delivery is best effort either way. The `notifications-stuck` and `notifications-gave-up` data alerts (§ Alerts) say when it is broken. Auth's own OTP email is a separate system this doesn't cover, and has no alert: build one from Postmark's bounce webhook the first time the `auth` stream shows a Blocked bounce |
 | The blob store is down while uploading a completed attempt's results | The verdict parks rather than being discarded — the analysis work is already paid for. It resumes on later ticks for up to `uploadRetryBudgetMs`, then converts to `failed('infrastructure')` |
-| Database exhausts connections | Clients and the database periodically terminate connections, plus timeouts, to limit zombie connections. Use connection pools and cap the number of connections |
-
-Two alert queries name what "notifications are broken" means concretely, both against
-`analysis_attempt`: **gave up** is terminal, not `canceled`, unsent, and
-`notification_attempts >= maxNotificationAttempts` ([`config.ts`](../apps/worker/src/config.ts));
-**stuck** is the same query without the attempts clause, and with
-`finished_at < now() - interval '1 hour'` in its place.
+| Database exhausts connections | Clients and the database periodically terminate connections, plus timeouts, to limit zombie connections. Use connection pools and cap the number of connections, by the budget in `packages/db/src/budget.ts`. The `connections` data alert (§ Alerts) |
 
 ## Data model
 

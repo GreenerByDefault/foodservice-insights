@@ -101,6 +101,7 @@ describe('handle', () => {
     ['/csp-report', '/csp-report'],
     ['/health/live', '/health/live'],
     ['/health/ready', '/health/ready'],
+    ['/health/data/queue-wait', '/health/data/[check]'],
   ] as const)(
     'logs %s at debug, so the default level shows only what a person did',
     async (pathname, routeId) => {
@@ -145,10 +146,14 @@ describe('handle', () => {
     expect(authorization.loadAuthorization).not.toHaveBeenCalled();
   });
 
-  test.each(['/health/live', '/health/ready'])(
+  test.each([
+    ['/health/live', '/health/live'],
+    ['/health/ready', '/health/ready'],
+    ['/health/data/queue-wait', '/health/data/[check]'],
+  ] as const)(
     'leaves the probe at %s alone, so it answers without Supabase',
-    async (pathname) => {
-      const event = anEvent(pathname);
+    async (pathname, routeId) => {
+      const event = anEvent(pathname, routeId);
 
       await handle({ event, resolve: respond });
 
@@ -171,7 +176,7 @@ describe('handle', () => {
   });
 
   test('identifies no one sending a violation report', async () => {
-    const event = anEvent('/csp-report');
+    const event = anEvent('/csp-report', '/csp-report');
 
     await handle({ event, resolve: respond });
 

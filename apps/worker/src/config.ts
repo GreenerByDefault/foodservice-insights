@@ -7,7 +7,12 @@
  */
 
 import { MINUTE_MS, SECOND_MS } from '@gbd/core';
-import { WORKER_DB_LIMITS } from '@gbd/db';
+import {
+  CLAIMED_CEILING_MS,
+  MAX_NOTIFICATION_ATTEMPTS,
+  REAP_INTERVAL_MS,
+  WORKER_DB_LIMITS,
+} from '@gbd/db';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
 import type { ChildCommand } from './child/spawn.ts';
 import { TRANSIENT_RETRY_WAITS_MS } from './retry.ts';
@@ -113,10 +118,7 @@ export type WorkerConfig = {
    * doubles it, so a row's claim also holds longer each time. */
   notificationRetryBaseMs: number;
 
-  /** How many times we will ever try to send one attempt's email.
-   *
-   * A test in `config.test.ts` asserts that this value agrees with the database index's
-   * hardcoding of the value. */
+  /** How many times we will ever try to send one attempt's email. */
   maxNotificationAttempts: number;
 
   /** The most notifications one sweep will claim and send. */
@@ -133,14 +135,14 @@ export const WORKER_DEFAULTS = {
   killGraceMs: 10 * SECOND_MS,
   drainGraceMs: 30 * SECOND_MS,
   leaseExpiresAfterMs: 3 * MINUTE_MS,
-  claimedCeilingMs: 30 * MINUTE_MS,
-  reapIntervalMs: MINUTE_MS,
+  claimedCeilingMs: CLAIMED_CEILING_MS,
+  reapIntervalMs: REAP_INTERVAL_MS,
   maxReapsPerSweep: 5,
   uploadRetryBudgetMs: 5 * MINUTE_MS,
   transientRetryWaitsMs: TRANSIENT_RETRY_WAITS_MS,
   notifyIntervalMs: 15 * SECOND_MS,
   notificationRetryBaseMs: 5 * MINUTE_MS,
-  maxNotificationAttempts: 5,
+  maxNotificationAttempts: MAX_NOTIFICATION_ATTEMPTS,
   maxNotificationsPerSweep: 5,
 } as const satisfies Omit<WorkerConfig, 'workerId' | 'runRoot' | 'childCommand'>;
 
