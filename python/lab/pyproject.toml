@@ -4,7 +4,7 @@ version = "0.0.0"
 description = "Experiments against the analysis library. Ships nothing; nothing imports it."
 requires-python = ">=3.14"
 dependencies = [
-    "anthropic>=2.8,<3",
+    "anthropic>=2.12.0,<3",
     "chardet>=7.7.0,<8",
     "gbd-foodservice-insights",
     "google-genai>=2.34.0,<3",
