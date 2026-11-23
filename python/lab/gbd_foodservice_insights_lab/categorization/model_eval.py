@@ -8,11 +8,12 @@ is the answer key.
 
 The cache is not perfect gold, so a disagreement is not always the model's error:
 
-    python -m gbd_foodservice_insights_lab.categorization.model_eval run [--models ...]
+    uv run python -m gbd_foodservice_insights_lab.categorization.model_eval run [--models ...]
     # A reviewer fills `correct_category` in DIR/disagreements.csv where the cache is wrong.
-    python -m gbd_foodservice_insights_lab.categorization.model_eval fixes DIR/disagreements.csv
+    uv run python -m gbd_foodservice_insights_lab.categorization.model_eval fixes \
+        DIR/disagreements.csv
     # Run the printed SQL in Supabase Studio, then `just pull-caches`.
-    python -m gbd_foodservice_insights_lab.categorization.model_eval score DIR
+    uv run python -m gbd_foodservice_insights_lab.categorization.model_eval score DIR
 
 `score` re-scores the answers already in DIR against the re-pulled cache, so adjudicating costs
 nothing; it rewrites only `report.md`. Every other file in DIR names products, so DIR is under the

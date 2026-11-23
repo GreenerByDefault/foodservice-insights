@@ -96,7 +96,7 @@ needed the new client anyway. Changing `DEFAULT_MODEL` between Claude models is 
 
 ### The eval: the verified cache is the answer key, and a human settles disagreements
 
-`python -m gbd_foodservice_insights_lab.categorization.model_eval run` (in `python/lab`) cleans and
+`uv run python -m gbd_foodservice_insights_lab.categorization.model_eval run` cleans and
 matches ~1,000 cached products with each model in `MODELS`, exactly as the product does for a cache
 miss, and writes everything to a new `python/lab/client_work/model_eval/<UTC time>/`. The sample is
 400 random rows, up to 100 of each hard slice, and every product the pork rule covers but should not
