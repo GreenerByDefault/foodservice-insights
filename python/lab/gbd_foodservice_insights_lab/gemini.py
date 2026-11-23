@@ -1,7 +1,7 @@
 """
 The Gemini model registry and call wrapper, for the lab's entree detection and extraction.
 
-The product never calls Gemini: its categorization runs on OpenAI, in
+The product never calls Gemini: its categorization runs on Claude, in
 `gbd_foodservice_insights.categorization.llm`. Provider clients are built with
 `notebook_runscript_setup.setup_api_clients`.
 """

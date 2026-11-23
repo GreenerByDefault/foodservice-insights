@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 import pandas as pd
 
+from gbd_foodservice_insights_lab.extraction.llm import DEFAULT_PDF_MODEL
 from gbd_foodservice_insights_lab.extraction.tabular_inspection import RawDataFileReport
 from gbd_foodservice_insights_lab.extraction.tabular_inspection import (
     check_same_columns as _check_same_columns,
@@ -261,15 +262,15 @@ def extract_dates_from_sheet_filenames(
 
 def experimental_excel_extraction_code(
     csv_filename: str | Path,
-    OpenAI_client: Any,
-    model: str = "gpt-4.1",
+    anthropic_client: Any,
+    model: str = DEFAULT_PDF_MODEL,
     desired_columns: list[str] | None = None,
     numeric_columns: list[str] | None = None,
     product_name_column: str = "Product name",
 ) -> pd.DataFrame:
     """Run the experimental LLM-based CSV extractor (legacy alias).
 
-    ``OpenAI_client`` is an initialized OpenAI client. The DataFrame is parsed from the
+    ``anthropic_client`` is an initialized Anthropic client. The DataFrame is parsed from the
     LLM-generated markdown table. ``desired_columns``, ``numeric_columns``, and
     ``product_name_column`` are reserved for future use.
     """
@@ -279,7 +280,7 @@ def experimental_excel_extraction_code(
     )
     return _experimental_excel_extraction_code(
         csv_filename,
-        OpenAI_client,
+        anthropic_client,
         model=model,
         desired_columns=desired_columns,
         numeric_columns=numeric_columns,

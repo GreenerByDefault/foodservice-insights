@@ -24,7 +24,7 @@ matplotlib.use("Agg")
 
 # The shared LLM helpers live in the module that extract_pdf imported via importlib.
 # Grab a reference so we can monkeypatch time.sleep in the right namespace.
-_llms_time = extract_pdf.shared_call_openai_prompt_with_metadata.__globals__["time"]
+_llms_time = extract_pdf.shared_call_claude_prompt_with_metadata.__globals__["time"]
 
 
 def _write_test_pdf(path: Path, num_pages: int = 1) -> None:
@@ -165,55 +165,47 @@ class TestLLMProcessExtractedPdfText:
         captured = capsys.readouterr()
         assert "LLMWhispererClientException" in captured.out
 
-    def test_calls_openai_api(self):
+    def test_calls_claude(self, claude_message):
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[
-            0
-        ].message.content = "| Product | Qty |\n| --- | --- |\n| Apple | 10 |"
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_client.messages.create.return_value = claude_message(
+            "| Product | Qty |\n| --- | --- |\n| Apple | 10 |"
+        )
 
         result = LLM_process_extracted_pdf_text(mock_client, "Some extracted text")
 
-        mock_client.chat.completions.create.assert_called_once()
+        mock_client.messages.create.assert_called_once()
         assert "Apple" in result
 
-    def test_retries_temporary_openai_failures(self, monkeypatch):
+    def test_retries_temporary_failures(self, monkeypatch, claude_message):
         monkeypatch.setattr(_llms_time, "sleep", lambda *_args, **_kwargs: None)
 
         class TemporaryError(Exception):
-            status_code = 429
+            status_code = 529
 
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[
-            0
-        ].message.content = "| Product | Qty |\n| --- | --- |\n| Apple | 10 |"
-        mock_client.chat.completions.create.side_effect = [
-            TemporaryError("rate limit"),
-            mock_response,
+        mock_client.messages.create.side_effect = [
+            TemporaryError("overloaded"),
+            claude_message("| Product | Qty |\n| --- | --- |\n| Apple | 10 |"),
         ]
 
         result = LLM_process_extracted_pdf_text(mock_client, "Some extracted text", prompt="prompt")
 
         assert "Apple" in result
-        assert mock_client.chat.completions.create.call_count == 2
+        assert mock_client.messages.create.call_count == 2
 
-    def test_does_not_retry_non_retryable_openai_failures(self, monkeypatch):
+    def test_does_not_retry_non_retryable_failures(self, monkeypatch):
         monkeypatch.setattr(_llms_time, "sleep", lambda *_args, **_kwargs: None)
 
         class PermanentError(Exception):
             status_code = 400
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.side_effect = PermanentError("bad request")
+        mock_client.messages.create.side_effect = PermanentError("bad request")
 
         result = LLM_process_extracted_pdf_text(mock_client, "Some extracted text", prompt="prompt")
 
         assert result == ""
-        assert mock_client.chat.completions.create.call_count == 1
+        assert mock_client.messages.create.call_count == 1
 
 
 # ----------------------------------------------------------------------
@@ -228,7 +220,7 @@ class TestRunPdfExtractionPipeline:
         self, tmp_path, monkeypatch, capsys
     ):
         mock_whisper_client = MagicMock()
-        mock_openai_client = MagicMock()
+        mock_anthropic_client = MagicMock()
         exception = extract_pdf.LLMWhispererClientException("Test error", 400)
 
         monkeypatch.chdir(tmp_path)
@@ -250,7 +242,7 @@ class TestRunPdfExtractionPipeline:
         ):
             extract_pdf.run_pdf_extraction_pipeline(
                 whisper_client=mock_whisper_client,
-                OpenAI_client=mock_openai_client,
+                anthropic_client=mock_anthropic_client,
                 pages=[12],
                 product_name_column="Product name",
                 file_name="08.18.24 - 08.24.24 - AFCH Usage Data.pdf",
@@ -277,7 +269,7 @@ class TestRunPdfExtractionPipeline:
         assert debug_file.exists()
         assert "LLMWhispererClientException" in debug_file.read_text(encoding="utf-8")
 
-    def test_raises_after_finishing_all_pages_in_file(self, tmp_path, monkeypatch):
+    def test_raises_after_finishing_all_pages_in_file(self, tmp_path, monkeypatch, claude_message):
         page_calls = []
 
         def fake_extract(**kwargs):
@@ -301,18 +293,15 @@ class TestRunPdfExtractionPipeline:
 
         monkeypatch.setattr(extract_pdf, "_extract_pdf_text_whisper_with_metadata", fake_extract)
 
-        mock_openai_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[
-            0
-        ].message.content = "| Product name | Quantity |\n| --- | --- |\n| Apple | 10 |"
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        mock_anthropic_client = MagicMock()
+        mock_anthropic_client.messages.create.return_value = claude_message(
+            "| Product name | Quantity |\n| --- | --- |\n| Apple | 10 |"
+        )
 
         with pytest.raises(AssertionError, match="page 2"):
             extract_pdf.run_pdf_extraction_pipeline(
                 whisper_client=MagicMock(),
-                OpenAI_client=mock_openai_client,
+                anthropic_client=mock_anthropic_client,
                 pages=[1, 2],
                 product_name_column="Product name",
                 file_name="test.pdf",
@@ -328,7 +317,7 @@ class TestRunPdfExtractionPipeline:
         assert page_calls.index("2") >= 1
 
     def test_reprocesses_invalid_existing_checkpoint_and_writes_combined_file(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, claude_message
     ):
         """Corrupt checkpoints should be overwritten instead of silently skipped."""
         extracted_dir = tmp_path / "extracted_pages"
@@ -347,17 +336,14 @@ class TestRunPdfExtractionPipeline:
             },
         )
 
-        mock_openai_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[
-            0
-        ].message.content = "| Product name | Quantity |\n| --- | --- |\n| Apple | 1,000 |"
-        mock_openai_client.chat.completions.create.return_value = mock_response
+        mock_anthropic_client = MagicMock()
+        mock_anthropic_client.messages.create.return_value = claude_message(
+            "| Product name | Quantity |\n| --- | --- |\n| Apple | 1,000 |"
+        )
 
         summary = extract_pdf.run_pdf_extraction_pipeline(
             whisper_client=MagicMock(),
-            OpenAI_client=mock_openai_client,
+            anthropic_client=mock_anthropic_client,
             pages=[1],
             product_name_column="Product name",
             file_name="test.pdf",
@@ -411,7 +397,7 @@ class TestRunPdfExtractionPipelineMultipleFiles:
         extract_pdf.run_pdf_extraction_pipeline_multiple_files(
             pdf_files=["a.pdf"],
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_path,
             product_name_column="Product name",
             desired_columns=["Product name", "Quantity"],
@@ -469,7 +455,7 @@ class TestRunPdfExtractionPipelineMultipleFiles:
         result = extract_pdf.run_pdf_extraction_pipeline_multiple_files(
             pdf_files=["b.pdf", "a.pdf"],
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_path,
             product_name_column="Product name",
             desired_columns=["Product name", "Quantity"],
@@ -513,7 +499,7 @@ class TestRunPdfExtractionPipelineMultipleFiles:
         extract_pdf.run_pdf_extraction_pipeline_multiple_files(
             pdf_files=["a.pdf"],
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_path,
             product_name_column="Product name",
             desired_columns=["Product name", "Quantity"],
@@ -650,7 +636,7 @@ class TestStructuredParsingAndSampling:
 
         cbord_context = extract_pdf._build_pipeline_context(
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_data_location,
             file_name="test.pdf",
             product_name_column="product name",
@@ -673,7 +659,7 @@ class TestStructuredParsingAndSampling:
         )
         non_cbord_context = extract_pdf._build_pipeline_context(
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_data_location,
             file_name="test.pdf",
             product_name_column="product name",
@@ -761,12 +747,13 @@ class TestExtractPdfTextWhisper:
 class TestPageProcessingAndArtifacts:
     """Tests for page-level audit, repair, and sidecar behavior."""
 
-    def test_no_table_detected_writes_sidecar_without_csv(self, tmp_path, monkeypatch):
-        mock_openai_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "No table found on this page."
-        mock_openai_client.chat.completions.create.return_value = mock_response
+    def test_no_table_detected_writes_sidecar_without_csv(
+        self, tmp_path, monkeypatch, claude_message
+    ):
+        mock_anthropic_client = MagicMock()
+        mock_anthropic_client.messages.create.return_value = claude_message(
+            "No table found on this page."
+        )
 
         monkeypatch.setattr(
             extract_pdf,
@@ -785,7 +772,7 @@ class TestPageProcessingAndArtifacts:
 
         context = extract_pdf._build_pipeline_context(
             whisper_client=MagicMock(),
-            OpenAI_client=mock_openai_client,
+            anthropic_client=mock_anthropic_client,
             data_location=tmp_path,
             file_name="test.pdf",
             product_name_column="product name",
@@ -845,7 +832,7 @@ class TestPageProcessingAndArtifacts:
                 "data_location": tmp_path,
                 "file_name": "test.pdf",
                 "whisper_client": MagicMock(),
-                "OpenAI_client": MagicMock(),
+                "anthropic_client": MagicMock(),
                 "parse_extracted_pdf_prompt": "prompt",
                 "desired_columns": ["product name", "quantity"],
                 "numeric_columns": ["quantity"],
@@ -956,7 +943,7 @@ class TestPageProcessingAndArtifacts:
                     "failure_reasons": [],
                 },
                 "whisper_result": {"attempts": 1},
-                "model": "gpt-4o",
+                "model": "claude-sonnet-5-5",
             }
 
         monkeypatch.setattr(extract_pdf, "_run_parser_candidate", fake_run_parser_candidate)
@@ -967,7 +954,7 @@ class TestPageProcessingAndArtifacts:
 
         context = extract_pdf._build_pipeline_context(
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_path,
             file_name="test.pdf",
             product_name_column="product name",
@@ -1021,7 +1008,7 @@ class TestPageProcessingAndArtifacts:
 
         context = extract_pdf._build_pipeline_context(
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_path,
             file_name="test.pdf",
             product_name_column="product name",
@@ -1121,7 +1108,7 @@ class TestPublicRefactorBehaviors:
         result = extract_pdf.run_pdf_preflight_sample(
             pdf_files=["test.pdf"],
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             data_location=tmp_path,
             product_name_column="Product name",
             desired_columns=["Product name", "Quantity"],
@@ -1185,7 +1172,7 @@ class TestPublicRefactorBehaviors:
 
         summary = extract_pdf.run_pdf_extraction_pipeline(
             whisper_client=MagicMock(),
-            OpenAI_client=MagicMock(),
+            anthropic_client=MagicMock(),
             pages=[1],
             product_name_column="Product name",
             file_name="test.pdf",
