@@ -160,7 +160,8 @@ jobs:
 
       # The dashboards go last. After the migrate step, so no panel reaches Grafana Cloud before the
       # view it reads; and after the deploy and its tag, so a Grafana outage can fail this run but
-      # never hold back the app. Edits made in the Grafana Cloud UI are overwritten here.
+      # never hold back the app. Edits made in the Grafana Cloud UI are overwritten here. A sleeping
+      # stack is skipped with a warning; apps/grafana/README.md § Deploying says how to wake it.
       - uses: ./.github/actions/setup-gcx
         if: env.superseded != 'true'
 

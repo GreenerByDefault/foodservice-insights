@@ -24,9 +24,11 @@ import {
   buildCloudDataSource,
   checkDataSourceHealth,
   DATA_SOURCE_UID,
+  grafanaHeaders,
   upsertDataSource,
 } from '../src/data-source.ts';
 import { pruneFolderDashboards } from '../src/folder-dashboards.ts';
+import { isSleepingStack } from '../src/sleeping-stack.ts';
 
 const PACKAGE_ROOT = join(import.meta.dirname, '..');
 const RESOURCES_DIR = join(PACKAGE_ROOT, 'resources');
@@ -34,6 +36,16 @@ const DASHBOARDS_DIR = join(RESOURCES_DIR, 'dashboards');
 
 const grafanaUrl = requireEnv('GRAFANA_URL');
 const token = requireEnv('GRAFANA_TOKEN');
+
+// A sleeping stack would fail every call below. Most deploys change no dashboard, so it warns
+// rather than turning the run red.
+const probe = await fetch(new URL('/api/health', grafanaUrl), { headers: grafanaHeaders(token) });
+if (isSleepingStack(probe.status, await probe.text())) {
+  console.log(
+    `::warning title=Grafana Cloud is asleep::The dashboards were not updated. Open ${grafanaUrl}, tick the checkbox, then re-run the latest Deploy run.`,
+  );
+  process.exit(0);
+}
 
 await upsertDataSource(
   grafanaUrl,
