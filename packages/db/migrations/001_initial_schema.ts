@@ -1030,6 +1030,8 @@ async function analysisAttemptsAndResults(database: Kysely<any>): Promise<void> 
 // ---------------------------------------------------------------------------
 
 async function audit(database: Kysely<any>): Promise<void> {
+  // Nothing writes 'gbd_manual'. Writes by hand are not audited: nothing would make a person
+  // remember to record one.
   await database.schema
     .createType('audit_actor_kind')
     .asEnum(['user', 'superadmin', 'system', 'gbd_manual'])

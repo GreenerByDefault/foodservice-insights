@@ -28,6 +28,8 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 - [Review cache suggestions](review-cache-suggestions.md) in Supabase Studio.
 - [Rotate a secret](rotate-a-secret.md), routinely or because one may have leaked.
 - [Offboard a person](offboard-a-person.md) from every vendor, and the secrets they held.
+- [Change a user's email](change-a-users-email.md) when they are locked out of the old one.
+- [Restore the database](restore-the-database.md) from a backup, and what to do right after.
 - [Deploy the worker](deploy-the-worker.md), the one deploy done by hand.
 - [Trace a problem through the logs](trace-a-problem-through-the-logs.md), from a user's report,
   an alert or a failed report to the lines that explain it.

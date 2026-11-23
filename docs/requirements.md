@@ -254,9 +254,8 @@ authentication events are recorded, logins included — too noisy.
 ### Account recovery
 
 A user who needs to change their email but is locked out of the original must contact GBD, who
-verifies them and then changes the email.
-
-**Open:** whether that is a script or the Supabase UI, and its runbook.
+verifies them and then changes the email, following
+[Change a user's email](runbooks/change-a-users-email.md).
 
 ## Non-functional
 
