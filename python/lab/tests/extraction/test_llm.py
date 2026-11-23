@@ -2,52 +2,126 @@
 
 from unittest.mock import MagicMock
 
+import anthropic
+import httpx2
+import pytest
 from gbd_foodservice_insights_lab.extraction import llm
 
+_REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
 
-class TestOpenAiPromptWrapper:
-    """Tests for the shared OpenAI chat wrapper."""
 
-    def test_retries_temporary_failures(self, monkeypatch):
-        """Temporary OpenAI failures should retry before succeeding."""
-        monkeypatch.setattr(llm.time, "sleep", lambda *_args, **_kwargs: None)
-
-        class TemporaryError(Exception):
-            status_code = 429
-
+class TestClaudePromptWrapper:
+    def test_sends_the_prompt_as_a_cached_system_prompt(self, claude_message):
         mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "parsed table"
-        mock_client.chat.completions.create.side_effect = [
-            TemporaryError("rate limit"),
-            mock_response,
-        ]
+        mock_client.messages.create.return_value = claude_message("parsed table")
 
-        result = llm.call_openai_prompt_with_metadata(
-            openai_client=mock_client,
+        result = llm.call_claude_prompt_with_metadata(
+            anthropic_client=mock_client,
+            prompt="prompt",
+            user_content="Some extracted text",
+        )
+
+        assert result == {
+            "processed_text": "parsed table",
+            "error": "",
+            "retryable": False,
+            "attempts": 1,
+            "model": llm.DEFAULT_PDF_MODEL,
+        }
+        mock_client.messages.create.assert_called_once_with(
+            model=llm.DEFAULT_PDF_MODEL,
+            system=[{"type": "text", "text": "prompt", "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": "Some extracted text"}],
+            max_tokens=llm.MAX_OUTPUT_TOKENS,
+            output_config={"effort": "low"},
+        )
+
+    @pytest.mark.parametrize(
+        "temporary_error",
+        [
+            anthropic.APIConnectionError(request=_REQUEST),
+            anthropic.APITimeoutError(request=_REQUEST),
+            anthropic.InternalServerError(
+                "overloaded", response=httpx2.Response(529, request=_REQUEST), body=None
+            ),
+        ],
+    )
+    def test_retries_temporary_failures(self, monkeypatch, claude_message, temporary_error):
+        monkeypatch.setattr(llm.time, "sleep", lambda *_args, **_kwargs: None)
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = [temporary_error, claude_message("parsed table")]
+
+        result = llm.call_claude_prompt_with_metadata(
+            anthropic_client=mock_client,
             prompt="prompt",
             user_content="Some extracted text",
         )
 
         assert result["processed_text"] == "parsed table"
         assert result["attempts"] == 2
-        assert mock_client.chat.completions.create.call_count == 2
+
+    @pytest.mark.parametrize(
+        ("stop_reason", "error"),
+        [
+            ("refusal", "Claude refused to answer (category: None)."),
+            (
+                "max_tokens",
+                f"Claude's reply hit max_tokens ({llm.MAX_OUTPUT_TOKENS}) and was cut off.",
+            ),
+        ],
+    )
+    def test_an_unusable_reply_is_an_error_without_a_retry(
+        self, claude_message, stop_reason, error
+    ):
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = claude_message(
+            "| partial", stop_reason=stop_reason
+        )
+
+        result = llm.call_claude_prompt_with_metadata(
+            anthropic_client=mock_client,
+            prompt="prompt",
+            user_content="Some extracted text",
+        )
+
+        assert result == {
+            "processed_text": "",
+            "error": error,
+            "retryable": False,
+            "attempts": 1,
+            "model": llm.DEFAULT_PDF_MODEL,
+        }
 
     def test_handles_whisper_exception_input(self):
-        """Whisper exceptions should short-circuit before calling OpenAI."""
         mock_client = MagicMock()
         exception = llm.LLMWhispererClientException("Test error", 400)
 
-        result = llm.call_openai_prompt_with_metadata(
-            openai_client=mock_client,
+        result = llm.call_claude_prompt_with_metadata(
+            anthropic_client=mock_client,
             prompt="prompt",
             user_content=exception,
         )
 
         assert result["processed_text"] == ""
         assert "LLMWhispererClientException" in result["error"]
-        mock_client.chat.completions.create.assert_not_called()
+        mock_client.messages.create.assert_not_called()
+
+
+class TestCsvExtractionToMarkdown:
+    def test_returns_the_markdown(self, claude_message):
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = claude_message("| Item |\n| --- |\n| Apple |")
+
+        markdown = llm.experimental_csv_extraction_to_markdown("raw,csv", mock_client)
+
+        assert markdown == "| Item |\n| --- |\n| Apple |"
+
+    def test_raises_when_claude_gives_no_table(self, claude_message):
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = claude_message("", stop_reason="refusal")
+
+        with pytest.raises(ValueError, match="refused"):
+            llm.experimental_csv_extraction_to_markdown("raw,csv", mock_client)
 
 
 class TestGeminiPdfUploadWrapper:

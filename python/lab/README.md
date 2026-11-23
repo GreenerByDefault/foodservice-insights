@@ -36,9 +36,9 @@ directory, and find the repo root's `.env` by walking up from it.
 The kernel holds whatever lab code it imported, and step 1.5 runs step 2 in that kernel. After
 editing lab code, restart the kernel, or run `%load_ext autoreload` and `%autoreload 2` first.
 
-The lab reads four keys from `.env`: `ANTHROPIC_API_KEY` (categorization), `OPENAI_API_KEY`,
-`GEMINI_API_KEY`, and `LLM_WHISPERER_API_KEY` (PDF extraction only). See
-[`.env.example`](../../.env.example).
+The lab reads three keys from `.env`: `ANTHROPIC_API_KEY` (categorization and PDF extraction),
+`GEMINI_API_KEY` (entree detection and extraction), and `LLM_WHISPERER_API_KEY` (PDF
+extraction). See [`.env.example`](../../.env.example).
 
 The categorization and entree caches live in the database. To use them:
 

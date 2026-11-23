@@ -5,12 +5,13 @@ This file contains fixtures that are available to all tests in the test suite.
 """
 
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import psycopg
 import pytest
+from anthropic.types import Message, StopReason, TextBlock, Usage
 from dotenv import dotenv_values
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -21,15 +22,24 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 # ----------------------------------------------------------------------
 
 
+def _claude_message(text: str, stop_reason: StopReason = "end_turn") -> Message:
+    return Message(
+        id="msg_test",
+        type="message",
+        role="assistant",
+        model="claude-sonnet-5-5",
+        content=[TextBlock(type="text", text=text)],
+        stop_reason=stop_reason,
+        stop_details=None,
+        stop_sequence=None,
+        usage=Usage(input_tokens=1000, output_tokens=50),
+    )
+
+
 @pytest.fixture
-def mock_openai_client():
-    """Mock OpenAI client for testing without API calls."""
-    mock_client = MagicMock()
-    mock_response = MagicMock()
-    mock_response.choices = [MagicMock()]
-    mock_response.choices[0].message.content = "Test response"
-    mock_client.chat.completions.create.return_value = mock_response
-    return mock_client
+def claude_message() -> Callable[..., Message]:
+    """Builds the `Message` a stand-in `anthropic_client.messages.create` returns."""
+    return _claude_message
 
 
 @pytest.fixture

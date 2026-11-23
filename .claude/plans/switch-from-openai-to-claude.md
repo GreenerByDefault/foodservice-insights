@@ -10,12 +10,12 @@ What calls an LLM:
 - **The product's categorization**, the only LLM use the worker has. It moved to Claude Sonnet 5.5
   in #753. Making it more accurate, and choosing between Claude models, is
   `categorization-accuracy.md`.
-- **The lab's extraction**: PDF and tabular text to Markdown tables, still on `gpt-4o` and
-  `gpt-4.1` (`python/lab/gbd_foodservice_insights_lab/extraction/`). It moves to Claude too, and
-  until it does, the lab keeps `OPENAI_API_KEY` and the `openai` package.
+- **The lab's extraction**: PDF and tabular text to Markdown tables
+  (`python/lab/gbd_foodservice_insights_lab/extraction/`), also on Claude Sonnet 5.5 now. Nothing
+  in the repo reads `OPENAI_API_KEY` or imports `openai` any more.
 - **The lab's entree classifier** runs on Gemini and stays there.
 
-What is left is the lab's port and the wording and cost estimate that still say OpenAI.
+What is left is the wording and cost estimate that still say OpenAI.
 
 ## Decisions
 
@@ -36,38 +36,10 @@ contracts and the fixtures, all for a fraction of a cent per run.
 ### PR shape: the swap went first, because production was down
 
 The switch itself shipped as one PR rather than behind prefactors, since each prefactor would have
-shipped while production was still broken. The two PRs left are independent of each other and of
+shipped while production was still broken. The PR left is independent of
 `categorization-accuracy.md`.
 
-## PR 1 — Port the lab's OpenAI extraction to Claude, and drop `openai` (lab)
-
-- **`notebook_runscript_setup.py:468-513`:** `setup_api_clients(anthropic=...)` reads
-  `ANTHROPIC_API_KEY`, and `setup_cli_environment` asks for Claude and Gemini.
-- **`extraction/llm.py`:**
-  - `chat.completions` calls become the Messages API: read text blocks by type, and drop
-    `temperature`.
-  - The experimental `responses.create` path is OpenAI-only. Delete it, and say so in the PR, as
-    the lab rule asks for code a `client_work/` notebook might call.
-- **`extraction/pdf.py`, `other.py`, `tabular_io.py`:**
-  - The client and model constants go from `gpt-4o` and `gpt-4.1` to `claude-sonnet-5-5`; data
-    scientists can tune that.
-  - Keep the comparison against Gemini.
-- **Runscripts:**
-  - `0.5 Prepare PDF data.ipynb` moves to the Claude client.
-  - `1.5. Clean Units Runscript.py:23-24` builds a client it never uses; delete it.
-- **Tests:** `tests/conftest.py:25-31`, `tests/extraction/test_llm.py`,
-  `tests/extraction/test_pdf.py`.
-- **Remove OpenAI:**
-  - Drop `openai` from `python/lab/pyproject.toml` and `uv.lock`.
-  - Drop `OPENAI_API_KEY` from `.env.example` and from `LAB_ONLY` in
-    `apps/worker/src/env-lists.test.ts`.
-  - Drop it from `python/lab/README.md`'s list of keys the lab reads, and from
-    `python/README.md`'s count of them; update `gemini.py:4`.
-  - If `experiments/gemini_api_examples.py` imports `openai`, delete it.
-- **Port like for like.** Letting Claude read PDFs directly could replace part of this pipeline,
-  but that is a redesign.
-
-## PR 2 — Provider-neutral wording and the cost estimate
+## PR — Provider-neutral wording and the cost estimate
 
 - **A new migration** with `COMMENT ON COLUMN` for `analysis_attempt_llm_usage.served_model`,
   `.requests` and `.input_tokens`, so none says OpenAI. Regenerate `public-schema.sql` and the
@@ -101,6 +73,7 @@ shipped while production was still broken. The two PRs left are independent of e
     `cached_input_tokens > 0` after the first calls, the cost is plausible, and `truncated_calls`
     is low.
   - Check the operations and cost dashboards in Grafana, and delete the `OPENAI_API_KEY` secret.
+  - Run the lab's PDF runscript on a one-page sample, to see the extraction work on Claude.
 - **Rate limits:** check the org's tier for the chosen model. The worker has at most workers ×
   attempts × 3 calls in flight, which is 9 today.
 - **Suggestions:**
@@ -112,11 +85,6 @@ shipped while production was still broken. The two PRs left are independent of e
 
 ## Verification
 
-**PR 1:**
-- Run `just lint && just check && just test && TEST_DB=1 just test-lab`.
-- Run a PDF runscript on a one-page sample.
-
-**PR 2:**
 - Run `pnpm lint && pnpm check && pnpm test` for the migration and the DB tests, and
   `just lint && just check && just test`.
 - Run `uv run scripts/monthly_costs.py` and check its output.
