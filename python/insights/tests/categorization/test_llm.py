@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, cast
@@ -15,6 +16,7 @@ from anthropic.types import (
     Usage,
 )
 from gbd_foodservice_insights.categorization.llm import (
+    CLEAN_FORMAT,
     MAX_ATTEMPTS,
     MODELS,
     REQUEST_TIMEOUT_S,
@@ -61,7 +63,12 @@ def _text(text: str) -> TextBlock:
     return TextBlock(type="text", text=text)
 
 
-# A bare string is shorthand for a message with that text and `DEFAULT_USAGE`.
+def _json(**answer: str) -> TextBlock:
+    return _text(json.dumps(answer))
+
+
+# A bare string is shorthand for a message answering with it, in the one field the request's
+# output format asks for, with `DEFAULT_USAGE`.
 type Outcome = Exception | Message | str
 
 
@@ -86,7 +93,10 @@ class FakeAnthropic:
         outcome = self.outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
-        return outcome if isinstance(outcome, Message) else _message(_text(outcome))
+        if isinstance(outcome, Message):
+            return outcome
+        [answer_field] = kwargs["output_config"]["format"]["schema"]["required"]
+        return _message(_json(**{answer_field: outcome}))
 
 
 def _client(*outcomes: Outcome) -> tuple[AnthropicLlmClient, FakeAnthropic, list[float]]:
@@ -179,9 +189,26 @@ def test_a_refusal_is_an_error_naming_its_category() -> None:
         client.match_product_to_category("cheddar", ["Cheese"])
 
 
+def test_an_empty_answer_is_an_error() -> None:
+    client, _, _ = _client(_message(_json(name="  ")))
+
+    with pytest.raises(ValueError, match="no name"):
+        client.clean_product_name("cheddar")
+
+
+def test_an_answer_cut_off_at_max_tokens_is_an_error() -> None:
+    client, _, _ = _client(_message(_text('{"name": "chedd'), stop_reason="max_tokens"))
+
+    with pytest.raises(ValueError, match="cut off"):
+        client.clean_product_name("cheddar")
+
+
 def test_reads_the_text_after_a_thinking_block() -> None:
     client, _, _ = _client(
-        _message(ThinkingBlock(type="thinking", thinking="", signature="sig"), _text("Cheese"))
+        _message(
+            ThinkingBlock(type="thinking", thinking="", signature="sig"),
+            _json(category="Cheese"),
+        )
     )
 
     assert client.match_product_to_category("cheddar", ["Cheese"]) == "Cheese"
@@ -194,6 +221,40 @@ def test_clean_product_name_strips_pack_counts_and_lowercases() -> None:
     assert fake.requests[0]["messages"] == [
         {"role": "user", "content": "classify CHEDDAR  .5 2.5 5LB according to your instructions"}
     ]
+
+
+def test_match_constrains_the_answer_to_the_categories() -> None:
+    client, fake, _ = _client("Cheese")
+
+    client.match_product_to_category("cheddar", ["Cheese", "Butter"])
+
+    assert fake.requests[0]["output_config"]["format"] == {
+        "type": "json_schema",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "enum": ["Cheese", "Butter", "No Matches Found"]}
+            },
+            "required": ["category"],
+            "additionalProperties": False,
+        },
+    }
+
+
+def test_clean_asks_for_one_name() -> None:
+    client, fake, _ = _client("cheddar")
+
+    client.clean_product_name("cheddar")
+
+    assert fake.requests[0]["output_config"]["format"] == {
+        "type": "json_schema",
+        "schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+            "additionalProperties": False,
+        },
+    }
 
 
 def test_match_prompt_lists_the_categories() -> None:
@@ -232,15 +293,9 @@ def test_each_model_is_asked_to_think_as_little_as_it_can(model: str, thinking: 
     request = fake.requests[0]
     assert request["model"] == model
     assert request["thinking"] == thinking
-    assert request["output_config"] == {"effort": "low"}
+    assert request["output_config"] == {"effort": "low", "format": CLEAN_FORMAT}
     assert request["max_tokens"] == MODELS[model].max_tokens
     assert "temperature" not in request
-
-
-def test_match_returns_the_models_text_untouched() -> None:
-    client, _, _ = _client('"Cheese."')
-
-    assert client.match_product_to_category("cheddar", ["Cheese"]) == '"Cheese."'
 
 
 def test_requests_go_out_with_sdk_retries_off() -> None:
@@ -283,7 +338,7 @@ def test_reports_input_tokens_including_cache_reads_and_writes() -> None:
         cache_creation_input_tokens=50,
         output_tokens=7,
     )
-    client, _, _, calls = _reporting_client(_message(_text("cheddar"), usage=usage))
+    client, _, _, calls = _reporting_client(_message(_json(name="cheddar"), usage=usage))
 
     client.clean_product_name("cheddar")
 
@@ -377,10 +432,11 @@ def test_reports_the_billed_tokens_of_a_refusal() -> None:
 
 def test_reports_an_answer_cut_off_at_max_tokens() -> None:
     client, _, _, calls = _reporting_client(
-        _message(_text("cheddar che"), stop_reason="max_tokens")
+        _message(_text('{"name": "chedd'), stop_reason="max_tokens")
     )
 
-    client.clean_product_name("cheddar")
+    with pytest.raises(ValueError, match="cut off"):
+        client.clean_product_name("cheddar")
 
     assert calls == [_call(truncated=True)]
 
@@ -392,7 +448,7 @@ def test_reports_absent_cache_counts_as_zero() -> None:
         cache_creation_input_tokens=None,
         output_tokens=5,
     )
-    client, _, _, calls = _reporting_client(_message(_text("cheddar"), usage=usage))
+    client, _, _, calls = _reporting_client(_message(_json(name="cheddar"), usage=usage))
 
     client.clean_product_name("cheddar")
 

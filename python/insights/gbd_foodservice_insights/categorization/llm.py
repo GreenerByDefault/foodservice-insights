@@ -6,6 +6,7 @@ LLM operations for categorization, behind a protocol so the pipeline never sees 
 reports what its calls used, since only it spends anything.
 """
 
+import json
 import logging
 import os
 import random
@@ -16,8 +17,9 @@ from dataclasses import dataclass
 from typing import Final, Literal, Protocol
 
 import anthropic
-from anthropic.types import Message, ThinkingConfigParam
+from anthropic.types import JSONOutputFormatParam, Message, ThinkingConfigParam
 
+from gbd_foodservice_insights.categorization.cache import NO_MATCHES_FOUND
 from gbd_foodservice_insights.errors import UpstreamApiError
 from gbd_foodservice_insights.llm_prompts import load_prompt
 
@@ -78,7 +80,8 @@ class ModelSettings:
     # How the request turns thinking off; None for a model whose thinking cannot be turned off,
     # which `effort: low` keeps short instead.
     thinking: ThinkingConfigParam | None
-    # An answer is a name or a category, ~10 tokens; thinking counts toward the cap too.
+    # An answer is a name or a category in a one-field JSON object, ~20 tokens; thinking counts
+    # toward the cap too.
     max_tokens: int
 
 
@@ -93,13 +96,13 @@ MODELS: Final[Mapping[str, ModelSettings]] = {
     "claude-haiku-5-5": ModelSettings(
         ModelPrice(input=100_000, cached_input=10_000, output=500_000),
         thinking={"type": "disabled"},
-        max_tokens=30,
+        max_tokens=100,
     ),
     # `disabled` is a 400 on Sonnet 5.5; `between_tools` is its thinking-off setting.
     "claude-sonnet-5-5": ModelSettings(
         ModelPrice(input=2_000_000, cached_input=100_000, output=10_000_000),
         thinking={"type": "between_tools"},
-        max_tokens=30,
+        max_tokens=100,
     ),
     "claude-opus-5-5": ModelSettings(
         ModelPrice(input=4_000_000, cached_input=200_000, output=20_000_000),
@@ -200,17 +203,40 @@ def _llm_call(
     )
 
 
+def _one_field_format(field: str, schema: dict[str, object]) -> JSONOutputFormatParam:
+    """A structured output whose only field is `field`, so the reply cannot be anything but the
+    answer: no clarifying question, explanation or second thought around it."""
+    return {
+        "type": "json_schema",
+        "schema": {
+            "type": "object",
+            "properties": {field: schema},
+            "required": [field],
+            "additionalProperties": False,
+        },
+    }
+
+
+CLEAN_FORMAT: Final = _one_field_format("name", {"type": "string"})
+
+
 # *Rejected: server-side `fallbacks`.* They retry only `cyber` and `frontier_llm` refusals, which
 # a product name will not draw, and would make the served model, and so the price, vary per call.
-def _answer(response: Message) -> str:
+def _answer(response: Message, field: str) -> str:
     if response.stop_reason == "refusal":
         category = response.stop_details.category if response.stop_details else None
         raise ValueError(f"Claude refused to answer (category: {category}): {response!r}")
+    # The schema holds only for a reply that finished; a cut-off one is not valid JSON.
+    if response.stop_reason == "max_tokens":
+        raise ValueError(f"Claude's answer was cut off at max_tokens: {response!r}")
     # A response can open with a thinking block, so find the text by type, not position.
     text = "".join(block.text for block in response.content if block.type == "text")
     if not text.strip():
         raise ValueError(f"Claude returned no text: {response!r}")
-    return text.strip()
+    answer = json.loads(text)[field]
+    if not isinstance(answer, str) or not answer.strip():
+        raise ValueError(f"Claude returned no {field}: {response!r}")
+    return answer.strip()
 
 
 @dataclass(frozen=True)
@@ -240,6 +266,8 @@ class AnthropicLlmClient:
             "clean",
             load_prompt("clean_item_name_prompt.md"),
             f"classify {_strip_pack_counts(item)} according to your instructions",
+            "name",
+            CLEAN_FORMAT,
         ).lower()
 
     def match_product_to_category(self, item: str, categories: Sequence[str]) -> str:
@@ -247,9 +275,20 @@ class AnthropicLlmClient:
             "match",
             _categories_prompt("match_items_to_gbd_categories_prompt.md", categories),
             f"classify {_strip_pack_counts(item)} according to your instructions",
+            "category",
+            _one_field_format(
+                "category", {"type": "string", "enum": [*categories, NO_MATCHES_FOUND]}
+            ),
         )
 
-    def _complete(self, operation: LlmOperation, system_prompt: str, user_prompt: str) -> str:
+    def _complete(
+        self,
+        operation: LlmOperation,
+        system_prompt: str,
+        user_prompt: str,
+        field: str,
+        output_format: JSONOutputFormatParam,
+    ) -> str:
         client = self.client.with_options(max_retries=0, timeout=REQUEST_TIMEOUT_S)
         settings = MODELS[self.model]
         requests = 0
@@ -272,7 +311,7 @@ class AnthropicLlmClient:
                         ],
                         messages=[{"role": "user", "content": user_prompt}],
                         max_tokens=settings.max_tokens,
-                        output_config={"effort": "low"},
+                        output_config={"effort": "low", "format": output_format},
                         thinking=settings.thinking or anthropic.omit,
                     )
                 except anthropic.APIError as err:
@@ -288,7 +327,7 @@ class AnthropicLlmClient:
                     self.sleep(2**requests + random.random())
                     continue
 
-                return _answer(response)
+                return _answer(response, field)
         finally:
             self.on_call(
                 _llm_call(
