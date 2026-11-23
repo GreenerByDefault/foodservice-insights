@@ -363,9 +363,8 @@ templated by `.env.example`. `.env.test` is committed because every value in it 
 GitHub Actions holds every production secret, for the migrate step and the push to Grafana Cloud
 in [`deploy.yml`](../.github/workflows/deploy.yml), and for the running apps, which receive theirs at
 deploy ([`.do/README.md`](../.do/README.md)) — only in the `production` Environment, which only
-`main` can deploy from, never as repo secrets. Rotating one is in [`.do/README.md`](../.do/README.md).
-
-**Open:** a process for a suspected leak.
+`main` can deploy from, never as repo secrets. Rotating one, and what to do when one may have
+leaked, is [a runbook](runbooks/rotate-a-secret.md).
 
 ### Agent guardrails
 
