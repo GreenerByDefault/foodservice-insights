@@ -26,7 +26,8 @@ and their costs are in [`scripts/monthly_costs.py`](../../scripts/monthly_costs.
 
 - [Write to the database by hand](write-to-the-database-by-hand.md), past the write guard.
 - [Review cache suggestions](review-cache-suggestions.md) in Supabase Studio.
-- [Rotate a secret](rotate-a-secret.md) in the `production` Environment.
+- [Rotate a secret](rotate-a-secret.md), routinely or because one may have leaked.
+- [Offboard a person](offboard-a-person.md) from every vendor, and the secrets they held.
 - [Deploy the worker](deploy-the-worker.md), the one deploy done by hand.
 - [Trace a problem through the logs](trace-a-problem-through-the-logs.md), from a user's report,
   an alert or a failed report to the lines that explain it.
