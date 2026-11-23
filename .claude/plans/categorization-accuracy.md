@@ -42,7 +42,7 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 
 ## Decisions
 
-### Model: Sonnet 5.5 stays, until adjudication or PRs 1 and 2 say otherwise
+### Model: Sonnet 5.5 stays, and every prompt change re-applies the rule
 
 | | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 |
 |---|---|---|---|
@@ -55,7 +55,9 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 - Call volumes are `scripts/monthly_costs.py`'s scenarios.
 - A call is ~1,670 input tokens, all but 29 of them the cached system prompt: `count_tokens` on
   Sonnet 5.5 gives 1,402 for `clean` and 1,930 for `match`. Haiku and Opus were not measured.
-- A call writes ~10 output tokens; Opus averaged ~41 with its thinking.
+- A call writes ~10 output tokens; Opus averaged ~41 with its thinking. Structured outputs, which
+  wrap each answer in JSON, have since raised the eval's cost per product by ~25% on Haiku and
+  Sonnet, so read their rows as ~25% low.
 - Prices are Anthropic's list as of 2026-11-10, the date `MODELS` cites. Re-check them on the day.
 - For comparison, gpt-4.1-mini cost ~$48 under Planned, uncached.
 
@@ -73,22 +75,41 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 **The decision rule**, written down before the run: pick the cheapest model within one point of
 the best adjudicated accuracy on random rows that swaps one meat for another no more often than the
 best model does. If Haiku falls short only on the meat slices, try it once more with adaptive
-thinking at `low` effort (its `thinking` in `MODELS` set to `None`, with room in its `max_tokens`)
-before moving up.
+thinking at `low` effort (its `thinking` in `MODELS` set to `{"type": "adaptive"}`, with room in
+its `max_tokens`) before moving up.
 
-**Read now, that rule keeps Sonnet**, the only model within a point of the best. It is a weak
-verdict: two points on 400 rows is eight products, inside the noise, and Sonnet swaps meats most
-often, nearly all of it the pork rule. Opus is best on the meats but no better on random rows, at
-3.7× Sonnet's cost. Haiku costs 14× less than Sonnet, and 11 of its 32 errors on random rows are
-truncated or off-list replies, which PR 1 removes. So PRs 1 and 2 each end by re-running the eval
-and applying the rule again, and Haiku is the likeliest change.
+**Since then**, two re-runs on the same 1,012 products: after structured outputs, then after the
+pork rule (both § The request). All three runs are scored against the cache as re-pulled on
+2026-11-22. Opus was left out, since it had no format failures to remove and costs 3.7× Sonnet:
+
+| First run → structured outputs → pork rule | Haiku 5.5 | Sonnet 5.5 |
+|---|---|---|
+| Accuracy, 400 random rows | 92.0% → 93.2% → 93.0% | 94.0% → 94.8% → 94.8% |
+| Accuracy, 159 pork-rule rows | 94.3% → 92.5% → 97.5% | 92.5% → 96.2% → 99.4% |
+| A meat answered as another meat | 5 → 8 → 3 | 8 → 5 → 1 |
+| Off-list answers | 22 → 0 → 0 | 29 → 0 → 0 |
+| Truncated calls | 57 → 0 → 0 | 50 → 0 → 0 |
+| USD per 1,000 products | $0.05 → $0.07 → $0.07 | $0.71 → $0.89 → $0.93 |
+
+**The rule keeps Sonnet.** Haiku is within two points of it on random rows and swaps three meats to
+Sonnet's one, and with adaptive thinking, the one retry the rule allows, it still swapped three
+(93.5% random, 97.5% pork rule, $0.08 per 1,000). Two of Haiku's swaps are its clean call's doing,
+in both runs: it drops "beef" from a beef meatloaf, and reads a run-together brand name as "halal".
+Sonnet's one is a chicken-and-beef meatball, and the cache itself splits on mixed meats.
+
+**A point on random rows is noise.** Between the structured-outputs run and the first run of the
+pork rule, Haiku changed 68 of 1,012 answers and Sonnet 27, each fixing about as many as it broke.
+Sonnet's random rows dipped to 94.0% there, on a nutrition shake, green beans, a lentil soup and a
+chicken tortilla, which the rule does not touch, then came back to 94.8% on a re-run that changed
+only one example's wording. So "random-row accuracy must not drop" means no drop beyond a point,
+or a drop traced to the change in the rows that moved.
 
 *Rejected: choosing the model with the eval before switching.* Production was down, and the eval
 needed the new client anyway. Changing `DEFAULT_MODEL` between Claude models is also the rollback.
 
 ### The eval: the verified cache is the answer key, and a human settles disagreements
 
-`python -m gbd_foodservice_insights_lab.categorization.model_eval run` (in `python/lab`) cleans and
+`uv run python -m gbd_foodservice_insights_lab.categorization.model_eval run` cleans and
 matches ~1,000 cached products with each model in `MODELS`, exactly as the product does for a cache
 miss, and writes everything to a new `python/lab/client_work/model_eval/<UTC time>/`. The sample is
 400 random rows, up to 100 of each hard slice, and every product the pork rule covers but should not
@@ -102,20 +123,35 @@ cost. Only `report.md` holds no product names, so only it goes in a PR.
 Every change to a prompt or to the request re-runs it, and applies the decision rule above. Its
 blind spot: rows where every model agrees with a wrong cache are never shown to anyone.
 
-### The request: the old prompts, thinking off, system prompt cached
+### The request: the old prompts, thinking off, a structured answer, system prompt cached
 
-- **The prompts are gpt-4.1-mini's, unchanged so far**, so the first eval measured the models and
-  not a prompt edit. PRs 1–3 change them, each measured against that baseline.
+- **The prompts are gpt-4.1-mini's, plus two measured changes**, so the first eval measured the
+  models and not a prompt edit. The match prompt lost "Return only the category, worded exactly as
+  it is listed", which the schema now enforces. Its pork default now applies only to a meatball,
+  sausage or the like that names no meat and is not Halal or Kosher; one that is, and names no
+  meat, is Beef, as is venison, which is what the cache does every time.
+- **A match rule is only as good as the cleaned name it sees.** Sonnet's clean call dropped
+  "halal" and "kosher", so the match call never saw them; the clean prompt now keeps them. A new
+  match rule checks, in the eval's `answers/`, that the clean call keeps the words it relies on.
+- **A prompt's examples are generic names, never products from the cache.** One would leak the
+  answer key into the eval, and put a customer's product name in a public repo.
+- **Every answer is a one-field JSON object** (`output_config.format`): `match` answers
+  `{"category": ...}` from an `enum` of the categories it is given plus "No Matches Found", and
+  `clean` answers `{"name": ...}`. A conversational reply cannot happen, and a reply cut off at
+  `max_tokens` is not valid JSON, so it raises a `ValueError`, which fails a product run and the
+  eval counts as an error. `categorize_with_llm`'s unrecognized-answer handling stays as a guard
+  for other `LlmClient`s.
 - **`MODELS` maps each model id to its `ModelSettings`**: its price, how its request turns thinking
   off, and its `max_tokens`. Haiku sends `thinking={"type": "disabled"}`, Sonnet
   `{"type": "between_tools"}` (`disabled` is a 400 there), and Opus nothing, since its thinking
-  cannot be turned off. All three run at `output_config={"effort": "low"}`. Haiku and Sonnet cap
-  at 30 tokens; Opus at 2,000, to leave room for its thinking. `truncated` flags a reply that hits
-  the cap. Trying a model with thinking on is a change to its `thinking` entry, nothing else.
+  cannot be turned off. All three run at `effort: low`. Haiku and Sonnet cap at 100 tokens, room
+  for the JSON around a name; Opus at 2,000, to leave room for its thinking. `LlmCall.truncated`
+  flags a reply that hits the cap. Trying a model with thinking on is a change to its `thinking`
+  entry, nothing else.
 - **No `temperature`.** The SDK is `anthropic` 2.x, on API version 2026-10-21, which rejects it on
   every model. Small differences from run to run are absorbed by the verified cache.
-- **Refusals** raise a `ValueError` naming `stop_details.category`, which fails the run. The eval
-  drew none.
+- **Refusals** raise a `ValueError` naming `stop_details.category`, which fails the run. Neither
+  eval run drew one, nor a truncated call, nor a 400 from a format beside `thinking`.
 - *Rejected: server-side `fallbacks`.* They retry only `cyber` and `frontier_llm` refusals, which a
   product name will not draw, and would make the served model, and so the price, vary per call.
 
@@ -126,7 +162,7 @@ whole cache:
 
 | | Rows | What happens |
 |---|---|---|
-| The model is wrong | 146 | Nothing, or a prompt fix in PRs 1–3 |
+| The model is wrong | 146 | Nothing, or a prompt fix |
 | The cache is wrong, and the rule is clear | 14 | GBD approves; Eric runs the SQL |
 | Cream soups: the prompt says Milk, the cache splits | 7 | GBD confirms the rule |
 | Meat soups, or no rule written anywhere | 23 | GBD decides the rule |
@@ -137,10 +173,11 @@ The SQL for the 14 also fixes 8 rows outside the sample with the same errors, so
   over every cached row it covers, not only the sampled ones: the cache splits on soups as a
   whole, so fixing the sample alone leaves it inconsistent.
 - **The stakes are small except for meats.** 22 rows of ~41,400 barely move a report. A meat
-  answered as another meat does, since beef's emission factor is ~4× pork's, and PR 2 covers it.
+  answered as another meat does, since beef's emission factor is ~4× pork's, and the
+  pork rule now covers it.
 - **Unwritten conventions the cache follows consistently** go in the prompt without asking:
-  venison → Beef, green beans → Legumes, vegan mains → Plant-based Meats, a hot dog or meatball
-  naming no meat → Pork.
+  green beans → Legumes, vegan mains → Plant-based Meats. Venison → Beef, and Pork for a hot dog or
+  meatball naming no meat, are already there.
 - **Product names stay off the repo.** The rows, with the SQL for each decision, are in
   `client_work/model_eval/2026-11-11T044246Z/fixes.sql` and `review.csv` on Eric's laptop, backed
   up outside the checkout. This plan holds only the rules.
@@ -149,44 +186,9 @@ The SQL for the 14 also fixes 8 rows outside the sample with the same errors, so
 
 ### PR shape: one change per PR, each measured by the eval
 
-PRs 1 and 2 decide the model and need nothing from anyone, so they come first, in either order.
-PR 3 waits on GBD's answers, and only it does.
+What is left waits on GBD, so nothing here is ready to start until they answer.
 
-## PR 1 — Structured outputs, so every answer is one category or one name
-
-**Why:** Haiku and Sonnet sometimes reply conversationally instead of with one line: they ask for
-clarification, explain a non-food item, or correct themselves mid-answer. Out of ~1,000 products
-that was 57 and 50 truncated calls and 22 and 29 off-list answers. A chatty `clean` reply is worse
-than an off-list `match`: cut off at 30 tokens, it becomes the cleaned name that `match` sees and
-that goes back as a suggestion.
-
-- **`match`:** `output_config.format` with a JSON schema whose answer is an `enum` of
-  `category_names()` plus "No Matches Found", so an off-list answer cannot happen.
-  `categorize_with_llm`'s unrecognized-answer handling stays as a guard.
-- **`clean`:** a schema with one string, the cleaned name.
-- **Check first** that each model accepts a format alongside its `thinking` setting, Sonnet's
-  `between_tools` especially, and give `max_tokens` room for the JSON around the answer.
-- **The match prompt's "Return only the category, worded exactly as it is listed"** becomes what
-  the schema enforces; drop that sentence and nothing else, and leave the clean prompt's rules,
-  which shape the name rather than the format.
-- **Tests:** `python/insights/tests/categorization/test_llm.py`, for the request and for reading
-  the answer out of the JSON.
-- **Then** re-run the eval and apply the decision rule. Off-list answers should read zero and
-  truncations near it.
-
-## PR 2 — The pork rule yields to a stated meat, Halal or Kosher
-
-**Why:** the eval's pork-rule slice found all three models doing what gpt-4.1-mini did. All three
-called a Kosher meatball Pork, Haiku and Sonnet called Halal pepperoni Pork, and Sonnet called a
-venison sausage and a beef meatloaf Pork. These are most of every model's meat swaps.
-
-- **Rewrite the line** in `python/insights/gbd_foodservice_insights/prompts/match_items_to_gbd_categories_prompt.md`
-  so Pork is assumed only when the product names no meat and is not Halal or Kosher, with an
-  example of each.
-- **Then** re-run the eval. The pork-rule slice should rise, meat swaps fall, and random-row
-  accuracy must not drop.
-
-## PR 3 — Write GBD's rulings into the match prompt (blocked on GBD)
+## PR 1 — Write GBD's rulings into the match prompt (blocked on GBD)
 
 **Why:** the eval's soup slice means little until GBD picks a rule, and the cache follows
 conventions the prompt never states. Each ruling below needs a line in the prompt and a SQL pass
@@ -204,15 +206,15 @@ over the whole cache.
 **Code:**
 - `python/insights/gbd_foodservice_insights/prompts/match_items_to_gbd_categories_prompt.md`:
   each ruling, plus the unwritten conventions in § Cache fixes.
-- No code changes beyond the prompt.
+- The clean prompt, only where a ruling relies on a word its clean call drops.
 
 **Data, by hand in the SQL editor** per `docs/runbooks/write-to-the-database-by-hand.md`:
 - First the approved decisions 1–4 from `fixes.sql`.
 - Then one guarded `UPDATE` per ruling over every verified row it covers, generated from the
   pulled cache, checked by Eric before running.
 
-**Then** `just pull-caches`, re-score the first run with `score`, and re-run the eval on the new
-prompt. The soup slice should rise, and random-row accuracy must not drop.
+**Then** `just pull-caches`, re-score the pork-rule run with `score`, and re-run the eval on the new
+prompt. The soup slice should rise, and random-row accuracy must not drop (§ Model).
 
 ## Ops notes (outside the repo)
 
@@ -226,4 +228,5 @@ prompt. The soup slice should rise, and random-row accuracy must not drop.
 
 For each PR:
 - Run `just lint && just check && just test`.
-- Run the eval and put its `report.md` in the PR description, beside the baseline table above.
+- Run the eval and put its `report.md` in the PR description, beside the pork-rule column of the
+  table in § Model.

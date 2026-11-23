@@ -8,11 +8,12 @@ is the answer key.
 
 The cache is not perfect gold, so a disagreement is not always the model's error:
 
-    python -m gbd_foodservice_insights_lab.categorization.model_eval run [--models ...]
+    uv run python -m gbd_foodservice_insights_lab.categorization.model_eval run [--models ...]
     # A reviewer fills `correct_category` in DIR/disagreements.csv where the cache is wrong.
-    python -m gbd_foodservice_insights_lab.categorization.model_eval fixes DIR/disagreements.csv
+    uv run python -m gbd_foodservice_insights_lab.categorization.model_eval fixes \
+        DIR/disagreements.csv
     # Run the printed SQL in Supabase Studio, then `just pull-caches`.
-    python -m gbd_foodservice_insights_lab.categorization.model_eval score DIR
+    uv run python -m gbd_foodservice_insights_lab.categorization.model_eval score DIR
 
 `score` re-scores the answers already in DIR against the re-pulled cache, so adjudicating costs
 nothing; it rewrites only `report.md`. Every other file in DIR names products, so DIR is under the
@@ -63,8 +64,8 @@ HARD_SLICES: Final[Mapping[str, str]] = {
     "texture_modified": r"\blevel ?[3-7]\b|pur[eé]e",
 }
 # A meatball, sausage or the like that names another meat, or Halal or Kosher, and no pork: where
-# the match prompt's "assume meatballs, sausages and meat loaf is Pork unless otherwise stated"
-# should not apply, and gpt-4.1-mini sometimes applied it anyway. Every one is sampled.
+# the match prompt's default of Pork for these should not apply, and every model has sometimes
+# applied it anyway. Every one is sampled.
 PORK_RULE: Final = "pork_rule"
 _PORK_RULE_PRODUCTS: Final = r"meatball|sausage|hot ?dog|frankfurter|pepperoni|meat ?loaf|salami"
 _NAMES_OTHER_MEAT: Final = (
@@ -417,8 +418,9 @@ def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s  %(name)s  %(levelname)s  %(message)s"
     )
-    # httpx logs an INFO line per request, which buries progress across thousands of calls.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # The SDK's HTTP client logs an INFO line per request, which buries progress across thousands
+    # of calls.
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[1] if __doc__ else None)
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="Sample the cache, ask each model, and score them.")
