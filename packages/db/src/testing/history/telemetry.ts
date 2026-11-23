@@ -76,15 +76,15 @@ export type Upload = {
   qualityChecks: PlannedQualityCheck[];
 };
 
-const MODEL = 'gpt-4.1-mini';
-const SERVED_MODEL = 'gpt-4.1-mini-2025-04-14';
+const MODEL = 'claude-sonnet-5-5';
+const SERVED_MODEL = MODEL;
 
-/** `MODEL_PRICES` in the analysis library's `categorization/llm.py`, in micro-USD per million
- * tokens. */
-const PRICE = { input: 400_000, cachedInput: 100_000, output: 1_600_000 };
+/** `MODELS` in the analysis library's `categorization/llm.py`, in micro-USD per million tokens. */
+const PRICE = { input: 2_000_000, cachedInput: 100_000, output: 10_000_000 };
 
-/** OpenAI caches a prompt prefix in blocks, and the prompts sit just above its 1,024-token minimum. */
-const CACHED_PREFIX_TOKENS = 1_024;
+/** Each operation's system prompt, measured with `count_tokens`. Every call sends it cached; only
+ * the first calls of a run write it, and the rest read it. */
+const SYSTEM_PROMPT_TOKENS: Record<LlmOperation, number> = { clean: 1_373, match: 1_901 };
 
 /** Roughly how often each check fires on a real upload. */
 const QUALITY_CHECK_RATES: Record<QualityCheck, number> = {
@@ -302,8 +302,9 @@ function operationUsage(random: Random, operation: LlmOperation, calls: number):
   const failedRequests = random.chance(0.1)
     ? Math.ceil(calls * random.uniform(0.02, 0.15))
     : random.between(0, 3);
-  const inputTokens = calls * random.between(1_040, 1_080);
-  const cachedInputTokens = Math.floor(calls * random.uniform(0.6, 0.95)) * CACHED_PREFIX_TOKENS;
+  const inputTokens = calls * (SYSTEM_PROMPT_TOKENS[operation] + random.between(20, 40));
+  const cachedInputTokens =
+    Math.max(0, calls - random.between(1, 3)) * SYSTEM_PROMPT_TOKENS[operation];
   const outputTokens =
     calls * (operation === 'clean' ? random.between(6, 12) : random.between(4, 9));
   return {

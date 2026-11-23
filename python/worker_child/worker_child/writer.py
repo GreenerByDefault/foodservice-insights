@@ -155,8 +155,8 @@ def _add_call(usage: LlmUsage | None, call: LlmCall) -> LlmUsage:
 
 
 def _served_model(call: LlmCall) -> str | None:
-    # OpenAI spells this, not us. One the parent's CHECK would refuse must not fail the call it
-    # rode in on, and with it the report, so it is dropped as if nothing had answered.
+    # The provider spells this, not us. One the parent's CHECK would refuse must not fail the call
+    # it rode in on, and with it the report, so it is dropped as if nothing had answered.
     if call.served_model is None or MODEL_PATTERN.fullmatch(call.served_model):
         return call.served_model
     logger.warning("Dropping a served model that is not a model id: %r", call.served_model)

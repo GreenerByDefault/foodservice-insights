@@ -237,7 +237,7 @@ async function attemptTelemetry(database: Kysely<any>): Promise<void> {
 // ---------------------------------------------------------------------------
 
 async function llmUsage(database: Kysely<any>): Promise<void> {
-  // A model id as OpenAI spells one, such as `gpt-4.1-mini-2025-04-14`.
+  // A model id as its provider spells one, such as `claude-sonnet-5-5` or `gpt-4.1-mini-2025-04-14`.
   const modelPattern = sql.lit('^[a-z0-9][a-z0-9._:-]{0,99}$');
 
   await database.schema

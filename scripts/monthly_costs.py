@@ -40,7 +40,7 @@ class Scenario:
     new_users_per_month: int
     new_orgs_per_month: int
 
-    # OpenAI
+    # Anthropic
     products_per_report: int  # distinct products in one upload
     cache_miss_rate: float  # share of those with no verified cache row
 
@@ -166,12 +166,12 @@ MEMORY_HEADROOM: Final = 1.25
 # Two egress costs left out on purpose:
 #
 # - Bandwidth. Each instance adds to a pooled allowance, 50 GiB on the smallest tier and 200 GiB
-#   on a 2 GB one, and we send a few GB a month: inputs and results to Supabase Storage, OpenAI
+#   on a 2 GB one, and we send a few GB a month: inputs and results to Supabase Storage, Anthropic
 #   requests of a few KB each, and pages to users. Forwarded logs do not count. Past the
 #   allowance it is $0.02/GiB.
 # - The dedicated egress IP add-on, $25 per app per month, and web and worker are separate apps.
 #   It gives an app a fixed pair of IPv4 addresses, which only matters to a destination that
-#   allowlists by IP, and none of ours does: OpenAI and Postmark authenticate by key, and
+#   allowlists by IP, and none of ours does: Anthropic and Postmark authenticate by key, and
 #   Supabase's network restrictions stay off, since migrations run from GitHub-hosted runners and
 #   data scientists connect from their laptops. Nor does it help reach Supabase: App Platform has
 #   no outbound IPv6 and the add-on is IPv4 only, which is what Supabase's IPv4 add-on fixes.
@@ -250,7 +250,7 @@ def postmark(scenario: Scenario) -> Bill:
 
 
 # ------------------------------------------------------------------
-# OpenAI: categorization
+# Anthropic: categorization
 # ------------------------------------------------------------------
 # The model and its price come from the product's `categorization/llm.py`, so switching models
 # there moves this estimate too.
@@ -263,31 +263,32 @@ def postmark(scenario: Scenario) -> Bill:
 
 # `clean`, then `match` unless the cleaned name is already cached.
 CALLS_PER_UNCACHED_PRODUCT: Final = 2
-# Estimated from the prompts/ files at ~4 characters a token: ~1,000 for `clean`, ~1,150 for
-# `match`, with the category list filled in.
-INPUT_TOKENS_PER_CALL: Final = 1_050
-OUTPUT_TOKENS_PER_CALL: Final = 10  # a name or a category, capped at `MAX_TOKENS` = 30
+# Measured with `count_tokens` on claude-sonnet-5-5 on 2026-11-22: 1,402 for `clean` and 1,930
+# for `match`, with the category list filled in. Of each, 29 are the product name's message; the
+# rest is the system prompt.
+INPUT_TOKENS_PER_CALL: Final = 1_666
+# The system prompt is cached, so nearly every call reads it from the cache. Writing it bills at
+# 1.25x input, but a run writes each prompt only a few times, so that is left out.
+CACHED_INPUT_TOKENS_PER_CALL: Final = 1_637
+OUTPUT_TOKENS_PER_CALL: Final = 10  # a name or a category; `MODELS` caps it at its `max_tokens`
 ATTEMPTS_PER_REPORT: Final = 1.1
 
-# All input is priced uncached. OpenAI caches only prompts of at least 1,024 tokens, and both sit
-# near that line; if both do cache, this line is up to ~70% lower.
-#
 # The ceiling: the worker kills an attempt at 20 minutes (`killAfterTotalRuntimeMs`), which at
-# ~1 s a call across 3 threads is ~3,600 calls, or ~$1.60. So no report, across its
-# `MAX_ANALYSIS_ATTEMPTS` = 5, costs more than ~$8.
+# ~1 s a call across 3 threads is ~3,600 calls, or ~$1.20. So no report, across its
+# `MAX_ANALYSIS_ATTEMPTS` = 5, costs more than ~$6.
 
 
-def openai_calls_per_report(scenario: Scenario) -> float:
+def claude_calls_per_report(scenario: Scenario) -> float:
     uncached_products = scenario.products_per_report * scenario.cache_miss_rate
     return uncached_products * CALLS_PER_UNCACHED_PRODUCT * ATTEMPTS_PER_REPORT
 
 
-def openai(scenario: Scenario) -> Bill:
-    calls = round(scenario.reports_per_month * openai_calls_per_report(scenario))
+def anthropic(scenario: Scenario) -> Bill:
+    calls = round(scenario.reports_per_month * claude_calls_per_report(scenario))
     micro_usd = cost_micro_usd(
         DEFAULT_MODEL,
         input_tokens=calls * INPUT_TOKENS_PER_CALL,
-        cached_input_tokens=0,
+        cached_input_tokens=calls * CACHED_INPUT_TOKENS_PER_CALL,
         output_tokens=calls * OUTPUT_TOKENS_PER_CALL,
     )
     return (LineItem(DEFAULT_MODEL, micro_usd / 1_000_000),)
@@ -317,7 +318,7 @@ VENDORS: Final[tuple[tuple[str, Callable[[Scenario], Bill]], ...]] = (
     ("Supabase", supabase),
     ("DigitalOcean", digitalocean),
     ("Postmark", postmark),
-    ("OpenAI", openai),
+    ("Anthropic", anthropic),
     ("Better Stack", better_stack),
     ("Grafana Cloud", grafana_cloud),
 )
@@ -388,9 +389,9 @@ def main() -> None:
     )
     usage = [
         scenario_row("emails a month", lambda s: f"{emails_per_month(s):,.0f}"),
-        scenario_row("OpenAI calls a report", lambda s: f"{openai_calls_per_report(s):,.0f}"),
+        scenario_row("Claude calls a report", lambda s: f"{claude_calls_per_report(s):,.0f}"),
         scenario_row(
-            "OpenAI per report", lambda s: f"${total(openai(s)) / s.reports_per_month:.2f}"
+            "Claude per report", lambda s: f"${total(anthropic(s)) / s.reports_per_month:.2f}"
         ),
     ]
     print(f"Monthly cost estimate. Prices as of {PRICES_AS_OF}; usage figures are guesses.\n")

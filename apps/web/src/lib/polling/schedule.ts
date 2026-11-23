@@ -21,9 +21,9 @@ export const FAILURES_BEFORE_NOTICE = 2;
 /** The interval to poll the report page at for a given `WORKER_MODE`.
  *
  * Only `stubbed` gets the fast interval. `mock-llm` is meant to feel like production, cadence
- * included, and `live` (real OpenAI) and `off` *are* production or off — matching `apps/worker/src/modes.ts`'s own
- * reasoning for which modes get `STUBBED_OVERRIDES`. An unset or unrecognized mode falls back to
- * the production interval.
+ * included, and `live` (real Claude) and `off` *are* production or off — matching
+ * `apps/worker/src/modes.ts`'s own reasoning for which modes get `STUBBED_OVERRIDES`. An unset
+ * or unrecognized mode falls back to the production interval.
  */
 export function pollIntervalMsForWorkerMode(workerMode: string | undefined): number {
   return workerMode === 'stubbed' ? STUBBED_POLL_INTERVAL_MS : BASE_POLL_INTERVAL_MS;

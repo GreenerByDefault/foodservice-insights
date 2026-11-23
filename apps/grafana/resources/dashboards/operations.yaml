@@ -68,7 +68,7 @@ spec:
             transformations: []
         description: 'Over the time range: attempts that succeeded or failed; the
           share that failed for any reason but unusable data, which is the uploaded
-          file''s; the share of requests to OpenAI that failed, each retried or ending
+          file''s; the share of requests to Anthropic that failed, each retried or ending
           its call; and the most memory one analysis used. Connections is right now,
           whatever the time range: every role''s, against the server''s max_connections.'
         id: 1
@@ -319,8 +319,8 @@ spec:
                 refId: A
             queryOptions: {}
             transformations: []
-        description: Of the requests to OpenAI each week, Monday to Sunday in UTC,
-          the share that failed, stacked by whether OpenAI rate limited them. A call
+        description: Of the requests to Anthropic each week, Monday to Sunday in UTC,
+          the share that failed, stacked by whether Anthropic rate limited them. A call
           retries a failed request, so these cost time, and an attempt fails as upstream_api
           only once a call runs out of retries. Includes attempts since deleted.
         id: 3

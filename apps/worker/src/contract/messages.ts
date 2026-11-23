@@ -96,7 +96,7 @@ const ChildFailureSchema = v.strictObject({
 // Every telemetry CHECK on `analysis_attempt_telemetry`, `analysis_attempt_llm_usage` and
 // `analysis_attempt_quality_check` has a rule here, so a document that parses always inserts.
 const MAX_POSTGRES_INTEGER = 2_147_483_647;
-// A model id as OpenAI spells one, such as `gpt-4.1-mini-2025-04-14`.
+// A model id as its provider spells one, such as `claude-sonnet-5-5` or `gpt-4.1-mini-2025-04-14`.
 const MODEL_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,99}$/;
 
 const count = v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_POSTGRES_INTEGER));

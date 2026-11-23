@@ -2,8 +2,7 @@
 
 ## Context
 
-Categorization runs on Claude Sonnet 5.5 since #753; what is left of that switch is in
-`switch-from-openai-to-claude.md`. For each product the verified cache misses,
+Categorization runs on Claude Sonnet 5.5 since #753. For each product the verified cache misses,
 `AnthropicLlmClient` (`python/insights/gbd_foodservice_insights/categorization/llm.py`) makes a
 `clean` call, then a `match` call unless cleaned-name reuse hits (`steps.py`). A cache hit skips
 the LLM entirely, and an LLM answer goes back only as an unverified suggestion for GBD to review.
@@ -49,14 +48,13 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 |---|---|---|---|
 | $/MTok: input · cache read · output | 0.10 · 0.01 · 0.50 | 2 · 0.10 · 10 | 4 · 0.20 · 20 |
 | Thinking for a one-line answer | off (`disabled`) | off (`between_tools`) | always on; `effort: low` |
-| Planned: ~110k calls a month | ~$3 | ~$45 | ~$95, plus ~$22 per 10 thinking tokens a call |
-| Growth: ~440k calls a month | ~$12 | ~$180 | ~$380, plus ~$88 per 10 thinking tokens a call |
+| Planned: ~110k calls a month | ~$3 | ~$35 | ~$71, plus ~$22 per 10 thinking tokens a call |
+| Growth: ~440k calls a month | ~$11 | ~$142 | ~$283, plus ~$88 per 10 thinking tokens a call |
 
 **Assumptions behind the table:**
 - Call volumes are `scripts/monthly_costs.py`'s scenarios.
-- A call is ~1,400 input tokens, ~1,350 of them the cached system prompt. Claude's newer tokenizers
-  count more than the script's 1,050; nobody has measured the real figure yet
-  (`switch-from-openai-to-claude.md`, PR 2).
+- A call is ~1,670 input tokens, all but 29 of them the cached system prompt: `count_tokens` on
+  Sonnet 5.5 gives 1,402 for `clean` and 1,930 for `match`. Haiku and Opus were not measured.
 - A call writes ~10 output tokens; Opus averaged ~41 with its thinking.
 - Prices are Anthropic's list as of 2026-11-10, the date `MODELS` cites. Re-check them on the day.
 - For comparison, gpt-4.1-mini cost ~$48 under Planned, uncached.

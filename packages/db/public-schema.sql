@@ -877,7 +877,7 @@ COMMENT ON TABLE "public"."analysis_attempt_llm_usage" IS 'One row per attempt, 
 -- Name: COLUMN "analysis_attempt_llm_usage"."served_model"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."served_model" IS 'The model that answered, as OpenAI resolved the requested one. Null when no call got a response; the latest if it changed mid-run.';
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."served_model" IS 'The model that answered, as the provider resolved the requested one. Null when no call got a response; the latest if it changed mid-run.';
 
 
 --
@@ -891,14 +891,14 @@ COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."calls" IS 'Calls the an
 -- Name: COLUMN "analysis_attempt_llm_usage"."requests"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."requests" IS 'HTTP requests to OpenAI, retries included.';
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."requests" IS 'HTTP requests to the LLM provider, retries included.';
 
 
 --
 -- Name: COLUMN "analysis_attempt_llm_usage"."input_tokens"; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."input_tokens" IS 'Including cached_input_tokens, as OpenAI counts them.';
+COMMENT ON COLUMN "public"."analysis_attempt_llm_usage"."input_tokens" IS 'Every input token, including cached_input_tokens and any written to the cache.';
 
 
 --

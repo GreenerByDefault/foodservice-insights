@@ -1,5 +1,5 @@
 """`WORKER_MODE=mock-llm`'s entrypoint: the real `analyze()`, with `KeywordLlmClient` in place
-of OpenAI, so a whole report runs with no network and no API key.
+of Claude, so a whole report runs with no network and no API key.
 
 Imports `gbd_foodservice_insights.testing`, which product code may not, so the root
 `pyproject.toml` exempts this file the way it exempts `testing.py`.
