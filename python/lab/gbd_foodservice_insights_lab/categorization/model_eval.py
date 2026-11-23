@@ -64,8 +64,8 @@ HARD_SLICES: Final[Mapping[str, str]] = {
     "texture_modified": r"\blevel ?[3-7]\b|pur[eé]e",
 }
 # A meatball, sausage or the like that names another meat, or Halal or Kosher, and no pork: where
-# the match prompt's "assume meatballs, sausages and meat loaf is Pork unless otherwise stated"
-# should not apply, and gpt-4.1-mini sometimes applied it anyway. Every one is sampled.
+# the match prompt's default of Pork for these should not apply, and every model has sometimes
+# applied it anyway. Every one is sampled.
 PORK_RULE: Final = "pork_rule"
 _PORK_RULE_PRODUCTS: Final = r"meatball|sausage|hot ?dog|frankfurter|pepperoni|meat ?loaf|salami"
 _NAMES_OTHER_MEAT: Final = (

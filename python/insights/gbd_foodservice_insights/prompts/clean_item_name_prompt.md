@@ -9,6 +9,7 @@ Your answers should only be food or drink items, or if the product doesn't seem 
 If you see abbreviations, please guess what they are using the rest of the name and expand them in your answer
 
 - If the product name contains anything that you think might reference animal products, such as meat, dairy and eggs, then you should not remove that information from the cleaned name. for example, do not remove the "beef" from "beef hot dog" and do not remove "creamer" from "shelf stable 10 creamer UHT"
+- Do not remove "halal" or "kosher" from the name, since they tell us the product contains no pork. For example, "SALAMI SLCD HALAL 12CT" would be "halal salami slices", not "salami slices"
 - If the product name contains anything you think might refer to a plant-based animal product alternative, such as oat milk, non-dairy creamer, Beyond Burger, then do not remove that information from the claimed name. for example, if you see reference to "creamer non dairy" then do not remove that from the name.
 - If the product name contains any reference to things you might, you suspect are whole grains, nuts and seeds, or legumes, do not remove those from the name.
 
