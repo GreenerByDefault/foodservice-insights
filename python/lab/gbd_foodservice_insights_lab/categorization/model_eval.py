@@ -418,8 +418,9 @@ def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s  %(name)s  %(levelname)s  %(message)s"
     )
-    # httpx logs an INFO line per request, which buries progress across thousands of calls.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # The SDK's HTTP client logs an INFO line per request, which buries progress across thousands
+    # of calls.
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[1] if __doc__ else None)
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run", help="Sample the cache, ask each model, and score them.")
