@@ -34,15 +34,33 @@ const PACKAGE_ROOT = join(import.meta.dirname, '..');
 const RESOURCES_DIR = join(PACKAGE_ROOT, 'resources');
 const DASHBOARDS_DIR = join(RESOURCES_DIR, 'dashboards');
 
+/** Moved by `deploy-web` after each push that reaches Grafana Cloud. */
+const LAST_PUSH_TAG = 'deploy/grafana';
+/** What this script reads to build what it pushes, from the repo root. Broader than it must be,
+ * since a path missing here lets a change go unpushed with only a warning. */
+const PUSHED_PATHS = [
+  'apps/grafana/resources',
+  'apps/grafana/src',
+  'apps/grafana/scripts/deploy.ts',
+  'apps/grafana/gcx-cloud.yaml',
+  'supabase-ca.crt',
+];
+
 const grafanaUrl = requireEnv('GRAFANA_URL');
 const token = requireEnv('GRAFANA_TOKEN');
 
-// A sleeping stack would fail every call below. Most deploys change no dashboard, so it warns
-// rather than turning the run red.
+// A sleeping stack would fail every call below. Most deploys change nothing Grafana holds, so those
+// only warn. Any other deploy fails, so the change is not silently dropped.
 const probe = await fetch(new URL('/api/health', grafanaUrl), { headers: grafanaHeaders(token) });
 if (isSleepingStack(probe.status, await probe.text())) {
+  if (await changedSinceLastPush()) {
+    console.log(
+      `::error title=Grafana Cloud is asleep::What it serves changed since ${LAST_PUSH_TAG}, so the deploy cannot skip it. Open ${grafanaUrl}, tick the checkbox, then re-run the latest Deploy run.`,
+    );
+    process.exit(1);
+  }
   console.log(
-    `::warning title=Grafana Cloud is asleep::The dashboards were not updated. Open ${grafanaUrl}, tick the checkbox, then re-run the latest Deploy run.`,
+    `::warning title=Grafana Cloud is asleep::Nothing it serves changed since ${LAST_PUSH_TAG}, so the push was skipped.`,
   );
   process.exit(0);
 }
@@ -87,6 +105,22 @@ const pruned = await pruneFolderDashboards(
   token,
 );
 console.log(pruned.length === 0 ? 'no dashboards to prune' : `pruned ${pruned.join(', ')}`);
+
+/** Whether anything this script pushes differs between `LAST_PUSH_TAG` and `HEAD`. Comparing
+ * with the last push, not the parent commit, catches a change whose own run was superseded or
+ * skipped. A missing tag counts as a change. */
+async function changedSinceLastPush(): Promise<boolean> {
+  try {
+    await promisify(execFile)(
+      'git',
+      ['diff', '--quiet', LAST_PUSH_TAG, 'HEAD', '--', ...PUSHED_PATHS],
+      { cwd: findRepoRoot() },
+    );
+    return false;
+  } catch {
+    return true;
+  }
+}
 
 /** A resource file's `metadata.name`, which Grafana uses as its uid. */
 function resourceName(path: string): string {

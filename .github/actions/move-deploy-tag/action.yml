@@ -9,14 +9,15 @@ description: Point deploy/<service> at the commit just deployed, pushing over SS
 # /etc/ssh/ssh_known_hosts, and fails the push rather than trusting a key on first use.
 inputs:
   service:
-    description: web or worker
+    description: web, worker or grafana
     required: true
   sha:
     description: The commit just deployed
     required: true
   digest:
-    description: The image digest just deployed, recorded in the tag message
-    required: true
+    description: The image digest just deployed, recorded in the tag message. Grafana has no image.
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
@@ -36,6 +37,8 @@ runs:
 
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
-        git tag -f -a "$TAG" "$SHA" -m "digest: $DIGEST"
+        message="no image"
+        if [ -n "$DIGEST" ]; then message="digest: $DIGEST"; fi
+        git tag -f -a "$TAG" "$SHA" -m "$message"
         GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
           git push -f "git@github.com:${GITHUB_REPOSITORY}.git" "refs/tags/$TAG"
