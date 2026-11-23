@@ -52,6 +52,13 @@ Deleting a dashboard's file deletes that dashboard there, and an edit made in Gr
 overwritten by the next deploy. For exploratory work, use another folder, or pull its file into a
 PR.
 
+**The free stack sleeps** after some days without a visitor, and only a person opening it wakes
+it: no API call does. While it sleeps, a deploy compares with the `deploy/grafana` tag, which only
+a deploy that reached Grafana moves. If nothing pushed from here changed since, it skips the push
+with a warning. Otherwise it fails, and so does every deploy after it until the stack wakes. So
+before merging a dashboard change, open the stack. If a deploy already failed, open it and re-run
+the latest Deploy run.
+
 ## Adding a metric
 
 1. Add a view in a new migration, following the conventions for `metrics` views in

@@ -160,7 +160,9 @@ jobs:
 
       # The dashboards go last. After the migrate step, so no panel reaches Grafana Cloud before the
       # view it reads; and after the deploy and its tag, so a Grafana outage can fail this run but
-      # never hold back the app. Edits made in the Grafana Cloud UI are overwritten here.
+      # never hold back the app. Edits made in the Grafana Cloud UI are overwritten here. A sleeping
+      # stack only warns when nothing it serves changed since deploy/grafana, and fails otherwise;
+      # apps/grafana/README.md § Deploying says how to wake it.
       - uses: ./.github/actions/setup-gcx
         if: env.superseded != 'true'
 
@@ -171,6 +173,17 @@ jobs:
           GRAFANA_URL: ${{ vars.GRAFANA_URL }}
           GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
           METRICS_DB_CONNECTION_STRING: ${{ secrets.METRICS_DB_CONNECTION_STRING }}
+
+      # The push above compares with this tag when Grafana Cloud is asleep. After a skip, moving it
+      # is still right, since nothing it covers changed.
+      - name: Move the deploy/grafana tag
+        if: env.superseded != 'true'
+        uses: ./.github/actions/move-deploy-tag
+        with:
+          service: grafana
+          sha: ${{ github.sha }}
+        env:
+          DEPLOY_TAGS_SSH_KEY: ${{ secrets.DEPLOY_TAGS_SSH_KEY }}
 
   deploy-worker:
     name: Deploy worker
