@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { expiringCache } from './cache.ts';
+import { cacheEachKeyFor } from './cache.ts';
 
-describe('expiringCache', () => {
+describe('cacheEachKeyFor', () => {
   function aCache() {
     let clock = 0;
     let computed = 0;
-    const cache = expiringCache<string, number>(1_000, () => clock);
+    const cache = cacheEachKeyFor<string, number>(1_000, () => clock);
     return {
       get: (key: string) => cache(key, () => ++computed),
       advance: (ms: number) => {

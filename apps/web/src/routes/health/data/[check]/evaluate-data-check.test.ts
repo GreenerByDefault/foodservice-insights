@@ -21,7 +21,9 @@ afterEach(() => {
 
 /** Every check counts across the whole table, and other test files commit rows to this database
  * concurrently, so a count is only stable inside one snapshot. */
-async function withSnapshot<T>(fn: (transaction: Transaction<Database>) => Promise<T>): Promise<T> {
+async function withRolledBackSnapshot<T>(
+  fn: (transaction: Transaction<Database>) => Promise<T>,
+): Promise<T> {
   return await withRollback(database(), async (transaction) => {
     await sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ`.execute(transaction);
     return await fn(transaction);
@@ -33,7 +35,7 @@ async function countAdded(
   check: DataCheckName,
   insert: (transaction: Transaction<Database>) => Promise<unknown>,
 ): Promise<number> {
-  return await withSnapshot(async (transaction) => {
+  return await withRolledBackSnapshot(async (transaction) => {
     const before = await DATA_CHECKS[check].measure(transaction);
     await insert(transaction);
     const after = await DATA_CHECKS[check].measure(transaction);
@@ -41,10 +43,10 @@ async function countAdded(
   });
 }
 
-/** A finished attempt whose email the sweep has tried `sends` times without success. */
+/** A finished attempt whose email the sweep has tried `failedSends` times without success. */
 async function insertUnsentAttempt(
   transaction: DatabaseExecutor,
-  overrides: { finishedAgoMs: number; sends?: number; withRequester?: boolean },
+  overrides: { finishedAgoMs: number; failedSends?: number; withRequester?: boolean },
 ) {
   const requester = overrides.withRequester === false ? null : await insertAppUser(transaction);
   const finishedAt = dbMsAgo(overrides.finishedAgoMs);
@@ -54,12 +56,12 @@ async function insertUnsentAttempt(
     finishedAt,
     requestedByUserId: requester?.id ?? null,
   });
-  const sends = overrides.sends ?? 0;
-  if (sends === 0) return attempt;
+  const failedSends = overrides.failedSends ?? 0;
+  if (failedSends === 0) return attempt;
   return await transaction
     .updateTable('analysisAttempt')
     .set({
-      notificationAttempts: sends,
+      notificationAttempts: failedSends,
       notificationClaimedAt: DB_NOW,
       notificationClaimedByWorkerId: 'test-worker',
     })
@@ -136,7 +138,7 @@ describe('DATA_CHECKS', () => {
   });
 
   describe('unreaped-attempts', () => {
-    async function insertProcessing(transaction: DatabaseExecutor, claimedAgoMs: number) {
+    async function insertProcessingAttempt(transaction: DatabaseExecutor, claimedAgoMs: number) {
       const claimedAt = dbMsAgo(claimedAgoMs);
       return await insertAnalysisAttempt(transaction, {
         status: 'processing',
@@ -147,14 +149,14 @@ describe('DATA_CHECKS', () => {
 
     test('counts an attempt processing past the claimed ceiling and a sweep', async () => {
       const added = await countAdded('unreaped-attempts', (transaction) =>
-        insertProcessing(transaction, 32 * MINUTE_MS),
+        insertProcessingAttempt(transaction, 32 * MINUTE_MS),
       );
       expect(added).toBe(1);
     });
 
     test('ignores one the reaper still has time for', async () => {
       const added = await countAdded('unreaped-attempts', (transaction) =>
-        insertProcessing(transaction, 30 * MINUTE_MS),
+        insertProcessingAttempt(transaction, 30 * MINUTE_MS),
       );
       expect(added).toBe(0);
     });
@@ -163,14 +165,14 @@ describe('DATA_CHECKS', () => {
   describe('notifications-gave-up', () => {
     test('counts an email out of sends', async () => {
       const added = await countAdded('notifications-gave-up', (transaction) =>
-        insertUnsentAttempt(transaction, { finishedAgoMs: 2 * HOUR_MS, sends: 5 }),
+        insertUnsentAttempt(transaction, { finishedAgoMs: 2 * HOUR_MS, failedSends: 5 }),
       );
       expect(added).toBe(1);
     });
 
     test.for([
-      ['with sends left', { finishedAgoMs: 2 * HOUR_MS, sends: 4 }],
-      ['past the window', { finishedAgoMs: 7 * HOUR_MS, sends: 5 }],
+      ['with sends left', { finishedAgoMs: 2 * HOUR_MS, failedSends: 4 }],
+      ['past the window', { finishedAgoMs: 7 * HOUR_MS, failedSends: 5 }],
     ] as const)('ignores an email %s', async ([, overrides]) => {
       const added = await countAdded('notifications-gave-up', (transaction) =>
         insertUnsentAttempt(transaction, overrides),
@@ -194,7 +196,7 @@ describe('DATA_CHECKS', () => {
   describe('notifications-stuck', () => {
     test.for([
       ['never tried', { finishedAgoMs: 2 * HOUR_MS }],
-      ['with sends left', { finishedAgoMs: 2 * HOUR_MS, sends: 4 }],
+      ['with sends left', { finishedAgoMs: 2 * HOUR_MS, failedSends: 4 }],
     ] as const)('counts an email unsent after an hour, %s', async ([, overrides]) => {
       const added = await countAdded('notifications-stuck', (transaction) =>
         insertUnsentAttempt(transaction, overrides),
@@ -204,7 +206,7 @@ describe('DATA_CHECKS', () => {
 
     test.for([
       ['under an hour old', { finishedAgoMs: 59 * MINUTE_MS }],
-      ['out of sends', { finishedAgoMs: 2 * HOUR_MS, sends: 5 }],
+      ['out of sends', { finishedAgoMs: 2 * HOUR_MS, failedSends: 5 }],
       ['whose requester was deleted', { finishedAgoMs: 2 * HOUR_MS, withRequester: false }],
     ] as const)('ignores an email %s', async ([, overrides]) => {
       const added = await countAdded('notifications-stuck', (transaction) =>
@@ -264,10 +266,10 @@ describe('DATA_CHECKS', () => {
 });
 
 describe('_evaluateDataCheck', () => {
-  const { firing } = DATA_CHECKS['queue-wait'];
+  const { firesWhen } = DATA_CHECKS['queue-wait'];
 
   test('fires on a row its check counts', async () => {
-    const report = await withSnapshot(async (transaction) => {
+    const report = await withRolledBackSnapshot(async (transaction) => {
       await insertAnalysisAttempt(transaction, { createdAt: dbMsAgo(31 * MINUTE_MS) });
       return await _evaluateDataCheck(transaction, 'queue-wait');
     });
@@ -275,7 +277,7 @@ describe('_evaluateDataCheck', () => {
     expect(report).toEqual({
       check: 'queue-wait',
       status: 'firing',
-      firing,
+      firesWhen,
       count: expect.any(Number),
       threshold: 0,
     });
@@ -290,7 +292,7 @@ describe('_evaluateDataCheck', () => {
 
     const report = await _evaluateDataCheck(database(), 'queue-wait');
 
-    expect(report).toEqual({ check: 'queue-wait', status, firing, count, threshold: 1 });
+    expect(report).toEqual({ check: 'queue-wait', status, firesWhen, count, threshold: 1 });
   });
 
   test('answers error when its query fails, logging why', async () => {
@@ -300,7 +302,7 @@ describe('_evaluateDataCheck', () => {
       return await _evaluateDataCheck(transaction, 'queue-wait');
     });
 
-    expect(report).toEqual({ check: 'queue-wait', status: 'error', firing });
+    expect(report).toEqual({ check: 'queue-wait', status: 'error', firesWhen });
     expect(SERVER_LOGS.records).toEqual([
       expect.objectContaining({ level: 'error', check: 'queue-wait', msg: 'Data check failed' }),
     ]);

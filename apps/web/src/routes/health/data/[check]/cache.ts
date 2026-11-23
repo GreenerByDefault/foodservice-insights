@@ -1,6 +1,6 @@
 /** Remembers each key's value for `ttlMs`. Store a promise, and callers that arrive while it is
  * pending share it rather than each computing their own. */
-export function expiringCache<K, V>(
+export function cacheEachKeyFor<K, V>(
   ttlMs: number,
   now: () => number = () => performance.now(),
 ): (key: K, compute: () => V) => V {

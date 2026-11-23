@@ -27,29 +27,29 @@ export type Measurement = { count: number; threshold: number };
 export type DataCheck = {
   /** What it means that the count is over the threshold, for whoever follows the alert email to
    * the check's page. */
-  firing: string;
+  firesWhen: string;
   measure: (db: DatabaseExecutor) => Promise<Measurement>;
 };
 
 /** No attempt the reaper is running for lasts past this. A dev profile that reaps sooner
  * (`apps/worker/src/modes.ts`) only makes this fire late. */
-const UNREAPED_AFTER_MS = CLAIMED_CEILING_MS + REAP_INTERVAL_MS;
+const REAPER_DEADLINE_MS = CLAIMED_CEILING_MS + REAP_INTERVAL_MS;
 
 /** How long a give-up keeps its incident open. The last send goes out about 75 minutes after the
  * attempt finished (`notificationRetryWindowMs`), so this leaves hours of room for a worker that
  * was down meanwhile, and every give-up is counted once before it ages out. */
-const GAVE_UP_WINDOW_MS = 6 * HOUR_MS;
+const GAVE_UP_COUNTED_FOR_MS = 6 * HOUR_MS;
 
 /** Over this share of `max_connections`, the clients are past what `budget.ts` sizes them for.
  * `metrics.database_connection` can read a connection or two high, which this absorbs. */
-const CONNECTION_SHARE = 0.8;
+const ALERT_SHARE_OF_MAX_CONNECTIONS = 0.8;
 
-function beforeNow(ms: number): RawBuilder<Date> {
+function msBeforeNow(ms: number): RawBuilder<Date> {
   return sql<Date>`now() - make_interval(secs => ${ms / 1000})`;
 }
 
 /** A check that fires on any row `query` counts. */
-function anyRow(query: RawBuilder<{ count: number }>): DataCheck['measure'] {
+function firesOnAnyRow(query: RawBuilder<{ count: number }>): DataCheck['measure'] {
   return async (db) => {
     const { rows } = await query.execute(db);
     return { count: rows[0]?.count ?? 0, threshold: 0 };
@@ -58,53 +58,53 @@ function anyRow(query: RawBuilder<{ count: number }>): DataCheck['measure'] {
 
 export const DATA_CHECKS = {
   'queue-wait': {
-    firing:
+    firesWhen:
       'An attempt has waited over 30 minutes for a worker to claim it. Three slots of 2–15 ' +
       'minutes each means demand beyond capacity, or no worker is claiming.',
-    measure: anyRow(sql`
+    measure: firesOnAnyRow(sql`
       SELECT count(*)::integer AS count
       FROM metrics.attempt
       WHERE status = 'pending'
         AND purged_at IS NULL
-        AND created_at < ${beforeNow(30 * MINUTE_MS)}
+        AND created_at < ${msBeforeNow(30 * MINUTE_MS)}
     `),
   },
 
   'failed-attempts': {
     // `unusable_data` is the customer's file, not our failure.
-    firing: 'An attempt failed in the last hour for a reason that is ours.',
-    measure: anyRow(sql`
+    firesWhen: 'An attempt failed in the last hour for a reason that is ours.',
+    measure: firesOnAnyRow(sql`
       SELECT count(*)::integer AS count
       FROM metrics.attempt
       WHERE status = 'failed'
         AND failure_reason <> 'unusable_data'
-        AND finished_at > ${beforeNow(HOUR_MS)}
+        AND finished_at > ${msBeforeNow(HOUR_MS)}
     `),
   },
 
   'unreaped-attempts': {
-    firing:
+    firesWhen:
       'An attempt is still processing past the longest the reaper allows, so no reaper is running.',
-    measure: anyRow(sql`
+    measure: firesOnAnyRow(sql`
       SELECT count(*)::integer AS count
       FROM metrics.attempt
       WHERE status = 'processing'
         AND purged_at IS NULL
-        AND claimed_at < ${beforeNow(UNREAPED_AFTER_MS)}
+        AND claimed_at < ${msBeforeNow(REAPER_DEADLINE_MS)}
     `),
   },
 
   'notifications-gave-up': {
     // The window is on `finished_at` because the view has no notification claim time.
-    firing: `An attempt's result email failed all ${MAX_NOTIFICATION_ATTEMPTS} sends, and the sweep gave up on it.`,
-    measure: anyRow(sql`
+    firesWhen: `An attempt's result email failed all ${MAX_NOTIFICATION_ATTEMPTS} sends, and the sweep gave up on it.`,
+    measure: firesOnAnyRow(sql`
       SELECT count(*)::integer AS count
       FROM metrics.attempt
       WHERE status <> 'canceled'
         AND purged_at IS NULL
         AND notification_email_sent_at IS NULL
         AND notification_attempts >= ${MAX_NOTIFICATION_ATTEMPTS}
-        AND finished_at > ${beforeNow(GAVE_UP_WINDOW_MS)}
+        AND finished_at > ${msBeforeNow(GAVE_UP_COUNTED_FOR_MS)}
     `),
   },
 
@@ -112,10 +112,10 @@ export const DATA_CHECKS = {
     // The sweep's due predicate (`dueCandidates` in `apps/worker/src/sweeps/notifications.ts`),
     // an hour on. Without its report and requester clauses, an email the sweep rightly never sends
     // would fire forever.
-    firing:
+    firesWhen:
       'A result email is still unsent an hour after its attempt finished, with sends left: email ' +
       'is down, or the notification sweep is not running.',
-    measure: anyRow(sql`
+    measure: firesOnAnyRow(sql`
       SELECT count(*)::integer AS count
       FROM metrics.attempt a
       JOIN metrics.report r ON r.id = a.report_id
@@ -125,18 +125,18 @@ export const DATA_CHECKS = {
         AND a.notification_attempts < ${MAX_NOTIFICATION_ATTEMPTS}
         AND a.has_requester
         AND r.deleted_at IS NULL
-        AND a.finished_at < ${beforeNow(HOUR_MS)}
+        AND a.finished_at < ${msBeforeNow(HOUR_MS)}
     `),
   },
 
   connections: {
     // When the database is truly out, this query cannot connect either, and that answers 503 too.
-    firing: `The database's connections are over ${CONNECTION_SHARE * 100}% of max_connections.`,
+    firesWhen: `The database's connections are over ${ALERT_SHARE_OF_MAX_CONNECTIONS * 100}% of max_connections.`,
     measure: async (db) => {
       const { rows } = await sql<Measurement>`
         SELECT
           sum(connections)::integer AS count,
-          floor(max(max_connections) * ${CONNECTION_SHARE}::numeric)::integer AS threshold
+          floor(max(max_connections) * ${ALERT_SHARE_OF_MAX_CONNECTIONS}::numeric)::integer AS threshold
         FROM metrics.database_connection
       `.execute(db);
       // This query's own connection is always a row.
