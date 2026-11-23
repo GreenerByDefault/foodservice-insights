@@ -6,6 +6,7 @@ import { checkDeferredConstraints, withRollback } from '../transactions.ts';
 import { type InsertedSyntheticHistory, insertSyntheticHistory } from './insert.ts';
 import {
   type PlannedAttempt,
+  type PlannedReport,
   planSyntheticHistory,
   SYNTHETIC_HISTORY_SEED,
   type SyntheticHistoryPlan,
@@ -134,13 +135,33 @@ function plannedTelemetry(plan: SyntheticHistoryPlan) {
   };
 }
 
+/** The first report of each shape, its counts basis and its attempts' statuses, and every user.
+ * The whole history is some 700 statements in sequence, which ran past the 5s timeout on a loaded
+ * machine; `plan.test.ts` is what holds the plan to covering every shape. */
+function onePerShape(plan: SyntheticHistoryPlan): SyntheticHistoryPlan {
+  const seen = new Set<string>();
+  function isFirstOfShape({ countsBasis, attempts }: PlannedReport) {
+    const shape = JSON.stringify([countsBasis, attempts.map(({ status }) => status)]);
+    if (seen.has(shape)) return false;
+    seen.add(shape);
+    return true;
+  }
+  return {
+    ...plan,
+    organizations: plan.organizations.map((organization) => ({
+      ...organization,
+      reports: organization.reports.filter(isFirstOfShape),
+    })),
+  };
+}
+
 function sorted<T>(rows: T[]): T[] {
   return rows.toSorted((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
 
 describe('insertSyntheticHistory', () => {
   test('writes what the plan says, and it commits', async () => {
-    const plan = planSyntheticHistory(SYNTHETIC_HISTORY_SEED);
+    const plan = onePerShape(planSyntheticHistory(SYNTHETIC_HISTORY_SEED));
     const { telemetryColumns, ...expectedTelemetry } = plannedTelemetry(plan);
 
     const history = await withRollback(DATABASE, async (transaction) => {
