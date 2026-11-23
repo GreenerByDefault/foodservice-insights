@@ -216,7 +216,6 @@ hand-built frame with `KeywordLlmClient`, with no network.
     `MAX_TOKENS` = 30, which is now each model's `max_tokens` in `MODELS`.
 - **Synthetic history:** in `packages/db/src/testing/history/telemetry.ts:84-86`, the prices and
   cached prefix become Claude's.
-- **`.claude/plans/runbooks.md:33,115,178`:** the OpenAI key mentions.
 
 ## Ops notes (outside the repo)
 
