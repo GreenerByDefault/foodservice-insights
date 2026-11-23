@@ -12,12 +12,14 @@
 // window. Otherwise a single old row would hold its incident open forever. That is also why a
 // check of a current state reads live rows only: a tombstone keeps the status its row had when it
 // was deleted, so a deleted `pending` attempt would wait in `metrics.attempt` forever.
-//
-// The worker's timings are copied, not imported, since the web app cannot depend on the worker.
-// Each copy names its source in `apps/worker/src/config.ts`; change both together.
 
 import { HOUR_MS, MINUTE_MS } from '@gbd/core';
-import type { DatabaseExecutor } from '@gbd/db';
+import {
+  CLAIMED_CEILING_MS,
+  type DatabaseExecutor,
+  MAX_NOTIFICATION_ATTEMPTS,
+  REAP_INTERVAL_MS,
+} from '@gbd/db';
 import { type RawBuilder, sql } from 'kysely';
 
 export type Measurement = { count: number; threshold: number };
@@ -29,11 +31,9 @@ export type DataCheck = {
   measure: (db: DatabaseExecutor) => Promise<Measurement>;
 };
 
-/** `claimedCeilingMs + reapIntervalMs`: no attempt the reaper is running for lasts past this. */
-const UNREAPED_AFTER_MS = 30 * MINUTE_MS + MINUTE_MS;
-
-/** `maxNotificationAttempts`. `config.test.ts` already pins the worker's copy to the database's. */
-const MAX_NOTIFICATION_ATTEMPTS = 5;
+/** No attempt the reaper is running for lasts past this. A dev profile that reaps sooner
+ * (`apps/worker/src/modes.ts`) only makes this fire late. */
+const UNREAPED_AFTER_MS = CLAIMED_CEILING_MS + REAP_INTERVAL_MS;
 
 /** How long a give-up keeps its incident open. The last send goes out about 75 minutes after the
  * attempt finished (`notificationRetryWindowMs`), so this leaves hours of room for a worker that

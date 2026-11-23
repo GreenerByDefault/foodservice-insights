@@ -2,6 +2,11 @@ export {
   ANALYSIS_FAILURE_EXPLANATIONS,
   type AnalysisFailureFollowUp,
 } from './analysis-failure-explanations.ts';
+export {
+  CLAIMED_CEILING_MS,
+  MAX_NOTIFICATION_ATTEMPTS,
+  REAP_INTERVAL_MS,
+} from './attempt-lifecycle.ts';
 export { WEB_DB_LIMITS, WORKER_DB_LIMITS } from './budget.ts';
 export {
   type DatabaseConfig,

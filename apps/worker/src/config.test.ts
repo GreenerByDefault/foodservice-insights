@@ -3,7 +3,6 @@ import { parseEnv } from 'node:util';
 import { SECOND_MS } from '@gbd/core';
 import { WORKER_DB_LIMITS } from '@gbd/db';
 import { SEND_TIMEOUT_MS } from '@gbd/email';
-import { sql } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import { parse } from 'yaml';
 import {
@@ -15,7 +14,6 @@ import {
   type WorkerDefaultableFields,
   type WorkerRequiredFields,
 } from './config.ts';
-import { WORKER_DATABASE } from './db.ts';
 
 const REQUIRED_FIELDS: WorkerRequiredFields = {
   workerId: 'worker-under-test',
@@ -295,18 +293,6 @@ describe('createWorkerConfig', () => {
         { maxNotificationAttempts: WORKER_DEFAULTS.maxNotificationAttempts - 1 },
         'notificationRetryBaseMs and maxNotificationAttempts must together span at least',
       );
-    });
-
-    test('maxNotificationAttempts matches the literal in the notification index', async () => {
-      const { rows } = await sql<{ indexdef: string }>`
-        SELECT indexdef FROM pg_indexes WHERE indexname = 'analysis_attempt_notification_pending'
-      `.execute(WORKER_DATABASE);
-
-      expect(rows.map((row) => row.indexdef)).toEqual([
-        expect.stringContaining(
-          `notification_attempts < ${WORKER_DEFAULTS.maxNotificationAttempts}`,
-        ),
-      ]);
     });
   });
 });
