@@ -43,7 +43,7 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 
 ## Decisions
 
-### Model: Sonnet 5.5 stays, until adjudication, the structured-outputs re-run or PR 1 says otherwise
+### Model: Sonnet 5.5 stays, until adjudication or PR 1 says otherwise
 
 | | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 |
 |---|---|---|---|
@@ -57,7 +57,9 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 - A call is ~1,400 input tokens, ~1,350 of them the cached system prompt. Claude's newer tokenizers
   count more than the script's 1,050; nobody has measured the real figure yet
   (`switch-from-openai-to-claude.md`, PR 2).
-- A call writes ~10 output tokens; Opus averaged ~41 with its thinking.
+- A call writes ~10 output tokens; Opus averaged ~41 with its thinking. Structured outputs, which
+  wrap each answer in JSON, have since raised the eval's cost per product by ~25% on Haiku and
+  Sonnet, so read their rows as ~25% low.
 - Prices are Anthropic's list as of 2026-11-10, the date `MODELS` cites. Re-check them on the day.
 - For comparison, gpt-4.1-mini cost ~$48 under Planned, uncached.
 
@@ -78,18 +80,26 @@ best model does. If Haiku falls short only on the meat slices, try it once more 
 thinking at `low` effort (its `thinking` in `MODELS` set to `None`, with room in its `max_tokens`)
 before moving up.
 
-**Read now, that rule keeps Sonnet**, the only model within a point of the best. It is a weak
-verdict: two points on 400 rows is eight products, inside the noise, and Sonnet swaps meats most
-often, nearly all of it the pork rule. Opus is best on the meats but no better on random rows, at
-3.7× Sonnet's cost. Haiku costs 14× less than Sonnet, and 11 of its 32 errors on random rows are
-truncated or off-list replies, which structured outputs (§ The request) now rule out. So the eval
-is re-run, and the rule applied again, first for structured outputs and then after PR 1, and Haiku
-is the likeliest change.
+**After structured outputs** (§ The request), re-run on the same 1,012 products and with both runs
+scored against the cache as re-pulled on 2026-11-22. Opus was left out, since it had no format
+failures to remove:
 
-**The structured-outputs re-run is still owed.** It landed without a live call, so that run is
-also the first check that each model accepts a format beside its `thinking` setting, Sonnet's
-`between_tools` especially: a 400 there fails the run at once. Off-list answers should read zero
-and truncations near it.
+| | Haiku 5.5 | Sonnet 5.5 |
+|---|---|---|
+| Accuracy, 400 random rows | 92.0% → 93.2% | 94.0% → 94.8% |
+| Accuracy, 159 pork-rule rows | 94.3% → 92.5% | 92.5% → 96.2% |
+| A meat answered as another meat | 5 → 8 | 8 → 5 |
+| Off-list answers | 22 → 0 | 29 → 0 |
+| Truncated calls | 57 → 0 | 50 → 0 |
+| USD per 1,000 products | $0.05 → $0.07 | $0.71 → $0.89 |
+
+**Read now, that rule keeps Sonnet**, still the only model within a point of the best: Haiku trails
+it by 1.6 points on random rows and swaps more meats. The verdict is still weak, since 1.6 points on
+400 rows is six or seven products. Haiku's drop on soups is 10 changed answers, 8 of them after a
+different cleaned name, nearly all flipping between Milk or a meat and "No Matches Found": the
+questions sent to GBD, where the cache itself splits, so that slice means little until PR 2. Opus is
+best on the meats but no better on random rows, at 3.7× Sonnet's cost. So PR 1 ends by re-running
+the eval and applying the rule again.
 
 *Rejected: choosing the model with the eval before switching.* Production was down, and the eval
 needed the new client anyway. Changing `DEFAULT_MODEL` between Claude models is also the rollback.
@@ -131,8 +141,8 @@ blind spot: rows where every model agrees with a wrong cache are never shown to 
   entry, nothing else.
 - **No `temperature`.** The SDK is `anthropic` 2.x, on API version 2026-10-21, which rejects it on
   every model. Small differences from run to run are absorbed by the verified cache.
-- **Refusals** raise a `ValueError` naming `stop_details.category`, which fails the run. The eval
-  drew none.
+- **Refusals** raise a `ValueError` naming `stop_details.category`, which fails the run. Neither
+  eval run drew one, nor a truncated call, nor a 400 from a format beside `thinking`.
 - *Rejected: server-side `fallbacks`.* They retry only `cyber` and `frontier_llm` refusals, which a
   product name will not draw, and would make the served model, and so the price, vary per call.
 
@@ -214,7 +224,6 @@ prompt. The soup slice should rise, and random-row accuracy must not drop.
 - **Adjudication:** the first run's 190 disagreements are reviewed, and `fixes.sql` is ready to
   send to GBD (see § Cache fixes). Waiting on GBD: approval of decisions 1–4 and rulings on
   questions 5–9. Record here the date it went out, and nudge after two weeks.
-- **Structured-outputs re-run:** owed (§ Model); its `report.md` goes beside the baseline table.
 - **Eval spend:** a run is ~6,000 calls, about $3.40 across the three models, nearly all of it
   Opus. `run --models claude-haiku-5-5 claude-sonnet-5-5` skips it.
 
