@@ -39,7 +39,7 @@ Examples of Yogurt include parfait
 
 - Guacamole is not "Legumes".
 
-- Veal belongs to the category "Beef and Buffalo Meat"
+- Veal and venison belong to the category "Beef and Buffalo Meat"
 - Cheeseburger should be classified as "Beef and Buffalo Meat".
 
 - Scallops, cockles, clams, squid and octupus all belong to the category "Fish & Mollusks" not "Shellfish (Shrimp & lobster)".
@@ -47,7 +47,10 @@ Examples of Yogurt include parfait
 
 - Turkey bacon, turkey sausage and Turkey patties, as well as duck should all be classified as "Poultry (Chicken & Turkey)".
 
-- Assume meatballs, sausages and meat loaf is "Pork (pig meat)" unless otherwise stated (e.g. "plant based sausages" are "Plant-based Meats", "meatloaf beef" is "Beef and Buffalo Meat").
+- Assume meatballs, sausages, hot dogs, pepperoni, salami and meat loaf are "Pork (pig meat)" only when they name no meat and are not Halal or Kosher:
+  - When one names a meat, it is that meat: "meatloaf beef" is "Beef and Buffalo Meat" and "chicken hot dog" is "Poultry (Chicken & Turkey)".
+  - Halal and Kosher products never contain pork, so one that names no meat is "Beef and Buffalo Meat": "halal salami" and "kosher hot dogs" are "Beef and Buffalo Meat".
+  - Plant-based ones are "Plant-based Meats", for example "plant based sausages".
 
 - Soups such as chicken soup, potato soup, "soup bases" and clam chowder should be classified as "No Matches Found" except where you suspect it is a milk or cream based soup, in which case it should be classified as "Milk (Cow's milk)".
 - "Creamer" should be classified as "Milk (Cow's milk)", except when it is non-dairy creamer, where it should be classified as "Oat Milk". Half and half should also be classified as "Milk (Cow's milk)"
