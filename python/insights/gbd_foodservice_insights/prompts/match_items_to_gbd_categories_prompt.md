@@ -49,7 +49,7 @@ Examples of Yogurt include parfait
 
 - Assume meatballs, sausages, hot dogs, pepperoni, salami and meat loaf are "Pork (pig meat)" only when they name no meat and are not Halal or Kosher:
   - When one names a meat, it is that meat: "meatloaf beef" is "Beef and Buffalo Meat" and "chicken hot dog" is "Poultry (Chicken & Turkey)".
-  - Halal and Kosher products never contain pork, so one that names no meat is "Beef and Buffalo Meat": "halal salami" and "kosher hot dogs" are "Beef and Buffalo Meat".
+  - Halal and Kosher products never contain pork. One that names a meat is that meat, like "kosher chicken sausage" is "Poultry (Chicken & Turkey)"; one that names no meat is "Beef and Buffalo Meat", like "halal salami" and "kosher hot dogs".
   - Plant-based ones are "Plant-based Meats", for example "plant based sausages".
 
 - Soups such as chicken soup, potato soup, "soup bases" and clam chowder should be classified as "No Matches Found" except where you suspect it is a milk or cream based soup, in which case it should be classified as "Milk (Cow's milk)".

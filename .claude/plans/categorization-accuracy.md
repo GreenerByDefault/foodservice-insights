@@ -86,24 +86,25 @@ pork rule (both § The request). All three runs are scored against the cache as 
 
 | First run → structured outputs → pork rule | Haiku 5.5 | Sonnet 5.5 |
 |---|---|---|
-| Accuracy, 400 random rows | 92.0% → 93.2% → 93.8% | 94.0% → 94.8% → 94.0% |
-| Accuracy, 159 pork-rule rows | 94.3% → 92.5% → 95.0% | 92.5% → 96.2% → 99.4% |
+| Accuracy, 400 random rows | 92.0% → 93.2% → 93.0% | 94.0% → 94.8% → 94.8% |
+| Accuracy, 159 pork-rule rows | 94.3% → 92.5% → 97.5% | 92.5% → 96.2% → 99.4% |
 | A meat answered as another meat | 5 → 8 → 3 | 8 → 5 → 1 |
 | Off-list answers | 22 → 0 → 0 | 29 → 0 → 0 |
 | Truncated calls | 57 → 0 → 0 | 50 → 0 → 0 |
 | USD per 1,000 products | $0.05 → $0.07 → $0.07 | $0.71 → $0.89 → $0.93 |
 
-**The rule keeps Sonnet.** Haiku is now within a point of it on random rows but swaps three meats to
+**The rule keeps Sonnet.** Haiku is within two points of it on random rows and swaps three meats to
 Sonnet's one, and with adaptive thinking, the one retry the rule allows, it still swapped three
 (93.5% random, 97.5% pork rule, $0.08 per 1,000). Two of Haiku's swaps are its clean call's doing,
 in both runs: it drops "beef" from a beef meatloaf, and reads a run-together brand name as "halal".
 Sonnet's one is a chicken-and-beef meatball, and the cache itself splits on mixed meats.
 
-**A point on random rows is noise.** Between the last two runs Haiku changed 68 of 1,012 answers
-and Sonnet 27, each fixing about as many as it broke. Sonnet's dip of three random rows was a
-nutrition shake, green beans, a lentil soup and a chicken tortilla, which the pork rule does not
-touch, most with the same cleaned name as before. So "random-row accuracy must not drop" means no
-drop beyond a point, or a drop traced to the change in the rows that moved.
+**A point on random rows is noise.** Between the structured-outputs run and the first run of the
+pork rule, Haiku changed 68 of 1,012 answers and Sonnet 27, each fixing about as many as it broke.
+Sonnet's random rows dipped to 94.0% there, on a nutrition shake, green beans, a lentil soup and a
+chicken tortilla, which the rule does not touch, then came back to 94.8% on a re-run that changed
+only one example's wording. So "random-row accuracy must not drop" means no drop beyond a point,
+or a drop traced to the change in the rows that moved.
 
 *Rejected: choosing the model with the eval before switching.* Production was down, and the eval
 needed the new client anyway. Changing `DEFAULT_MODEL` between Claude models is also the rollback.
