@@ -43,7 +43,7 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 
 ## Decisions
 
-### Model: Sonnet 5.5 stays, until adjudication or PRs 1 and 2 say otherwise
+### Model: Sonnet 5.5 stays, until adjudication or PR 1 says otherwise
 
 | | Haiku 5.5 | Sonnet 5.5 | Opus 5.5 |
 |---|---|---|---|
@@ -57,7 +57,9 @@ restored entree rows with their final labels, and 35 Pork→Beef fixes in the pr
 - A call is ~1,400 input tokens, ~1,350 of them the cached system prompt. Claude's newer tokenizers
   count more than the script's 1,050; nobody has measured the real figure yet
   (`switch-from-openai-to-claude.md`, PR 2).
-- A call writes ~10 output tokens; Opus averaged ~41 with its thinking.
+- A call writes ~10 output tokens; Opus averaged ~41 with its thinking. Structured outputs, which
+  wrap each answer in JSON, have since raised the eval's cost per product by ~25% on Haiku and
+  Sonnet, so read their rows as ~25% low.
 - Prices are Anthropic's list as of 2026-11-10, the date `MODELS` cites. Re-check them on the day.
 - For comparison, gpt-4.1-mini cost ~$48 under Planned, uncached.
 
@@ -78,19 +80,33 @@ best model does. If Haiku falls short only on the meat slices, try it once more 
 thinking at `low` effort (its `thinking` in `MODELS` set to `None`, with room in its `max_tokens`)
 before moving up.
 
-**Read now, that rule keeps Sonnet**, the only model within a point of the best. It is a weak
-verdict: two points on 400 rows is eight products, inside the noise, and Sonnet swaps meats most
-often, nearly all of it the pork rule. Opus is best on the meats but no better on random rows, at
-3.7× Sonnet's cost. Haiku costs 14× less than Sonnet, and 11 of its 32 errors on random rows are
-truncated or off-list replies, which PR 1 removes. So PRs 1 and 2 each end by re-running the eval
-and applying the rule again, and Haiku is the likeliest change.
+**After structured outputs** (§ The request), re-run on the same 1,012 products and with both runs
+scored against the cache as re-pulled on 2026-11-22. Opus was left out, since it had no format
+failures to remove:
+
+| | Haiku 5.5 | Sonnet 5.5 |
+|---|---|---|
+| Accuracy, 400 random rows | 92.0% → 93.2% | 94.0% → 94.8% |
+| Accuracy, 159 pork-rule rows | 94.3% → 92.5% | 92.5% → 96.2% |
+| A meat answered as another meat | 5 → 8 | 8 → 5 |
+| Off-list answers | 22 → 0 | 29 → 0 |
+| Truncated calls | 57 → 0 | 50 → 0 |
+| USD per 1,000 products | $0.05 → $0.07 | $0.71 → $0.89 |
+
+**Read now, that rule keeps Sonnet**, still the only model within a point of the best: Haiku trails
+it by 1.6 points on random rows and swaps more meats. The verdict is still weak, since 1.6 points on
+400 rows is six or seven products. Haiku's drop on soups is 10 changed answers, 8 of them after a
+different cleaned name, nearly all flipping between Milk or a meat and "No Matches Found": the
+questions sent to GBD, where the cache itself splits, so that slice means little until PR 2. Opus is
+best on the meats but no better on random rows, at 3.7× Sonnet's cost. So PR 1 ends by re-running
+the eval and applying the rule again.
 
 *Rejected: choosing the model with the eval before switching.* Production was down, and the eval
 needed the new client anyway. Changing `DEFAULT_MODEL` between Claude models is also the rollback.
 
 ### The eval: the verified cache is the answer key, and a human settles disagreements
 
-`python -m gbd_foodservice_insights_lab.categorization.model_eval run` (in `python/lab`) cleans and
+`uv run python -m gbd_foodservice_insights_lab.categorization.model_eval run` cleans and
 matches ~1,000 cached products with each model in `MODELS`, exactly as the product does for a cache
 miss, and writes everything to a new `python/lab/client_work/model_eval/<UTC time>/`. The sample is
 400 random rows, up to 100 of each hard slice, and every product the pork rule covers but should not
@@ -104,20 +120,29 @@ cost. Only `report.md` holds no product names, so only it goes in a PR.
 Every change to a prompt or to the request re-runs it, and applies the decision rule above. Its
 blind spot: rows where every model agrees with a wrong cache are never shown to anyone.
 
-### The request: the old prompts, thinking off, system prompt cached
+### The request: the old prompts, thinking off, a structured answer, system prompt cached
 
-- **The prompts are gpt-4.1-mini's, unchanged so far**, so the first eval measured the models and
-  not a prompt edit. PRs 1–3 change them, each measured against that baseline.
+- **The prompts are gpt-4.1-mini's**, so the first eval measured the models and not a prompt edit.
+  The only change since is the match prompt losing "Return only the category, worded exactly as it
+  is listed", which the schema now enforces; the clean prompt's rules shape the name, not the
+  format, and stay. PRs 1–2 change the match prompt, each measured against that baseline.
+- **Every answer is a one-field JSON object** (`output_config.format`): `match` answers
+  `{"category": ...}` from an `enum` of the categories it is given plus "No Matches Found", and
+  `clean` answers `{"name": ...}`. A conversational reply cannot happen, and a reply cut off at
+  `max_tokens` is not valid JSON, so it raises a `ValueError`, which fails a product run and the
+  eval counts as an error. `categorize_with_llm`'s unrecognized-answer handling stays as a guard
+  for other `LlmClient`s.
 - **`MODELS` maps each model id to its `ModelSettings`**: its price, how its request turns thinking
   off, and its `max_tokens`. Haiku sends `thinking={"type": "disabled"}`, Sonnet
   `{"type": "between_tools"}` (`disabled` is a 400 there), and Opus nothing, since its thinking
-  cannot be turned off. All three run at `output_config={"effort": "low"}`. Haiku and Sonnet cap
-  at 30 tokens; Opus at 2,000, to leave room for its thinking. `truncated` flags a reply that hits
-  the cap. Trying a model with thinking on is a change to its `thinking` entry, nothing else.
+  cannot be turned off. All three run at `effort: low`. Haiku and Sonnet cap at 100 tokens, room
+  for the JSON around a name; Opus at 2,000, to leave room for its thinking. `LlmCall.truncated`
+  flags a reply that hits the cap. Trying a model with thinking on is a change to its `thinking`
+  entry, nothing else.
 - **No `temperature`.** The SDK is `anthropic` 2.x, on API version 2026-10-21, which rejects it on
   every model. Small differences from run to run are absorbed by the verified cache.
-- **Refusals** raise a `ValueError` naming `stop_details.category`, which fails the run. The eval
-  drew none.
+- **Refusals** raise a `ValueError` naming `stop_details.category`, which fails the run. Neither
+  eval run drew one, nor a truncated call, nor a 400 from a format beside `thinking`.
 - *Rejected: server-side `fallbacks`.* They retry only `cyber` and `frontier_llm` refusals, which a
   product name will not draw, and would make the served model, and so the price, vary per call.
 
@@ -128,7 +153,7 @@ whole cache:
 
 | | Rows | What happens |
 |---|---|---|
-| The model is wrong | 146 | Nothing, or a prompt fix in PRs 1–3 |
+| The model is wrong | 146 | Nothing, or a prompt fix in PRs 1–2 |
 | The cache is wrong, and the rule is clear | 14 | GBD approves; Eric runs the SQL |
 | Cream soups: the prompt says Milk, the cache splits | 7 | GBD confirms the rule |
 | Meat soups, or no rule written anywhere | 23 | GBD decides the rule |
@@ -139,7 +164,7 @@ The SQL for the 14 also fixes 8 rows outside the sample with the same errors, so
   over every cached row it covers, not only the sampled ones: the cache splits on soups as a
   whole, so fixing the sample alone leaves it inconsistent.
 - **The stakes are small except for meats.** 22 rows of ~41,400 barely move a report. A meat
-  answered as another meat does, since beef's emission factor is ~4× pork's, and PR 2 covers it.
+  answered as another meat does, since beef's emission factor is ~4× pork's, and PR 1 covers it.
 - **Unwritten conventions the cache follows consistently** go in the prompt without asking:
   venison → Beef, green beans → Legumes, vegan mains → Plant-based Meats, a hot dog or meatball
   naming no meat → Pork.
@@ -151,32 +176,10 @@ The SQL for the 14 also fixes 8 rows outside the sample with the same errors, so
 
 ### PR shape: one change per PR, each measured by the eval
 
-PRs 1 and 2 decide the model and need nothing from anyone, so they come first, in either order.
-PR 3 waits on GBD's answers, and only it does.
+PR 1 decides the model, with the structured-outputs re-run, and needs nothing from anyone, so it
+comes first. PR 2 waits on GBD's answers, and only it does.
 
-## PR 1 — Structured outputs, so every answer is one category or one name
-
-**Why:** Haiku and Sonnet sometimes reply conversationally instead of with one line: they ask for
-clarification, explain a non-food item, or correct themselves mid-answer. Out of ~1,000 products
-that was 57 and 50 truncated calls and 22 and 29 off-list answers. A chatty `clean` reply is worse
-than an off-list `match`: cut off at 30 tokens, it becomes the cleaned name that `match` sees and
-that goes back as a suggestion.
-
-- **`match`:** `output_config.format` with a JSON schema whose answer is an `enum` of
-  `category_names()` plus "No Matches Found", so an off-list answer cannot happen.
-  `categorize_with_llm`'s unrecognized-answer handling stays as a guard.
-- **`clean`:** a schema with one string, the cleaned name.
-- **Check first** that each model accepts a format alongside its `thinking` setting, Sonnet's
-  `between_tools` especially, and give `max_tokens` room for the JSON around the answer.
-- **The match prompt's "Return only the category, worded exactly as it is listed"** becomes what
-  the schema enforces; drop that sentence and nothing else, and leave the clean prompt's rules,
-  which shape the name rather than the format.
-- **Tests:** `python/insights/tests/categorization/test_llm.py`, for the request and for reading
-  the answer out of the JSON.
-- **Then** re-run the eval and apply the decision rule. Off-list answers should read zero and
-  truncations near it.
-
-## PR 2 — The pork rule yields to a stated meat, Halal or Kosher
+## PR 1 — The pork rule yields to a stated meat, Halal or Kosher
 
 **Why:** the eval's pork-rule slice found all three models doing what gpt-4.1-mini did. All three
 called a Kosher meatball Pork, Haiku and Sonnet called Halal pepperoni Pork, and Sonnet called a
@@ -188,7 +191,7 @@ venison sausage and a beef meatloaf Pork. These are most of every model's meat s
 - **Then** re-run the eval. The pork-rule slice should rise, meat swaps fall, and random-row
   accuracy must not drop.
 
-## PR 3 — Write GBD's rulings into the match prompt (blocked on GBD)
+## PR 2 — Write GBD's rulings into the match prompt (blocked on GBD)
 
 **Why:** the eval's soup slice means little until GBD picks a rule, and the cache follows
 conventions the prompt never states. Each ruling below needs a line in the prompt and a SQL pass
