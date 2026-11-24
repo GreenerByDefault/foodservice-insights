@@ -54,6 +54,10 @@ export async function lockReportRateLimit(
 
 /** How many `report` rows exist for `organizationId`, and separately for `userId`, created within
  * the last `windowSeconds`. Call `lockReportRateLimit` first, in the same transaction.
+ *
+ * The organization count leaves out reports a superadmin created: superadmins are exempt from the
+ * limit, and GBD staff making reports inside a client's organization must not use up that
+ * client's budget.
  */
 export async function countReportsSince(
   database: DatabaseExecutor,
@@ -70,6 +74,16 @@ export async function countReportsSince(
     .select((eb) => eb.fn.countAll<string>().as('count'))
     .where('organizationId', '=', organizationId)
     .where('createdAt', '>=', since)
+    .where(({ not, exists, selectFrom }) =>
+      not(
+        exists(
+          selectFrom('appUser')
+            .select('appUser.id')
+            .whereRef('appUser.id', '=', 'report.createdByUserId')
+            .where('appUser.isSuperadmin', '=', true),
+        ),
+      ),
+    )
     .executeTakeFirstOrThrow();
 
   const userRow = await database

@@ -37,7 +37,8 @@ PDF and client workbook as step 2, which calls the same product code. Only the l
   would reject;
 - cleans units and writes the QA workbook, which step 5 reads for both periods of a pilot.
 
-PLATE caps reports per user and per organization, superadmins included
+PLATE caps reports per user and per organization. Superadmins are exempt, and their reports do
+not count toward the organization's cap
 ([`requirements.md` § Abuse limits](../../docs/requirements.md#abuse-limits)).
 
 **Open:** which one a client's analysis should default to.

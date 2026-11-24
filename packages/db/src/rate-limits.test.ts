@@ -20,6 +20,7 @@ import {
   withConcurrentTransactions,
 } from './testing/concurrency.ts';
 import {
+  insertAppUser,
   insertOrganization,
   insertOrganizationInvite,
   insertReport,
@@ -381,5 +382,25 @@ describe('countReportsSince', () => {
     });
 
     expect(counts).toEqual({ organizationCount: 1, userCount: 1 });
+  });
+
+  test('leaves a superadmin’s reports out of the organization count', async () => {
+    const counts = await withRollback(DATABASE, async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+      const superadmin = await insertAppUser(transaction, { isSuperadmin: true });
+      await insertReport(transaction, {
+        organizationId: organization.id,
+        createdByUserId: superadmin.id,
+      });
+      await insertReport(transaction, { organizationId: organization.id, createdByUserId: null });
+
+      return await countReportsSince(transaction, {
+        organizationId: organization.id,
+        userId: admin.id,
+        windowSeconds: HOUR_MS / 1000,
+      });
+    });
+
+    expect(counts).toEqual({ organizationCount: 1, userCount: 0 });
   });
 });

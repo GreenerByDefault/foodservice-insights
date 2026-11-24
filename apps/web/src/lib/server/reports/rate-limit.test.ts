@@ -36,6 +36,7 @@ describe('checkReportRateLimit', () => {
       const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(result).toBeUndefined();
@@ -59,6 +60,7 @@ describe('checkReportRateLimit', () => {
       const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(result).toEqual({
@@ -87,6 +89,7 @@ describe('checkReportRateLimit', () => {
       const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(result).toEqual({
@@ -108,6 +111,7 @@ describe('checkReportRateLimit', () => {
       const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(result).toEqual({
@@ -133,6 +137,7 @@ describe('checkReportRateLimit', () => {
       const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(result).toEqual({
@@ -155,6 +160,27 @@ describe('checkReportRateLimit', () => {
       const result = await checkReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
+      });
+
+      expect(result).toBeUndefined();
+    });
+  });
+
+  test('exempts a superadmin even at the hourly ceiling', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+      for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
+        await insertReport(transaction, {
+          organizationId: organization.id,
+          createdByUserId: admin.id,
+        });
+      }
+
+      const result = await checkReportRateLimit(transaction, {
+        organizationId: organization.id,
+        userId: admin.id,
+        isSuperadmin: true,
       });
 
       expect(result).toBeUndefined();
@@ -173,6 +199,7 @@ describe('lockAndCheckReportRateLimit', () => {
       const result = await lockAndCheckReportRateLimit(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(result).toEqual({
@@ -180,6 +207,26 @@ describe('lockAndCheckReportRateLimit', () => {
         window: 'hourly',
         limit: HOURLY_REPORT_LIMIT,
       } satisfies RateLimitExceeded);
+    });
+  });
+
+  test('exempts a superadmin even at the hourly ceiling', async () => {
+    await withRollback(database(), async (transaction) => {
+      const { organization, admin } = await insertOrganization(transaction);
+      for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
+        await insertReport(transaction, {
+          organizationId: organization.id,
+          createdByUserId: admin.id,
+        });
+      }
+
+      const result = await lockAndCheckReportRateLimit(transaction, {
+        organizationId: organization.id,
+        userId: admin.id,
+        isSuperadmin: true,
+      });
+
+      expect(result).toBeUndefined();
     });
   });
 
@@ -199,6 +246,7 @@ describe('lockAndCheckReportRateLimit', () => {
       const alphaResult = await lockAndCheckReportRateLimit(alpha.transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
       expect(alphaResult).toBeUndefined();
 
@@ -213,6 +261,7 @@ describe('lockAndCheckReportRateLimit', () => {
         lockAndCheckReportRateLimit(transaction, {
           organizationId: organization.id,
           userId: admin.id,
+          isSuperadmin: false,
         }),
       );
 
