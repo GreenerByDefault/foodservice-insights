@@ -146,7 +146,7 @@ df["total_pack_weight"]
 
 # %%
 # Check for problematic weights.
-df[df["total_pack_weight"].isna() | df["total_pack_weight"] < 1]
+df[df["total_pack_weight"].isna() | (df["total_pack_weight"] < 1)]
 
 
 # %%

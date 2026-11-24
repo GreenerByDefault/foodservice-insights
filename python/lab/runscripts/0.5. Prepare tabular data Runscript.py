@@ -3,7 +3,6 @@
 # ruff: noqa: E402
 import subprocess  # nosec B404
 import sys
-from pathlib import Path
 
 import pandas as pd
 from dotenv import find_dotenv, load_dotenv
@@ -27,6 +26,7 @@ from gbd_foodservice_insights_lab.extraction.tabular_io import (
 )
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     detect_client_structure,
+    get_customer_template_dir,
     save_client_metadata,
     setup_pandas_display,
 )
@@ -267,18 +267,18 @@ full_data.to_csv(output_file, index=False)
 
 # %%
 # Run step 1 categorization on the CSV produced in this file.
-script_path = Path(__file__).resolve().parent / "1. Categorize Runscript.py"
-if not script_path.exists():
-    raise FileNotFoundError(f"Categorize runscript not found at: {script_path}")
+# Set to False for an experiment, so this run's answers stay out of the cache's review queue.
+PUSH_SUGGESTIONS = True
 
 data_type = "serving" if "serving" in procurement_serving.lower() else "procurement"
 cmd = [
     sys.executable,
-    str(script_path),
+    str(get_customer_template_dir() / "1. Categorize Runscript.py"),
     "--input",
     str(output_file),
     "--data-type",
     data_type,
+    *([] if PUSH_SUGGESTIONS else ["--no-push-suggestions"]),
 ]
 
 print("Running:", " ".join(cmd))

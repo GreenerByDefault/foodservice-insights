@@ -87,7 +87,38 @@ def test_categorize_runscript_pulls_then_passes_its_arguments_straight_through(
         "data_type": "serving",
         "gemini_client": gemini_client,
         "date_format": "%b-%y",
+        "push_suggestions": True,
     }
+
+
+def test_categorize_runscript_passes_no_push_suggestions_through(monkeypatch, tmp_path):
+    module = _load_categorize_runscript_module()
+    called = {}
+
+    def _fake_categorize(**kwargs):
+        called.update(kwargs)
+        return pd.DataFrame(), _summary(str(tmp_path / "input.csv"))
+
+    monkeypatch.setattr(module, "pull_caches_if_configured", lambda: None)
+    monkeypatch.setattr(module, "categorize_spreadsheet_to_csvs", _fake_categorize)
+    monkeypatch.setattr(module, "setup_api_clients", lambda **_: {})
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(module, "load_dotenv", lambda **_: None)
+    monkeypatch.setattr(module, "update_metadata_with_categorization_stats", lambda _: None)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "1. Categorize Runscript.py",
+            "--input",
+            str(tmp_path / "input.csv"),
+            "--no-push-suggestions",
+        ],
+    )
+
+    module.main()
+
+    assert called["push_suggestions"] is False
 
 
 def test_produce_food_report_runscript_passes_input_and_diner_meals_straight_through(
