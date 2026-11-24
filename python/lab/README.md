@@ -56,7 +56,8 @@ both files, hand edits included.**
 Step 1 suggests its new categorizations and entree labels back to the database. A suggestion is
 used by no run until someone verifies it in Supabase Studio; the next pull then brings it down.
 The first suggestion of a product wins, so correct an answer in Studio, not in a file, and pass
-`push_suggestions=False` to keep a prompt experiment's answers out.
+step 1 `--no-push-suggestions` to keep a prompt experiment's answers out. Each step 0.5 sets it
+from `PUSH_SUGGESTIONS` beside its launch of step 1.
 
 Without the string, step 1 warns, sends the LLM whatever the files on disk do not answer, and
 suggests nothing.

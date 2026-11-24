@@ -10,6 +10,7 @@ Usage:
     python "1. Categorize Runscript.py" --input data.csv
     python "1. Categorize Runscript.py" --input data.csv --data-type serving
     python "1. Categorize Runscript.py" --input data.csv --output results.csv --date-format "%b-%y"
+    python "1. Categorize Runscript.py" --input data.csv --no-push-suggestions
 """
 
 import argparse
@@ -49,6 +50,12 @@ def main() -> None:
     parser.add_argument(
         "--date-format", default=None, help="Date format string (default: auto-detect)"
     )
+    parser.add_argument(
+        "--no-push-suggestions",
+        dest="push_suggestions",
+        action="store_false",
+        help="Keep this run's new answers out of the cache's review queue, e.g. for an experiment",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
@@ -77,6 +84,7 @@ def main() -> None:
         llm=AnthropicLlmClient.from_env(),
         gemini_client=clients.get("gemini_client"),
         date_format=args.date_format,
+        push_suggestions=args.push_suggestions,
     )
 
     # Save categorization statistics to client_metadata.json
