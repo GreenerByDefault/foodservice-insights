@@ -7,7 +7,7 @@ dependencies = [
     "anthropic>=2.8,<3",
     "chardet>=7.7.0,<8",
     "gbd-foodservice-insights",
-    "google-genai>=2.34.0,<3",
+    "google-genai>=3.6.1,<4",
     "ipykernel>=7.4.0,<8",
     "ipython>=8,<10",
     "Levenshtein>=0.27,<1",
