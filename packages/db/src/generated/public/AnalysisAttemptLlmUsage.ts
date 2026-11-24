@@ -23,13 +23,13 @@ export default interface AnalysisAttemptLlmUsageTable {
 
   requestedModel: ColumnType<string, string, string>;
 
-  /** The model that answered, as OpenAI resolved the requested one. Null when no call got a response; the latest if it changed mid-run. */
+  /** The model that answered, as the provider resolved the requested one. Null when no call got a response; the latest if it changed mid-run. */
   servedModel: ColumnType<string | null, string | null, string | null>;
 
   /** Calls the analysis made to its LLM client. A call retries, so it can span several requests, and stops at its first successful one. */
   calls: ColumnType<number, number, number>;
 
-  /** HTTP requests to OpenAI, retries included. */
+  /** HTTP requests to the LLM provider, retries included. */
   requests: ColumnType<number, number, number>;
 
   failedRequests: ColumnType<number, number, number>;
@@ -38,7 +38,7 @@ export default interface AnalysisAttemptLlmUsageTable {
 
   truncatedCalls: ColumnType<number, number, number>;
 
-  /** Including cached_input_tokens, as OpenAI counts them. */
+  /** Every input token, including cached_input_tokens and any written to the cache. */
   inputTokens: ColumnType<number, number, number>;
 
   cachedInputTokens: ColumnType<number, number, number>;
