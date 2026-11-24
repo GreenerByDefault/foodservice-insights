@@ -21,8 +21,8 @@ export type RateLimitWindow = 'hourly' | 'weekly';
 export type RateLimitExceeded = { scope: RateLimitScope; window: RateLimitWindow; limit: number };
 
 /** Who is creating a report, and where. A superadmin is exempt: the limits exist only to stop
- * abuse, and GBD's own staff run client analyses through the app. Their reports still count
- * toward the organization's limit for everyone else. */
+ * abuse, and GBD's own staff run client analyses through the app. `countReportsSince` leaves their
+ * reports out of the organization's count, too. */
 export type ReportCreator = {
   organizationId: OrganizationId;
   userId: UserId;
