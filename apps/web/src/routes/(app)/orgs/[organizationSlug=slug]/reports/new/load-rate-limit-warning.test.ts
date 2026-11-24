@@ -22,6 +22,7 @@ describe('_loadRateLimitWarning', () => {
       const data = await _loadRateLimitWarning(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(data).toEqual({ rateLimitWarning: undefined });
@@ -38,6 +39,7 @@ describe('_loadRateLimitWarning', () => {
       const data = await _loadRateLimitWarning(transaction, {
         organizationId: organization.id,
         userId: admin.id,
+        isSuperadmin: false,
       });
 
       expect(data).toEqual({

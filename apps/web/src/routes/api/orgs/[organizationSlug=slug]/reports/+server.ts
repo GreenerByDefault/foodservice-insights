@@ -19,6 +19,7 @@ import type { ReportMetadata } from '#lib/reports/metadata.js';
 import { type RejectedUploadRecord, userFacingRejection } from '#lib/reports/rejection.js';
 import type { FileDescription, RawSubmission, UploadedFile } from '#lib/reports/submission.js';
 import { readSubmission, validateSubmission } from '#lib/reports/submission.js';
+import { requireAuth } from '#lib/server/auth/guards.js';
 import { requireOrganizationRouteContext } from '#lib/server/auth/route-context.js';
 import { database, withDbErrorHandling } from '#lib/server/db.js';
 import { logger } from '#lib/server/log.js';
@@ -26,11 +27,12 @@ import {
   describeRateLimitExceeded,
   lockAndCheckReportRateLimit,
   type RateLimitExceeded,
+  type ReportCreator,
 } from '#lib/server/reports/rate-limit.js';
 import { blobStore, withBlobStoreErrorHandling } from '#lib/server/storage.js';
 import type { RequestHandler } from './$types';
 
-export type Uploader = { organizationId: OrganizationId; organizationSlug: string; userId: UserId };
+export type Uploader = ReportCreator & { organizationSlug: string };
 
 export const POST: RequestHandler = async (event) => {
   const { organizationId, actor } = await requireOrganizationRouteContext(database(), event);
@@ -38,7 +40,12 @@ export const POST: RequestHandler = async (event) => {
   return await _createReport(
     database(),
     blobStore(),
-    { organizationId, organizationSlug: event.params.organizationSlug, userId: actor.userId },
+    {
+      organizationId,
+      organizationSlug: event.params.organizationSlug,
+      userId: actor.userId,
+      isSuperadmin: requireAuth(event.locals).user.isSuperadmin,
+    },
     event.request,
   );
 };
@@ -62,10 +69,7 @@ export async function _createReport(
 
   // Refuse before spending a blob write on an upload that's already over the rate limit.
   const initialRateLimitViolation = await withDbErrorHandling(
-    () =>
-      withTransaction(db, (transaction) =>
-        lockAndCheckReportRateLimit(transaction, { organizationId, userId }),
-      ),
+    () => withTransaction(db, (transaction) => lockAndCheckReportRateLimit(transaction, uploader)),
     { action: 'check the report rate limit', context: { organizationId } },
   );
   if (initialRateLimitViolation) {
@@ -95,10 +99,7 @@ export async function _createReport(
       withTransaction(db, async (transaction) => {
         // Even though we already checked the rate limit, we must recheck because this
         // is a new database transaction.
-        const exceeded = await lockAndCheckReportRateLimit(transaction, {
-          organizationId,
-          userId,
-        });
+        const exceeded = await lockAndCheckReportRateLimit(transaction, uploader);
         if (exceeded) {
           const rejection = await recordRateLimitRejection(
             transaction,

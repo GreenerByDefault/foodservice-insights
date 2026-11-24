@@ -20,6 +20,15 @@ export type RateLimitScope = 'organization' | 'user';
 export type RateLimitWindow = 'hourly' | 'weekly';
 export type RateLimitExceeded = { scope: RateLimitScope; window: RateLimitWindow; limit: number };
 
+/** Who is creating a report, and where. A superadmin is exempt: the limits exist only to stop
+ * abuse, and GBD's own staff run client analyses through the app. Their reports still count
+ * toward the organization's limit for everyone else. */
+export type ReportCreator = {
+  organizationId: OrganizationId;
+  userId: UserId;
+  isSuperadmin: boolean;
+};
+
 /** Whether `organizationId` or `userId` is at or over its hourly or weekly report limit, from an
  * unlocked read. `undefined` means neither is.
  *
@@ -29,9 +38,9 @@ export type RateLimitExceeded = { scope: RateLimitScope; window: RateLimitWindow
  */
 export async function checkReportRateLimit(
   database: DatabaseExecutor,
-  { organizationId, userId }: { organizationId: OrganizationId; userId: UserId },
+  { organizationId, userId, isSuperadmin }: ReportCreator,
 ): Promise<RateLimitExceeded | undefined> {
-  if (REPORT_RATE_LIMIT === 'off') return undefined;
+  if (REPORT_RATE_LIMIT === 'off' || isSuperadmin) return undefined;
 
   const hourly = await countReportsSince(database, {
     organizationId,
@@ -69,10 +78,11 @@ export async function checkReportRateLimit(
  */
 export async function lockAndCheckReportRateLimit(
   database: DatabaseExecutor,
-  { organizationId, userId }: { organizationId: OrganizationId; userId: UserId },
+  creator: ReportCreator,
 ): Promise<RateLimitExceeded | undefined> {
-  await lockReportRateLimit(database, { organizationId, userId });
-  return checkReportRateLimit(database, { organizationId, userId });
+  if (creator.isSuperadmin) return undefined;
+  await lockReportRateLimit(database, creator);
+  return checkReportRateLimit(database, creator);
 }
 
 const WINDOW_PHRASE: Record<RateLimitWindow, string> = {

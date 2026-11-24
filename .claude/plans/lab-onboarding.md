@@ -23,7 +23,8 @@ agent, with the default marked **Open:**.
 - **A pilot needs the lab for both periods.** Step 5 reads each period's Raw Data sheet, which
   only the QA workbook has.
 - **PLATE caps reports** per user and per organization (`HOURLY_REPORT_LIMIT` and
-  `WEEKLY_REPORT_LIMIT`), and a superadmin is not exempt.
+  `WEEKLY_REPORT_LIMIT`). A superadmin is exempt, but their reports still count toward the
+  organization's cap, so heavy use in a client's own organization could lock the client out.
 
 ## Decisions
 
@@ -55,8 +56,8 @@ Each question says what its answer changes.
    each product got before sending a report? When PLATE makes a client's report, whose
    organization is it in: GBD's, or the client's own, so the client can see it?
    *Changes:* the default in the lab README's § PLATE or the lab. Using PLATE for baselines would need step 5 to read PLATE's
-   client workbook, or PLATE to offer per-product data. Heavy use would need the report caps to
-   fit.
+   client workbook, or PLATE to offer per-product data. Heavy use in clients' own organizations
+   would need superadmin reports left out of the organization's count.
 2. **Open: Which engagements are midway,** with a baseline from the old repo and a pilot still to
    come? Categorizations have been corrected since then (the pork rule, GBD's cache fixes), so
    re-running a baseline here would change numbers the client has already seen. Nobody has tested

@@ -297,6 +297,7 @@ Follow security best practices for web development.
 - **Hourly and weekly reports:** valid reports per rolling hour and per rolling 7 days, enforced
   per organization *and* per user — see `HOURLY_REPORT_LIMIT` and `WEEKLY_REPORT_LIMIT` in
   [`apps/web/src/lib/reports/limits.ts`](../apps/web/src/lib/reports/limits.ts).
+  Superadmins are exempt, though their reports still count toward the organization's limit.
 - **Report retries:** a report can be attempted up to `MAX_ANALYSIS_ATTEMPTS` times — see
   [`packages/db/src/constraints.ts`](../packages/db/src/constraints.ts). Retries exist for internal errors.
 - **Invites:** a user can invite `HOURLY_INVITE_LIMIT` people per hour — see

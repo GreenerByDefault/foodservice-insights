@@ -70,7 +70,7 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
             createUploadRequest(),
           );
 
@@ -89,7 +89,7 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
             createUploadRequest(),
           );
           const { reportId } = (await response.json()) as { reportId: ReportId };
@@ -146,7 +146,7 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
             createUploadRequest({ countsBasis: 'none', monthlyCounts: null }),
           );
           const { reportId } = (await response.json()) as { reportId: ReportId };
@@ -167,7 +167,7 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
             createUploadRequest(),
           );
           const { reportId } = (await response.json()) as { reportId: ReportId };
@@ -199,7 +199,7 @@ describe('_createReport', () => {
             const response = await _createReport(
               transaction,
               store,
-              { organizationId, organizationSlug, userId: adminUserId },
+              { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
               createUploadRequest({ workbook: new File([WORKBOOK], 'procurement.xlsx') }),
             );
             const { reportId } = (await response.json()) as { reportId: ReportId };
@@ -230,7 +230,7 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
             createUploadRequest(overrides),
           );
           const refusal = { status: response.status, body: await response.json() };
@@ -346,7 +346,26 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
+            createUploadRequest(),
+          );
+
+          expect(response.status).toBe(201);
+        },
+      );
+    });
+
+    test('accepts a superadmin’s upload at the limit', async () => {
+      await withOrganizationFixtures(
+        async ({ transaction, store, organizationId, organizationSlug, adminUserId }) => {
+          for (let i = 0; i < HOURLY_REPORT_LIMIT; i++) {
+            await insertReport(transaction, { organizationId, createdByUserId: null });
+          }
+
+          const response = await _createReport(
+            transaction,
+            store,
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: true },
             createUploadRequest(),
           );
 
@@ -367,7 +386,7 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
             createUploadRequest(),
           );
           const body = (await response.json()) as { summary: string };
@@ -414,7 +433,7 @@ describe('_createReport', () => {
           const response = await _createReport(
             transaction,
             store,
-            { organizationId, organizationSlug, userId: adminUserId },
+            { organizationId, organizationSlug, userId: adminUserId, isSuperadmin: false },
             createUploadRequest(),
           );
 
