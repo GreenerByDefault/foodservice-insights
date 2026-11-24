@@ -1,14 +1,17 @@
 import json
+import os
+import re
 from pathlib import Path
 
 import numpy as np
 import pytest
-from gbd_foodservice_insights_lab import PACKAGE_DIR
+from gbd_foodservice_insights_lab import PACKAGE_DIR, notebook_runscript_setup
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     ANALYSIS_CONTEXT_ENV_VAR,
     detect_client_structure,
     get_customer_template_dir,
     load_client_metadata,
+    load_repo_env,
     save_client_metadata,
     update_metadata_with_categorization_stats,
 )
@@ -31,7 +34,6 @@ def _write_client_metadata(data_dir: Path, **overrides: object) -> dict:
         "base_filepath": str(data_dir),
         "data_location": str(data_dir / "raw_data"),
         "parts": ["client", "baseline", "purchasing-procurement data"],
-        "env_path": str(data_dir / "test.env"),  # nosec B108
         "has_sub_client": False,
         "pdf_extracted": False,
     }
@@ -49,8 +51,7 @@ def test_runscripts_dir_is_discovered_from_package():
     assert (template_dir / "2. Produce Food Report.py").exists()
 
 
-def test_save_client_metadata_serializes_path_env_value(tmp_path):
-    """A Path-valued .env location should be saved as JSON text for the template runscript."""
+def test_save_client_metadata_serializes_data_location(tmp_path):
     data_dir = _create_baseline_procurement_dir(tmp_path)
     config = {
         "analysis_context": "baseline",
@@ -58,13 +59,50 @@ def test_save_client_metadata_serializes_path_env_value(tmp_path):
         "base_filepath": str(data_dir),
         "data_location": data_dir / "raw_data",
     }
-    env_path = tmp_path / ".env"
 
-    save_client_metadata(config, env_path=env_path, pdf_extracted=False)
+    save_client_metadata(config, pdf_extracted=False)
 
     metadata = json.loads((data_dir / "client_metadata.json").read_text())
-    assert metadata["env_path"] == str(env_path)
-    assert metadata["data_location"] == str(data_dir / "raw_data")
+    assert metadata == {
+        **config,
+        "data_location": str(data_dir / "raw_data"),
+        "has_sub_client": False,
+        "pdf_extracted": False,
+    }
+
+
+def test_load_client_metadata_drops_a_saved_env_path(tmp_path, monkeypatch):
+    data_dir = _create_baseline_procurement_dir(tmp_path)
+    _write_client_metadata(data_dir, env_path=str(tmp_path / ".env"))
+    monkeypatch.chdir(data_dir)
+
+    config, _ = load_client_metadata(analysis_context="baseline")
+
+    assert "env_path" not in config
+
+
+def test_repo_env_path_is_at_the_repo_root():
+    assert (notebook_runscript_setup.REPO_ENV_PATH.parent / "Justfile").exists()
+
+
+def test_load_repo_env_loads_the_file(tmp_path, monkeypatch):
+    env_path = tmp_path / ".env"
+    env_path.write_text("GBD_TEST_REPO_ENV=loaded\n")
+    monkeypatch.setattr(notebook_runscript_setup, "REPO_ENV_PATH", env_path)
+    monkeypatch.delenv("GBD_TEST_REPO_ENV", raising=False)
+
+    load_repo_env()
+
+    assert os.environ["GBD_TEST_REPO_ENV"] == "loaded"
+    monkeypatch.delenv("GBD_TEST_REPO_ENV")
+
+
+def test_load_repo_env_names_the_missing_file(tmp_path, monkeypatch):
+    env_path = tmp_path / ".env"
+    monkeypatch.setattr(notebook_runscript_setup, "REPO_ENV_PATH", env_path)
+
+    with pytest.raises(FileNotFoundError, match=re.escape(str(env_path))):
+        load_repo_env()
 
 
 def test_context_override_wins_env_and_path(tmp_path, monkeypatch):
@@ -209,7 +247,7 @@ def test_load_client_metadata_clean_units_prefers_categorized_output_file(tmp_pa
     monkeypatch.chdir(data_dir)
     monkeypatch.delenv(ANALYSIS_CONTEXT_ENV_VAR, raising=False)
 
-    config, _, _ = load_client_metadata(step="clean_units", analysis_context="baseline")
+    config, _ = load_client_metadata(step="clean_units", analysis_context="baseline")
 
     assert config["input_file"] == str(preferred_categorized)
     assert config["output_file"].endswith("_units_cleaned.csv")
@@ -226,7 +264,7 @@ def test_load_client_metadata_report_prefers_report_input_file(tmp_path, monkeyp
     monkeypatch.chdir(data_dir)
     monkeypatch.delenv(ANALYSIS_CONTEXT_ENV_VAR, raising=False)
 
-    config, _, _ = load_client_metadata(
+    config, _ = load_client_metadata(
         step="produce_food_report",
         analysis_context="baseline",
     )

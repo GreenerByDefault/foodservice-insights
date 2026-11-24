@@ -6,7 +6,7 @@ Yujia runs GBD's client analyses. She is starting over in this repo rather than 
 notebooks from the old analysis repo, and she works through an AI agent, so what her agent reads
 matters as much as what she reads. Eric meets her in early December 2026.
 
-The plan has two halves. PRs 1–3 fix what is broken whatever she answers, and land before the
+The plan has two halves. PRs 1–2 fix what is broken whatever she answers, and land before the
 meeting. § Questions for Yujia holds what only she can decide, and § After the meeting sketches
 the PRs that wait on her answers.
 
@@ -19,10 +19,6 @@ but it covers none of these.
   needs a `CLIENT_DATA_FOLDER` that `.env.example` lacks, and copies a stale list of templates.
   It is also the only thing that makes the folder layout `detect_client_structure` requires; the
   lab README says only "give each client a folder".
-- **The runscripts find `.env` four ways:** by walking up from the working directory, from a path
-  typed into the notebook, from a path saved in `client_metadata.json`, and from `../.env`.
-  Walking up fails silently from a client folder outside the repo, where the old repo kept them,
-  and shows up later as a missing API key.
 - **`just sync` removes the Jupyter kernel.** `ipykernel` is not in the lockfile, so an editor
   that runs `# %%` cells pip-installs it into `.venv`, and the next sync takes it out.
 
@@ -45,35 +41,24 @@ These are the facts behind question 1.
 - **Fix what is broken; leave the workflow to her.** Everything before the meeting is a bug or a
   gap whichever way she answers. Where her data lives, what PLATE is for, and how her agent works
   are her calls.
-- **Client data can live anywhere.** PR 1 finds the repo's `.env` from the lab package rather
-  than the working directory, so a client folder in `client_work/` and one on GBD's Drive both
-  work. That takes question 3 off the critical path.
+- **Client data can live anywhere.** `load_repo_env()` in `notebook_runscript_setup.py` loads
+  the repo root's `.env` from `PACKAGE_DIR` rather than the working directory, and every runscript
+  and notebook but the setup notebook calls it, so a client folder in `client_work/` and one on
+  GBD's Drive both work. That takes question 3 off the critical path. `cache_sync` and
+  `model_eval` still walk up from the working directory, which is right for them: they run only
+  through `just`, from the repo root.
 - **Steps 1 and 2 run from the repo, never from a per-client copy.** They are CLIs with nothing
   to edit per client, so a fix to either reaches every client. Both step 0.5s already launch step 1
   from `get_customer_template_dir()`, with `--no-push-suggestions` set from a `PUSH_SUGGESTIONS`
   variable beside the launch. The setup notebook copies only the runscripts with cells to edit.
 
-## PR 1 — Find the repo's `.env` the same way everywhere
-
-**Why:** there are four ways to find one file, one of them silent when it fails, and they are the
-reason client data has to live inside the repo.
-
-**Code:**
-- `notebook_runscript_setup.py`: one function that loads the repo root's `.env`, found from
-  `PACKAGE_DIR`, and raises naming the path when it is missing. It replaces the unused
-  `setup_cli_environment`.
-- Every runscript and notebook calls it instead of what it does now, and `client_metadata.json`
-  stops carrying `env_path`.
-- Lab README: drop "find the repo root's `.env` by walking up from it".
-
-**Tests:** the missing-file error.
-
-## PR 2 — Make the setup notebook work
+## PR 1 — Make the setup notebook work
 
 **Why:** it is how a client folder gets the layout every later step requires.
 
 **Code** (`0 setup_folder_structure.ipynb`):
-- Load `.env` with PR 1's function.
+- Load `.env` with `load_repo_env()`, replacing the `../.env` lookup that fails from
+  `runscripts/`.
 - `CLIENT_DATA_FOLDER` defaults to `python/lab/client_work/`, and `.env` may override it. Add it,
   commented out, to `.env.example`.
 - Read the templates from `get_customer_template_dir()`, not the working directory. Copy only the
@@ -84,7 +69,7 @@ reason client data has to live inside the repo.
 **Verify:** run it for a made-up client, first the baseline and then the pilot, with both data
 types.
 
-## PR 3 — Document a client from clone to report
+## PR 2 — Document a client from clone to report
 
 **Why:** her agent reads the lab README first, and today the README describes neither the folder
 layout nor how to run a cell.
@@ -122,9 +107,9 @@ Each question says what its answer changes.
 
 ### Her setup
 
-3. **Open: Does client data stay on GBD's Drive, or move to `client_work/`?** After PR 1, both
+3. **Open: Does client data stay on GBD's Drive, or move to `client_work/`?** Both already
    work. Drive is backed up and shared with colleagues. `client_work/` is where her agent already
-   looks and where the repo's rules load, but it exists only on her laptop. *Changes:* PR 2's
+   looks and where the repo's rules load, but it exists only on her laptop. *Changes:* PR 1's
    default.
 4. **Open: Which editor runs her cells, and which agent does she use?** *Changes:* whether to add
    JupyterLab beside `ipykernel`, and whether agent guidance goes in `AGENTS.md`, which most
@@ -160,4 +145,4 @@ settled.
 ## Verification
 
 For each PR, run `just lint && just check && just test`, plus `TEST_DB=1 just test-lab`. After
-PR 3, do the README walk-through in PR 3's **Verify**.
+PR 2, do the README walk-through in PR 2's **Verify**.

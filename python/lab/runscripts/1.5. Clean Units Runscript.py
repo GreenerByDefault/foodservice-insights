@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # %%
 import pandas as pd
-from dotenv import load_dotenv
 from gbd_foodservice_insights_lab.clean_product_weights import (
     convert_products_to_kilograms,
 )
 from gbd_foodservice_insights_lab.food_report.pipeline import run_food_report
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     load_client_metadata,
+    load_repo_env,
     setup_api_clients,
     setup_pandas_display,
     update_metadata,
@@ -17,8 +17,8 @@ from gbd_foodservice_insights_lab.notebook_utils import rel_path
 setup_pandas_display()
 
 # Load metadata saved from step 1.
-config, ENV_PATH, PDF_EXTRACTED = load_client_metadata(step="clean_units")
-load_dotenv(dotenv_path=ENV_PATH)
+load_repo_env()
+config, PDF_EXTRACTED = load_client_metadata(step="clean_units")
 
 gemini_client = setup_api_clients(gemini=True)["gemini_client"]
 

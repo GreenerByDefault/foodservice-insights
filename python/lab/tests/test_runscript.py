@@ -60,7 +60,7 @@ def test_categorize_runscript_pulls_then_passes_its_arguments_straight_through(
     monkeypatch.setattr(module, "categorize_spreadsheet_to_csvs", _fake_categorize)
     monkeypatch.setattr(module, "setup_api_clients", _fake_setup_api_clients)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setattr(module, "load_dotenv", lambda **_: None)
+    monkeypatch.setattr(module, "load_repo_env", lambda: None)
     monkeypatch.setattr(module, "update_metadata_with_categorization_stats", lambda _: None)
     monkeypatch.setattr(
         sys,
@@ -103,7 +103,7 @@ def test_categorize_runscript_passes_no_push_suggestions_through(monkeypatch, tm
     monkeypatch.setattr(module, "categorize_spreadsheet_to_csvs", _fake_categorize)
     monkeypatch.setattr(module, "setup_api_clients", lambda **_: {})
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setattr(module, "load_dotenv", lambda **_: None)
+    monkeypatch.setattr(module, "load_repo_env", lambda: None)
     monkeypatch.setattr(module, "update_metadata_with_categorization_stats", lambda _: None)
     monkeypatch.setattr(
         sys,

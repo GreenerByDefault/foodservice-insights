@@ -3,10 +3,11 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Final, Literal, cast
 
 import pandas as pd
 from anthropic import Anthropic
+from dotenv import load_dotenv
 from google import genai
 from unstract.llmwhisperer import LLMWhispererClientV2
 
@@ -40,6 +41,20 @@ VALID_PROCUREMENT_SERVING: tuple[str, ...] = (
     "purchasing-procurement data",
     "sales-serving data",
 )
+
+
+# The lab runs only from a checkout, installed editable into the repo's `.venv`, so the repo root
+# is a fixed distance from the package whatever the working directory or client folder.
+REPO_ENV_PATH: Final[Path] = PACKAGE_DIR.parents[2] / ".env"
+
+
+def load_repo_env() -> None:
+    """Load the repo root's `.env` into the environment."""
+    if not REPO_ENV_PATH.exists():
+        raise FileNotFoundError(
+            f"No .env at {REPO_ENV_PATH}. Copy .env.example there and fill in the keys."
+        )
+    load_dotenv(REPO_ENV_PATH)
 
 
 def get_customer_template_dir() -> Path:
@@ -401,8 +416,8 @@ def detect_client_structure(
     return result
 
 
-def save_client_metadata(config: dict[str, Any], env_path: str | Path, pdf_extracted: bool) -> None:
-    """Save client metadata and ENV_PATH to client_metadata.json in the data type folder."""
+def save_client_metadata(config: dict[str, Any], pdf_extracted: bool) -> None:
+    """Save client metadata to client_metadata.json in the data type folder."""
     config_serializable = config.copy()
     if "data_location" in config_serializable:
         config_serializable["data_location"] = str(config_serializable["data_location"])
@@ -412,7 +427,6 @@ def save_client_metadata(config: dict[str, Any], env_path: str | Path, pdf_extra
         raise ValueError("config must include 'analysis_context'.")
 
     config_serializable["analysis_context"] = analysis_context
-    config_serializable["env_path"] = str(env_path)
     config_serializable["has_sub_client"] = config["sub_client_name"] is not None
     config_serializable["pdf_extracted"] = pdf_extracted
 
@@ -427,7 +441,7 @@ def load_client_metadata(
     step: PipelineStep | None = None,
     *,
     analysis_context: AnalysisContext | None = None,
-) -> tuple[dict[str, Any], str, bool]:
+) -> tuple[dict[str, Any], bool]:
     """Load client metadata from client_metadata.json in the current data folder."""
     _validate_step(step)
 
@@ -442,7 +456,8 @@ def load_client_metadata(
     with Path(metadata_path).open() as f:
         metadata = json.load(f)
 
-    env_path = metadata.pop("env_path")
+    # Metadata saved before the repo's .env was found from the package still carries its path.
+    metadata.pop("env_path", None)
     metadata.pop("has_sub_client", None)
     pdf_extracted = metadata.pop("pdf_extracted")
 
@@ -460,7 +475,7 @@ def load_client_metadata(
 
     print(f"✓ Loaded client metadata from {metadata_path.name}")
     _print_configuration(metadata, step)
-    return metadata, env_path, pdf_extracted
+    return metadata, pdf_extracted
 
 
 def setup_api_clients(
@@ -495,21 +510,6 @@ def setup_api_clients(
         clients["gemini_client"] = genai.Client(api_key=api_key)
 
     return clients
-
-
-def setup_cli_environment(env_path: str | Path | None = None) -> dict[str, Any]:
-    """Load .env configuration for CLI scripts and initialize API clients."""
-    from dotenv import find_dotenv, load_dotenv
-
-    if env_path is None:
-        env_path = find_dotenv(usecwd=True)
-    load_dotenv(dotenv_path=env_path)
-
-    clients = setup_api_clients(anthropic=True, gemini=True)
-    return {
-        "anthropic_client": clients["anthropic_client"],
-        "gemini_client": clients["gemini_client"],
-    }
 
 
 def update_metadata(updates: dict) -> None:
