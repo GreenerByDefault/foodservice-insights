@@ -6,7 +6,7 @@ Yujia runs GBD's client analyses. She is starting over in this repo rather than 
 notebooks from the old analysis repo, and she works through an AI agent, so what her agent reads
 matters as much as what she reads. Eric meets her in early December 2026.
 
-The plan has two halves. PRs 1–2 fix what is broken whatever she answers, and land before the
+The plan has two halves. PR 1 fixes what is broken whatever she answers, and lands before the
 meeting. § Questions for Yujia holds what only she can decide, and § After the meeting sketches
 the PRs that wait on her answers.
 
@@ -15,10 +15,9 @@ the PRs that wait on her answers.
 Found on 2026-11-23 by reading the runscripts and running their logic. `just test-lab` passes,
 but it covers none of these.
 
-- **The setup notebook fails at its first cell.** It loads `../.env` relative to `runscripts/`,
-  needs a `CLIENT_DATA_FOLDER` that `.env.example` lacks, and copies a stale list of templates.
-  It is also the only thing that makes the folder layout `detect_client_structure` requires; the
-  lab README says only "give each client a folder".
+- **The lab README says only "give each client a folder".** The setup notebook is the only
+  thing that makes the folder layout `detect_client_structure` requires, and the README does not
+  send her to it.
 - **`just sync` removes the Jupyter kernel.** `ipykernel` is not in the lockfile, so an editor
   that runs `# %%` cells pip-installs it into `.venv`, and the next sync takes it out.
 
@@ -43,33 +42,19 @@ These are the facts behind question 1.
   are her calls.
 - **Client data can live anywhere.** `load_repo_env()` in `notebook_runscript_setup.py` loads
   the repo root's `.env` from `PACKAGE_DIR` rather than the working directory, and every runscript
-  and notebook but the setup notebook calls it, so a client folder in `client_work/` and one on
-  GBD's Drive both work. That takes question 3 off the critical path. `cache_sync` and
+  and notebook calls it, so a client folder in `client_work/` and one on GBD's Drive both work.
+  The setup notebook puts new client folders in `python/lab/client_work/` unless `.env` sets
+  `CLIENT_DATA_FOLDER`. That takes question 3 off the critical path. `cache_sync` and
   `model_eval` still walk up from the working directory, which is right for them: they run only
   through `just`, from the repo root.
 - **Steps 1 and 2 run from the repo, never from a per-client copy.** They are CLIs with nothing
   to edit per client, so a fix to either reaches every client. Both step 0.5s already launch step 1
   from `get_customer_template_dir()`, with `--no-push-suggestions` set from a `PUSH_SUGGESTIONS`
-  variable beside the launch. The setup notebook copies only the runscripts with cells to edit.
+  variable beside the launch. The setup notebook copies only the runscripts with cells to edit,
+  named by `runscripts_for_data_folder()`, and never overwrites a copy the client already has. A
+  pilot starts from the baseline's copies where they exist.
 
-## PR 1 — Make the setup notebook work
-
-**Why:** it is how a client folder gets the layout every later step requires.
-
-**Code** (`0 setup_folder_structure.ipynb`):
-- Load `.env` with `load_repo_env()`, replacing the `../.env` lookup that fails from
-  `runscripts/`.
-- `CLIENT_DATA_FOLDER` defaults to `python/lab/client_work/`, and `.env` may override it. Add it,
-  commented out, to `.env.example`.
-- Read the templates from `get_customer_template_dir()`, not the working directory. Copy only the
-  runscripts with cells to edit: the initial check when asked for, the step 0.5 for each data
-  format, 1.5, 3 when there are both data types, and 5 for a pilot. Drop the deleted `1a` and
-  `1b` notebooks from its filter.
-
-**Verify:** run it for a made-up client, first the baseline and then the pilot, with both data
-types.
-
-## PR 2 — Document a client from clone to report
+## PR 1 — Document a client from clone to report
 
 **Why:** her agent reads the lab README first, and today the README describes neither the folder
 layout nor how to run a cell.
@@ -109,8 +94,8 @@ Each question says what its answer changes.
 
 3. **Open: Does client data stay on GBD's Drive, or move to `client_work/`?** Both already
    work. Drive is backed up and shared with colleagues. `client_work/` is where her agent already
-   looks and where the repo's rules load, but it exists only on her laptop. *Changes:* PR 1's
-   default.
+   looks and where the repo's rules load, but it exists only on her laptop. *Changes:* the
+   default for `CLIENT_DATA_FOLDER`.
 4. **Open: Which editor runs her cells, and which agent does she use?** *Changes:* whether to add
    JupyterLab beside `ipykernel`, and whether agent guidance goes in `AGENTS.md`, which most
    agents read, or in `.claude/`, which only Claude Code reads.
@@ -145,4 +130,4 @@ settled.
 ## Verification
 
 For each PR, run `just lint && just check && just test`, plus `TEST_DB=1 just test-lab`. After
-PR 2, do the README walk-through in PR 2's **Verify**.
+PR 1, do the README walk-through in its **Verify**.

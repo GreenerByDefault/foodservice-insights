@@ -8,10 +8,16 @@ import pytest
 from gbd_foodservice_insights_lab import PACKAGE_DIR, notebook_runscript_setup
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     ANALYSIS_CONTEXT_ENV_VAR,
+    CLEAN_UNITS_RUNSCRIPT,
+    COMPARE_PROCUREMENT_SERVING_RUNSCRIPT,
+    INITIAL_CHECK_RUNSCRIPT,
+    PILOT_RUNSCRIPT,
+    PREPARE_RUNSCRIPTS,
     detect_client_structure,
     get_customer_template_dir,
     load_client_metadata,
     load_repo_env,
+    runscripts_for_data_folder,
     save_client_metadata,
     update_metadata_with_categorization_stats,
 )
@@ -49,6 +55,35 @@ def test_runscripts_dir_is_discovered_from_package():
 
     assert template_dir == PACKAGE_DIR.parent / "runscripts"
     assert (template_dir / "2. Produce Food Report.py").exists()
+
+
+def test_the_setup_notebook_copies_runscripts_that_exist():
+    copied = [
+        INITIAL_CHECK_RUNSCRIPT,
+        *PREPARE_RUNSCRIPTS.values(),
+        CLEAN_UNITS_RUNSCRIPT,
+        COMPARE_PROCUREMENT_SERVING_RUNSCRIPT,
+        PILOT_RUNSCRIPT,
+    ]
+
+    assert [name for name in copied if not (get_customer_template_dir() / name).exists()] == []
+
+
+def test_runscripts_for_a_baseline_data_folder():
+    assert runscripts_for_data_folder("baseline", ["tabular"], include_initial_check=False) == [
+        "0.5. Prepare tabular data Runscript.py",
+        "1.5. Clean Units Runscript.py",
+    ]
+
+
+def test_runscripts_for_a_pilot_data_folder_with_both_formats_and_the_initial_check():
+    assert runscripts_for_data_folder("pilot", ["pdf", "tabular"], include_initial_check=True) == [
+        "0 initial_data_check.ipynb",
+        "0.5 Prepare PDF data.ipynb",
+        "0.5. Prepare tabular data Runscript.py",
+        "1.5. Clean Units Runscript.py",
+        "5 pilot_analysis.ipynb",
+    ]
 
 
 def test_save_client_metadata_serializes_data_location(tmp_path):

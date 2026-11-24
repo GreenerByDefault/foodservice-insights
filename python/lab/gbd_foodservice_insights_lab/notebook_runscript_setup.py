@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Final, Literal, cast
@@ -66,6 +67,37 @@ def get_customer_template_dir() -> Path:
             f"package. Expected it at: {template_dir}"
         )
     return template_dir
+
+
+DataFormat = Literal["pdf", "tabular"]
+
+INITIAL_CHECK_RUNSCRIPT: Final = "0 initial_data_check.ipynb"
+PREPARE_RUNSCRIPTS: Final[dict[DataFormat, str]] = {
+    "pdf": "0.5 Prepare PDF data.ipynb",
+    "tabular": "0.5. Prepare tabular data Runscript.py",
+}
+CLEAN_UNITS_RUNSCRIPT: Final = "1.5. Clean Units Runscript.py"
+COMPARE_PROCUREMENT_SERVING_RUNSCRIPT: Final = "3. Compare baseline procurement vs serving.py"
+PILOT_RUNSCRIPT: Final = "5 pilot_analysis.ipynb"
+
+
+def runscripts_for_data_folder(
+    period: Literal["baseline", "pilot"],
+    data_formats: Sequence[DataFormat],
+    *,
+    include_initial_check: bool,
+) -> list[str]:
+    """Name the runscripts a client's data folder needs its own copy of.
+
+    Steps 1 and 2 are missing on purpose: they have nothing to edit per client, so they run
+    from the repo.
+    """
+    return [
+        *([INITIAL_CHECK_RUNSCRIPT] if include_initial_check else []),
+        *(PREPARE_RUNSCRIPTS[data_format] for data_format in data_formats),
+        CLEAN_UNITS_RUNSCRIPT,
+        *([PILOT_RUNSCRIPT] if period == "pilot" else []),
+    ]
 
 
 def setup_pandas_display() -> None:
