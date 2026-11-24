@@ -26,12 +26,33 @@ Each step's runscript is in [`runscripts/`](runscripts/). Steps 0.5, 1.5 and 3 a
 [`test_data/`](test_data/) is an anonymized sample dataset with one input per step, for trying a
 change without client data.
 
+## PLATE or the lab
+
+For a US procurement file PLATE accepts
+([`requirements.md` § File upload](../../docs/requirements.md#file-upload)), PLATE makes the same
+PDF and client workbook as step 2, which calls the same product code. Only the lab:
+
+- shows which category each product got;
+- handles serving data and entree detection, Europe's emission factors, PDFs, and files PLATE
+  would reject;
+- cleans units and writes the QA workbook, which step 5 reads for both periods of a pilot.
+
+PLATE caps reports per user and per organization, superadmins included
+([`requirements.md` § Abuse limits](../../docs/requirements.md#abuse-limits)).
+
+**Open:** which one a client's analysis should default to.
+
 ## Working on a client
 
-Work in [`client_work/`](client_work/), which git ignores. Give each client a folder, copy in
-the runscripts you need with `cp -n` so you never overwrite edits, and run them cell by cell
-from the client's data folder. The runscripts read `client_metadata.json` from the working
-directory.
+Start each client by running `0 setup_folder_structure.ipynb` from [`runscripts/`](runscripts/).
+The runscripts read the client, period and data type from the folder they run in, so they need
+the layout it makes. It also copies in the runscripts you edit per client, and never overwrites a
+copy you already have. Client folders go in [`client_work/`](client_work/), which git ignores,
+unless `CLIENT_DATA_FOLDER` in `.env` says otherwise. Steps 1 and 2 have nothing to edit per
+client, so they run from `runscripts/`; each step 0.5 launches step 1.
+
+Run each copied runscript cell by cell from its folder, with the repo's `.venv` as the kernel.
+`just sync` installs `ipykernel` there, and the `.py` runscripts mark cells with `# %%`.
 
 The kernel holds whatever lab code it imported, and step 1.5 runs step 2 in that kernel. After
 editing lab code, restart the kernel, or run `%load_ext autoreload` and `%autoreload 2` first.

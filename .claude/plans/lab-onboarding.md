@@ -6,24 +6,14 @@ Yujia runs GBD's client analyses. She is starting over in this repo rather than 
 notebooks from the old analysis repo, and she works through an AI agent, so what her agent reads
 matters as much as what she reads. Eric meets her in early December 2026.
 
-The plan has two halves. PR 1 fixes what is broken whatever she answers, and lands before the
-meeting. § Questions for Yujia holds what only she can decide, and § After the meeting sketches
-the PRs that wait on her answers.
-
-### What her first day hits today
-
-Found on 2026-11-23 by reading the runscripts and running their logic. `just test-lab` passes,
-but it covers none of these.
-
-- **The lab README says only "give each client a folder".** The setup notebook is the only
-  thing that makes the folder layout `detect_client_structure` requires, and the README does not
-  send her to it.
-- **`just sync` removes the Jupyter kernel.** `ipykernel` is not in the lockfile, so an editor
-  that runs `# %%` cells pip-installs it into `.venv`, and the next sync takes it out.
+What was broken whatever she answers has landed: the setup notebook works, the lab README walks a
+client from clone to report, and `ipykernel` is in the lockfile. § Questions for Yujia holds what
+only she can decide, and § After the meeting sketches the PRs that wait on her answers.
 
 ### What PLATE can replace
 
-These are the facts behind question 1.
+These are the facts behind question 1. The lab README's § PLATE or the lab states them for her
+agent, with the default marked **Open:**.
 
 - **A US procurement file PLATE accepts** (`docs/requirements.md` § File upload) gets the same PDF
   and client workbook from PLATE as from the lab's step 2, which calls the same product code.
@@ -54,22 +44,6 @@ These are the facts behind question 1.
   named by `runscripts_for_data_folder()`, and never overwrites a copy the client already has. A
   pilot starts from the baseline's copies where they exist.
 
-## PR 1 — Document a client from clone to report
-
-**Why:** her agent reads the lab README first, and today the README describes neither the folder
-layout nor how to run a cell.
-
-**Code:**
-- `python/lab/pyproject.toml`: add `ipykernel`.
-- Lab README § Working on a client: start a client with the setup notebook, whose layout the
-  runscripts require, and run cells with `.venv` as the kernel.
-- Lab README: a short § PLATE or the lab, covering § What PLATE can replace above, linking rather
-  than restating. Facts only; a default waits on question 1.
-
-**Verify:** in a fresh worktree, follow only the README from `just sync` through step 2 on
-`test_data/raw_data/sample_raw_purchasing.csv`, with `--no-push-suggestions` so its made-up names
-stay out of the review queue. The file has 255 rows, so the LLM calls cost cents.
-
 ## Questions for Yujia
 
 Each question says what its answer changes.
@@ -80,7 +54,7 @@ Each question says what its answer changes.
    procurement file PLATE accepts, and which will reach a pilot? Does she check which category
    each product got before sending a report? When PLATE makes a client's report, whose
    organization is it in: GBD's, or the client's own, so the client can see it?
-   *Changes:* the README's default. Using PLATE for baselines would need step 5 to read PLATE's
+   *Changes:* the default in the lab README's § PLATE or the lab. Using PLATE for baselines would need step 5 to read PLATE's
    client workbook, or PLATE to offer per-product data. Heavy use would need the report caps to
    fit.
 2. **Open: Which engagements are midway,** with a baseline from the old repo and a pilot still to
@@ -129,5 +103,9 @@ settled.
 
 ## Verification
 
-For each PR, run `just lint && just check && just test`, plus `TEST_DB=1 just test-lab`. After
-PR 1, do the README walk-through in its **Verify**.
+For each PR, run `just lint && just check && just test`, plus `TEST_DB=1 just test-lab`.
+
+**Open:** nobody has yet followed the lab README through steps 1 and 2 with real API keys. On
+2026-11-23 a fresh worktree got from `just sync` through step 0.5 on
+`test_data/raw_data/sample_raw_purchasing.csv`. Finish it with `PUSH_SUGGESTIONS = False`, so the
+sample's made-up names stay out of the review queue; its 255 rows cost cents in LLM calls.
