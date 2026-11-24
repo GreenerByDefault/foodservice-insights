@@ -9,7 +9,7 @@ dependencies = [
     "gbd-foodservice-insights",
     "google-genai>=2.34.0,<3",
     "ipykernel>=7.4.0,<8",
-    "ipython>=8,<10",
+    "ipython>=9.18.1,<10",
     "Levenshtein>=0.27,<1",
     "llmwhisperer-client>=2.10.0,<3",
     "matplotlib>=3.10,<4",
