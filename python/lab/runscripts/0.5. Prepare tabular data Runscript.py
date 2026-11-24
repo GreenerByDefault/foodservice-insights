@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
 # %%
-# ruff: noqa: E402
 import subprocess  # nosec B404
 import sys
 
 import pandas as pd
-from dotenv import find_dotenv, load_dotenv
-
-ENV_PATH = find_dotenv(usecwd=True)
-load_dotenv(dotenv_path=ENV_PATH)
-
 from gbd_foodservice_insights_lab.extraction.tabular_inspection import (
     compare_component_datasets,
     detect_component_duplicate_risk,
@@ -27,10 +21,12 @@ from gbd_foodservice_insights_lab.extraction.tabular_io import (
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
     detect_client_structure,
     get_customer_template_dir,
+    load_repo_env,
     save_client_metadata,
     setup_pandas_display,
 )
 
+load_repo_env()
 setup_pandas_display()
 
 SUB_CLIENT = (
@@ -49,7 +45,7 @@ output_file = config["output_file"]
 DATA_LOCATION = config["data_location"]
 
 # Save metadata for subsequent steps.
-save_client_metadata(config=config, env_path=ENV_PATH, pdf_extracted=False)
+save_client_metadata(config=config, pdf_extracted=False)
 
 
 # %%

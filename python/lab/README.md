@@ -31,7 +31,7 @@ change without client data.
 Work in [`client_work/`](client_work/), which git ignores. Give each client a folder, copy in
 the runscripts you need with `cp -n` so you never overwrite edits, and run them cell by cell
 from the client's data folder. The runscripts read `client_metadata.json` from the working
-directory, and find the repo root's `.env` by walking up from it.
+directory.
 
 The kernel holds whatever lab code it imported, and step 1.5 runs step 2 in that kernel. After
 editing lab code, restart the kernel, or run `%load_ext autoreload` and `%autoreload 2` first.

@@ -16,11 +16,11 @@ Usage:
 import argparse
 import logging
 
-from dotenv import find_dotenv, load_dotenv
 from gbd_foodservice_insights.categorization.llm import AnthropicLlmClient
 from gbd_foodservice_insights_lab.cache_sync import pull_caches_if_configured
 from gbd_foodservice_insights_lab.categorization.spreadsheet import categorize_spreadsheet_to_csvs
 from gbd_foodservice_insights_lab.notebook_runscript_setup import (
+    load_repo_env,
     setup_api_clients,
     update_metadata_with_categorization_stats,
 )
@@ -64,9 +64,7 @@ def main() -> None:
         format="%(asctime)s  %(name)s  %(levelname)s  %(message)s",
     )
 
-    # Load .env and set up API clients
-    env_path = find_dotenv(usecwd=True)
-    load_dotenv(dotenv_path=env_path)
+    load_repo_env()
     pull_caches_if_configured()
     clients = setup_api_clients(gemini=(args.data_type == "serving"))
 
